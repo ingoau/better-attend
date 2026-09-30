@@ -11,6 +11,7 @@ class AttendApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.scans.onQueued = { au.ingo.betterattend.scan.ScanSyncWorker.enqueue(this) }
+        au.ingo.betterattend.widget.WidgetUpdater.start(this, container)
     }
 }
 

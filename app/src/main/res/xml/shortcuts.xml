@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press launcher shortcuts. MainActivity routes the open_tab extra to the right tab. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_scan"
+        android:shortcutDisabledMessage="@string/shortcut_disabled"
+        android:shortcutId="scan"
+        android:shortcutLongLabel="@string/shortcut_scan_long"
+        android:shortcutShortLabel="@string/shortcut_scan_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="au.ingo.betterattend.MainActivity"
+            android:targetPackage="au.ingo.betterattend">
+            <extra android:name="open_tab" android:value="scan" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_people"
+        android:shortcutDisabledMessage="@string/shortcut_disabled"
+        android:shortcutId="people"
+        android:shortcutLongLabel="@string/shortcut_people_long"
+        android:shortcutShortLabel="@string/shortcut_people_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="au.ingo.betterattend.MainActivity"
+            android:targetPackage="au.ingo.betterattend">
+            <extra android:name="open_tab" android:value="people" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_tickets"
+        android:shortcutDisabledMessage="@string/shortcut_disabled"
+        android:shortcutId="tickets"
+        android:shortcutLongLabel="@string/shortcut_tickets_long"
+        android:shortcutShortLabel="@string/shortcut_tickets_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="au.ingo.betterattend.MainActivity"
+            android:targetPackage="au.ingo.betterattend">
+            <extra android:name="open_tab" android:value="tickets" />
+        </intent>
+    </shortcut>
+</shortcuts>

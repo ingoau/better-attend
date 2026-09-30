@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home-screen widgets -->
+    <string name="widget_checkin_label">Check-in progress</string>
+    <string name="widget_checkin_description">Live check-in count for your event, with who\'s still to arrive and per-station totals.</string>
+    <string name="widget_arrivals_label">Arrivals</string>
+    <string name="widget_arrivals_description">Airport pickups at a glance: awaiting pickup, collected, checked in and the next arrival.</string>
+    <string name="widget_quickscan_label">Quick scan</string>
+    <string name="widget_quickscan_description">One tap to open the scanner with the camera ready.</string>
+    <string name="widget_ticket_label">My ticket</string>
+    <string name="widget_ticket_description">Your next Hack Club event with a countdown. Tap to show your QR pass.</string>
+
+    <!-- App shortcuts -->
+    <string name="shortcut_scan_short">Scan</string>
+    <string name="shortcut_scan_long">Scan tickets</string>
+    <string name="shortcut_people_short">People</string>
+    <string name="shortcut_people_long">Find a participant</string>
+    <string name="shortcut_tickets_short">My tickets</string>
+    <string name="shortcut_tickets_long">Show my ticket</string>
+    <string name="shortcut_disabled">Sign in to Attend first</string>
+</resources>
