@@ -374,7 +374,9 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
 
 @Composable
 private fun HeroChip(icon: ImageVector, text: String, modifier: Modifier = Modifier) {
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.55f), modifier = modifier) {
+    // Tint derived from the hero's own content colour so it stays legible in light and dark.
+    val onHero = androidx.compose.material3.LocalContentColor.current
+    Surface(shape = CircleShape, color = onHero.copy(alpha = 0.12f), contentColor = onHero, modifier = modifier) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
