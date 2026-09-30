@@ -1,5 +1,13 @@
 package au.ingo.betterattend.ui.people
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -13,20 +21,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import au.ingo.betterattend.ui.components.rememberHaptics
 
 /**
  * Material 3 Expressive connected button group for picking one of a few options
@@ -87,11 +103,19 @@ fun SectionCard(
     }
 }
 
-/** Label above value. Renders nothing for blank values so sections only show what's present. */
+/**
+ * Label above value. Renders nothing for blank values so sections only show what's present.
+ * With [onCopy], long-pressing the value copies it (also offered to accessibility services).
+ */
 @Composable
-fun Field(label: String, value: String?, modifier: Modifier = Modifier, highlight: Boolean = false) {
+fun Field(label: String, value: String?, modifier: Modifier = Modifier, highlight: Boolean = false, onCopy: (() -> Unit)? = null) {
     if (value.isNullOrBlank()) return
-    Column(modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 6.dp)) {
+    val haptics = rememberHaptics()
+    val latestCopy by rememberUpdatedState(onCopy)
+    val copy = if (onCopy == null) Modifier else Modifier
+        .pointerInput(Unit) { detectTapGestures(onLongPress = { haptics.longPress(); latestCopy?.invoke() }) }
+        .semantics { onLongClick("Copy $label") { onCopy(); true } }
+    Column(modifier.fillMaxWidth().then(copy).heightIn(min = 40.dp).padding(vertical = 6.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             value,
@@ -99,6 +123,28 @@ fun Field(label: String, value: String?, modifier: Modifier = Modifier, highligh
             color = if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+/** A number that rolls up (or down) to its new value instead of snapping. */
+@Composable
+fun AnimatedCount(
+    value: Int,
+    modifier: Modifier = Modifier,
+    style: TextStyle = LocalTextStyle.current,
+    fontWeight: FontWeight? = null,
+) {
+    val motion = MaterialTheme.motionScheme
+    AnimatedContent(
+        targetState = value,
+        transitionSpec = {
+            val up = targetState > initialState
+            (slideInVertically(motion.fastSpatialSpec()) { h -> if (up) h else -h } + fadeIn(motion.fastEffectsSpec())) togetherWith
+                (slideOutVertically(motion.fastSpatialSpec()) { h -> if (up) -h else h } + fadeOut(motion.fastEffectsSpec())) using
+                SizeTransform(clip = false)
+        },
+        label = "count",
+        modifier = modifier,
+    ) { v -> Text("$v", style = style, fontWeight = fontWeight) }
 }
 
 fun yesNo(b: Boolean?): String? = when (b) { true -> "Yes"; false -> "No"; null -> null }

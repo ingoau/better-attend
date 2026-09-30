@@ -1,6 +1,7 @@
 package au.ingo.betterattend.ui.people
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +79,8 @@ data class ContactActions(
     val whatsApp: (String) -> Unit = {},
     val email: (String) -> Unit = {},
     val openUrl: (String) -> Unit = {},
+    /** Long-press on a value: copy it. [label] names what was copied ("Phone number", "Email"…). */
+    val copy: (label: String, value: String) -> Unit = { _, _ -> },
 )
 
 private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault())
@@ -149,15 +152,34 @@ fun SafetyAlertCard(alert: SafetyAlert, modifier: Modifier = Modifier) {
 
 // ---------------- Generic bits ----------------
 
-/** Tappable value row, e.g. a phone number that dials. 56dp tall for comfortable targets. */
+/**
+ * Tappable value row, e.g. a phone number that dials. 56dp tall for comfortable targets.
+ * [onLongClick] (typically "copy") works even when there's no tap action.
+ */
 @Composable
-fun LinkRow(icon: ImageVector, label: String, value: String, onClick: (() -> Unit)?, actionDescription: String? = null) {
+fun LinkRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    onClick: (() -> Unit)?,
+    actionDescription: String? = null,
+    onLongClick: (() -> Unit)? = null,
+) {
     Surface(
-        onClick = onClick ?: {},
-        enabled = onClick != null,
         color = Color.Transparent,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .then(
+                if (onClick == null && onLongClick == null) Modifier
+                else Modifier.combinedClickable(
+                    onClickLabel = actionDescription,
+                    onLongClickLabel = if (onLongClick != null) "Copy" else null,
+                    onLongClick = onLongClick,
+                    onClick = onClick ?: {},
+                ),
+            ),
     ) {
         Row(Modifier.heightIn(min = 56.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, actionDescription, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
@@ -196,9 +218,11 @@ fun ContactSection(p: Participant, canViewPii: Boolean, actions: ContactActions)
     val email = p.email?.takeIf { it.isNotBlank() }
     if (phone == null && email == null && p.slackUserId == null) return
     SectionCard("Contact", Icons.Outlined.ContactPhone) {
-        phone?.let { LinkRow(Icons.Outlined.Call, "Mobile", it, { actions.call(it) }, "Call") }
-        email?.let { LinkRow(Icons.Outlined.Email, "Email", it, if (canViewPii) { { actions.email(it) } } else null, "Email") }
-        p.slackUserId?.let { SelectionContainer { Field("Slack ID", it) } }
+        phone?.let { LinkRow(Icons.Outlined.Call, "Mobile", it, { actions.call(it) }, "Call", onLongClick = { actions.copy("Phone number", it) }) }
+        email?.let {
+            LinkRow(Icons.Outlined.Email, "Email", it, if (canViewPii) { { actions.email(it) } } else null, "Email", onLongClick = { actions.copy("Email", it) })
+        }
+        p.slackUserId?.let { Field("Slack ID", it, onCopy = { actions.copy("Slack ID", it) }) }
     }
 }
 
@@ -490,8 +514,8 @@ fun GuardiansSection(p: Participant, actions: ContactActions) {
         if (guardians.isEmpty()) {
             if (p.parentGuardianName != null) {
                 Text(p.parentGuardianName, style = MaterialTheme.typography.titleSmall)
-                p.parentGuardianPhone?.let { LinkRow(Icons.Outlined.Call, "Phone", it, { actions.call(it) }, "Call") }
-                p.parentGuardianEmail?.let { LinkRow(Icons.Outlined.Email, "Email", it, { actions.email(it) }, "Email") }
+                p.parentGuardianPhone?.let { LinkRow(Icons.Outlined.Call, "Phone", it, { actions.call(it) }, "Call", onLongClick = { actions.copy("Phone number", it) }) }
+                p.parentGuardianEmail?.let { LinkRow(Icons.Outlined.Email, "Email", it, { actions.email(it) }, "Email", onLongClick = { actions.copy("Email", it) }) }
             }
             fallback.forEach { EmergencyContactRow(it, actions) }
         }
@@ -519,8 +543,8 @@ private fun GuardianBlock(g: Guardian, actions: ContactActions) {
         }
     }
     g.relationship?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    g.phone?.let { LinkRow(Icons.Outlined.Call, "Phone", it, { actions.call(it) }, "Call") }
-    g.email?.let { LinkRow(Icons.Outlined.Email, "Email", it, { actions.email(it) }, "Email") }
+    g.phone?.let { LinkRow(Icons.Outlined.Call, "Phone", it, { actions.call(it) }, "Call", onLongClick = { actions.copy("Phone number", it) }) }
+    g.email?.let { LinkRow(Icons.Outlined.Email, "Email", it, { actions.email(it) }, "Email", onLongClick = { actions.copy("Email", it) }) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
         CheckChip("Media", g.mediaPermission)
         CheckChip("Photos", g.photoPermission)
@@ -535,7 +559,10 @@ private fun GuardianBlock(g: Guardian, actions: ContactActions) {
 private fun EmergencyContactRow(c: EmergencyContact, actions: ContactActions) {
     val label = listOfNotNull("Emergency contact", c.relationship).joinToString(" · ")
     val phone = c.phone
-    if (phone != null) LinkRow(Icons.Outlined.HealthAndSafety, "${c.name ?: "Contact"} · $label", phone, { actions.call(phone) }, "Call")
+    if (phone != null) {
+        LinkRow(Icons.Outlined.HealthAndSafety, "${c.name ?: "Contact"} · $label", phone, { actions.call(phone) }, "Call",
+            onLongClick = { actions.copy("Phone number", phone) })
+    }
     else Field(label, c.name)
 }
 

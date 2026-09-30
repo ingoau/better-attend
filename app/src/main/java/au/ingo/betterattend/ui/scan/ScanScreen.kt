@@ -1,6 +1,10 @@
 package au.ingo.betterattend.ui.scan
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -80,6 +84,7 @@ import au.ingo.betterattend.data.auth.AuthState
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.store.AppSettings
+import au.ingo.betterattend.scan.FeedbackKind
 import au.ingo.betterattend.scan.NfcStatus
 import au.ingo.betterattend.scan.NfcSupport
 import au.ingo.betterattend.scan.ScanFeedback
@@ -89,6 +94,7 @@ import au.ingo.betterattend.ui.components.AccountButton
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.EventSwitcherTitle
 import au.ingo.betterattend.ui.components.LoadingState
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
 import au.ingo.betterattend.ui.theme.status
 import kotlinx.coroutines.launch
@@ -144,11 +150,17 @@ fun ScanScreen(nav: AppNavigator) {
     val snackbar = remember { SnackbarHostState() }
     val permission = rememberCameraPermission()
 
-    // Feedback: distinct sound + vibration per outcome, respecting settings.
+    // Feedback: distinct sound + vibration per scan outcome, respecting the Sounds and Haptics
+    // settings. That vibration is the only buzz for an outcome; the UI haptics below are for taps,
+    // gestures and non-scan results (undo, sync), never on top of an outcome.
     val feedback = remember { ScanFeedback(context) }
     DisposableEffect(feedback) { onDispose { feedback.release() } }
     val currentSettings by rememberUpdatedState(settings)
     LaunchedEffect(vm) { vm.feedback.collect { feedback.play(it, currentSettings.sounds, currentSettings.haptics) } }
+    // Captured here, outside the sheets: bottom sheets are separate windows whose own
+    // LocalHapticFeedback doesn't know about the in-app Haptics setting.
+    val haptics = rememberHaptics()
+    LaunchedEffect(vm) { vm.actionResults.collect { ok -> if (ok) haptics.confirm() else haptics.reject() } }
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     // Keep the screen awake at the desk.
@@ -190,7 +202,7 @@ fun ScanScreen(nav: AppNavigator) {
         actions = ScanActions(
             onPickEvent = nav::openEventPicker,
             onOpenSettings = nav::openSettings,
-            onSelectContext = vm::selectContext,
+            onSelectContext = { id -> if (id != selectedContextId) haptics.tick(); vm.selectContext(id) },
             onRetryContexts = { vm.refreshContexts() },
             onDismissCard = vm::dismiss,
             onUndo = vm::undo,
@@ -198,14 +210,19 @@ fun ScanScreen(nav: AppNavigator) {
             onDetails = if (canOpenDetails) { c -> c.participant?.let { p -> event?.let { nav.openParticipant(it.id, p.participantEventId) } } } else null,
             onRequestCamera = permission.request,
             onOpenAppSettings = permission.openSettings,
-            onToggleTorch = { torchOn = !torchOn },
+            onToggleTorch = { torchOn = !torchOn; haptics.toggle(torchOn) },
             onOpenNfcSettings = { NfcSupport.openSettings(context) },
             onFindPerson = { vm.setQuery(""); sheet = ScanSheet.Find },
             onRecent = { sheet = ScanSheet.Recent },
             onPending = { sheet = ScanSheet.Pending },
-            onKiosk = { event?.let { nav.openKiosk(it.id, selectedContextId) } },
-            onToggleSounds = { scope.launch { container.settings.setSounds(!settings.sounds) } },
-            onToggleHaptics = { scope.launch { container.settings.setHaptics(!settings.haptics) } },
+            onKiosk = { event?.let { haptics.click(); nav.openKiosk(it.id, selectedContextId) } },
+            onToggleSounds = { haptics.toggle(!settings.sounds); scope.launch { container.settings.setSounds(!settings.sounds) } },
+            onToggleHaptics = {
+                val on = !settings.haptics
+                // Turning vibration on gives a sample of the scan buzz (played directly: the setting isn't on yet).
+                if (on) feedback.play(FeedbackKind.Info, sound = false, haptic = true)
+                scope.launch { container.settings.setHaptics(on) }
+            },
         ),
         camera = {
             CameraScanner(
@@ -229,17 +246,18 @@ fun ScanScreen(nav: AppNavigator) {
                 timezone = tz,
                 selectedContextId = selectedContextId,
                 onQuery = vm::setQuery,
-                onCheckIn = { p: Participant -> sheet = null; vm.checkInManually(p.participantEventId) },
-                onSubmitDirect = { sheet = null; vm.submitDirect(it) },
+                // A click now; the outcome's own sound + vibration follows when the result arrives.
+                onCheckIn = { p: Participant -> haptics.click(); sheet = null; vm.checkInManually(p.participantEventId) },
+                onSubmitDirect = { haptics.click(); sheet = null; vm.submitDirect(it) },
             )
         }
         ScanSheet.Pending -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
-            PendingQueueContent(pending, syncing, tz, onSyncNow = vm::syncNow, onDiscard = { vm.discard(it.clientScanId) })
+            PendingQueueContent(pending, syncing, tz, onSyncNow = { vm.syncNow() }, onDiscard = { vm.discard(it.clientScanId) })
         }
         ScanSheet.Recent -> ModalBottomSheet(onDismissRequest = { sheet = null }) {
             RecentScansContent(log, tz, onOpen = { p ->
                 sheet = null
-                if (canOpenDetails) event?.let { nav.openParticipant(it.id, p.participantEventId) }
+                if (canOpenDetails) event?.let { haptics.click(); nav.openParticipant(it.id, p.participantEventId) }
             })
         }
         null -> Unit
@@ -352,7 +370,10 @@ private fun Viewport(state: ScanUiState, actions: ScanActions, camera: @Composab
                 null, ResultKind.Checking, ResultKind.Undone -> Color.White
                 else -> card.kind.colors().strong
             }
-            ScanFrame(accent = accent, verticalBias = if (card != null) 0.3f else 0.42f)
+            // The frame tints to the outcome and makes room for the card, smoothly rather than jumping.
+            val frameColor by animateColorAsState(accent, MaterialTheme.motionScheme.defaultEffectsSpec(), label = "frameColor")
+            val frameBias by animateFloatAsState(if (card != null) 0.3f else 0.42f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "frameBias")
+            ScanFrame(accent = frameColor, verticalBias = frameBias)
         } else {
             CameraPermissionPanel(state.camera, actions.onRequestCamera, actions.onOpenAppSettings,
                 modifier = Modifier.padding(bottom = if (card == null) 88.dp else 0.dp))
@@ -385,11 +406,24 @@ private fun Viewport(state: ScanUiState, actions: ScanActions, camera: @Composab
 
         // Result card + controls.
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            val motion = MaterialTheme.motionScheme
             AnimatedContent(
                 targetState = card,
                 contentKey = { it?.key },
                 transitionSpec = {
-                    (slideInVertically { it / 3 } + fadeIn()) togetherWith (slideOutVertically { it / 3 } + fadeOut())
+                    when {
+                        // A new scan replaces the card on screen: a quick crossfade with a little pop.
+                        initialState != null && targetState != null ->
+                            (fadeIn(motion.fastEffectsSpec()) + scaleIn(motion.fastSpatialSpec(), initialScale = 0.94f)) togetherWith
+                                fadeOut(motion.fastEffectsSpec())
+                        // Arriving: rise up from the controls.
+                        targetState != null ->
+                            (slideInVertically(motion.defaultSpatialSpec()) { it / 2 } + fadeIn(motion.defaultEffectsSpec())) togetherWith
+                                fadeOut(motion.fastEffectsSpec())
+                        // Dismissed: carry on downwards (from wherever a swipe left it).
+                        else -> fadeIn(motion.fastEffectsSpec()) togetherWith
+                            (slideOutVertically(motion.fastSpatialSpec()) { it / 2 } + fadeOut(motion.fastEffectsSpec()))
+                    } using SizeTransform(clip = false)
                 },
                 label = "result",
                 modifier = Modifier.widthIn(max = 560.dp),

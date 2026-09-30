@@ -1,5 +1,12 @@
 package au.ingo.betterattend.ui.people
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -236,25 +243,47 @@ fun NfcWriteSheetContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
-            when (state) {
-                is NfcWriteState.Waiting -> WaitingGraphic(animate)
-                NfcWriteState.Preparing, NfcWriteState.Idle, NfcWriteState.Writing -> LoadingIndicator(Modifier.size(96.dp))
-                NfcWriteState.Success -> ShapeIcon(MaterialShapes.Sunny.toShape(), s.successContainer, s.onSuccessContainer, Icons.Outlined.Check)
-                NfcWriteState.Unsupported -> ShapeIcon(MaterialShapes.Cookie9Sided.toShape(), cs.surfaceContainerHighest, cs.onSurfaceVariant, Icons.Outlined.PhonelinkErase)
-                NfcWriteState.Disabled -> ShapeIcon(MaterialShapes.Cookie9Sided.toShape(), cs.secondaryContainer, cs.onSecondaryContainer, Icons.Outlined.SettingsRemote)
-                is NfcWriteState.Failed -> ShapeIcon(MaterialShapes.Cookie9Sided.toShape(), cs.errorContainer, cs.onErrorContainer, Icons.Outlined.ErrorOutline)
+        val motion = MaterialTheme.motionScheme
+        // Each step (waiting → writing → done / failed) morphs in: the graphic pops, the copy crossfades.
+        AnimatedContent(
+            targetState = state,
+            contentKey = { it::class },
+            transitionSpec = {
+                (fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.7f)) togetherWith
+                    (fadeOut(motion.fastEffectsSpec()) + scaleOut(motion.fastSpatialSpec(), targetScale = 0.9f))
+            },
+            contentAlignment = Alignment.Center,
+            label = "nfcGraphic",
+            modifier = Modifier.size(160.dp),
+        ) { shown ->
+            Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+                when (shown) {
+                    is NfcWriteState.Waiting -> WaitingGraphic(animate)
+                    NfcWriteState.Preparing, NfcWriteState.Idle, NfcWriteState.Writing -> LoadingIndicator(Modifier.size(96.dp))
+                    NfcWriteState.Success -> ShapeIcon(MaterialShapes.Sunny.toShape(), s.successContainer, s.onSuccessContainer, Icons.Outlined.Check)
+                    NfcWriteState.Unsupported -> ShapeIcon(MaterialShapes.Cookie9Sided.toShape(), cs.surfaceContainerHighest, cs.onSurfaceVariant, Icons.Outlined.PhonelinkErase)
+                    NfcWriteState.Disabled -> ShapeIcon(MaterialShapes.Cookie9Sided.toShape(), cs.secondaryContainer, cs.onSecondaryContainer, Icons.Outlined.SettingsRemote)
+                    is NfcWriteState.Failed -> ShapeIcon(MaterialShapes.Cookie9Sided.toShape(), cs.errorContainer, cs.onErrorContainer, Icons.Outlined.ErrorOutline)
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
-        Text(
-            copy.title,
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(copy.body, style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, textAlign = TextAlign.Center)
+        AnimatedContent(
+            targetState = copy,
+            transitionSpec = { fadeIn(motion.defaultEffectsSpec()) togetherWith fadeOut(motion.fastEffectsSpec()) using SizeTransform(clip = false) },
+            label = "nfcCopy",
+        ) { shown ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    shown.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(shown.body, style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant, textAlign = TextAlign.Center)
+            }
+        }
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             when (state) {

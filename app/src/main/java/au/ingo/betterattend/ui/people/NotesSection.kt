@@ -1,5 +1,6 @@
 package au.ingo.betterattend.ui.people
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -40,6 +42,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 import java.time.Instant
@@ -79,8 +82,12 @@ fun NotesSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
             )
-            else -> Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                notes.forEach { NoteRow(it, now, onRetry, onDiscard) }
+            // New notes grow in rather than shoving the list down in one frame.
+            else -> Column(
+                Modifier.padding(top = 12.dp).animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                notes.forEach { key(it.note.id) { NoteRow(it, now, onRetry, onDiscard) } }
             }
         }
     }
@@ -97,7 +104,8 @@ fun NoteComposer(
     var type by rememberSaveable { mutableStateOf(initialType) }
     var sensitivity by rememberSaveable { mutableStateOf(initialSensitivity) }
     val tooLong = draft.trim().length > MAX_NOTE_LENGTH
-    Column {
+    val haptics = rememberHaptics()
+    Column(Modifier.animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
         OutlinedTextField(
             value = draft,
             onValueChange = { draft = it },
@@ -116,12 +124,12 @@ fun NoteComposer(
             modifier = Modifier.fillMaxWidth(),
         )
         Text("Type", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
-        ConnectedChoice(NOTE_TYPES.map { it to noteTypeLabel(it) }, type, { type = it })
+        ConnectedChoice(NOTE_TYPES.map { it to noteTypeLabel(it) }, type, { if (it != type) haptics.tick(); type = it })
         Spacer(Modifier.height(8.dp))
         Text("Sensitivity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
         ConnectedChoice(
             listOf("normal" to "Normal", "restricted" to "Restricted"),
-            sensitivity, { sensitivity = it },
+            sensitivity, { if (it != sensitivity) haptics.tick(); sensitivity = it },
             icons = mapOf("normal" to Icons.Outlined.LockOpen, "restricted" to Icons.Outlined.Lock),
         )
         if (sensitivity == "restricted") {
