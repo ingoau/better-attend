@@ -1,5 +1,6 @@
 package au.ingo.betterattend.data.repo
 
+import au.ingo.betterattend.util.resultOf
 import au.ingo.betterattend.data.api.AttendApi
 import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.ScanContext
@@ -43,7 +44,7 @@ class EventRepository(
         }
     }
 
-    suspend fun refresh(): Result<List<Event>> = runCatching {
+    suspend fun refresh(): Result<List<Event>> = resultOf {
         val list = api.events()
         _events.value = list
         cache.write(KEY_EVENTS, ListSerializer(Event.serializer()), list)
@@ -62,7 +63,7 @@ class EventRepository(
         }
     }
 
-    suspend fun refreshContexts(eventId: String): Result<List<ScanContext>> = runCatching {
+    suspend fun refreshContexts(eventId: String): Result<List<ScanContext>> = resultOf {
         val list = api.scanContexts(eventId)
         _contexts.update { it + (eventId to list) }
         cache.write("contexts_$eventId", ListSerializer(ScanContext.serializer()), list)

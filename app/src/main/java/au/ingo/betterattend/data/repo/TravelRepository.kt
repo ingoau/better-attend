@@ -1,5 +1,6 @@
 package au.ingo.betterattend.data.repo
 
+import au.ingo.betterattend.util.resultOf
 import au.ingo.betterattend.data.api.AttendApi
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.store.JsonCache
@@ -20,7 +21,7 @@ class TravelRepository(
         return cache.read(key(eventId), TravelCalendar.serializer())?.also { c -> _calendars.update { it + (eventId to c) } }
     }
 
-    suspend fun refresh(eventId: String): Result<TravelCalendar> = runCatching {
+    suspend fun refresh(eventId: String): Result<TravelCalendar> = resultOf {
         val cal = api.travel(eventId)
         _calendars.update { it + (eventId to cal) }
         cache.write(key(eventId), TravelCalendar.serializer(), cal)

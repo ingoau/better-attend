@@ -1,5 +1,6 @@
 package au.ingo.betterattend.data.repo
 
+import au.ingo.betterattend.util.resultOf
 import au.ingo.betterattend.data.api.AttendApi
 import au.ingo.betterattend.data.model.Ticket
 import au.ingo.betterattend.data.store.JsonCache
@@ -25,7 +26,7 @@ class TicketRepository(
         }
     }
 
-    suspend fun refresh(): Result<List<Ticket>> = runCatching {
+    suspend fun refresh(): Result<List<Ticket>> = resultOf {
         val fresh = api.tickets()
         // Keep detail extras (messages, travel) from earlier detail fetches.
         val old = _tickets.value.orEmpty().associateBy { it.id }
@@ -37,7 +38,7 @@ class TicketRepository(
         merged
     }
 
-    suspend fun refreshTicket(id: String): Result<Ticket> = runCatching {
+    suspend fun refreshTicket(id: String): Result<Ticket> = resultOf {
         val t = api.ticket(id)
         val list = _tickets.value.orEmpty()
         val updated = if (list.any { it.id == id }) list.map { if (it.id == id) t else it } else list + t
@@ -46,7 +47,7 @@ class TicketRepository(
         t
     }
 
-    suspend fun googleWalletUrl(id: String): Result<String> = runCatching { api.googleWalletUrl(id) }
+    suspend fun googleWalletUrl(id: String): Result<String> = resultOf { api.googleWalletUrl(id) }
 
     fun clear() { _tickets.value = emptyList() }
 

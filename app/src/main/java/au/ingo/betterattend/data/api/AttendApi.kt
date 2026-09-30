@@ -78,7 +78,7 @@ class AttendApi(
     private val tokens: TokenStore,
     private val onSessionExpired: () -> Unit,
     /** Mutable only so tests can point the app at a local mock server. */
-    @androidx.annotation.VisibleForTesting var baseUrl: String = BuildConfig.API_BASE_URL,
+    var baseUrl: String = BuildConfig.API_BASE_URL,
     client: OkHttpClient? = null,
 ) {
     val http: OkHttpClient = client ?: OkHttpClient.Builder()
@@ -155,9 +155,10 @@ class AttendApi(
                 }
                 throw ApiException(res.code, parseError(res.code, text))
             }
-            val token = tokens.token
-            if (authenticated && token != null && res.header("X-Token-Refresh-Recommended") == "true" &&
-                rotatingFor.getAndSet(token) != token
+            // The hint is about the token this request carried; ignore it if that's already been rotated.
+            val token = res.request.header("Authorization")?.removePrefix("Bearer ")
+            if (authenticated && token != null && token == tokens.token &&
+                res.header("X-Token-Refresh-Recommended") == "true" && rotatingFor.getAndSet(token) != token
             ) {
                 scope.launch { runCatching { refreshSession(expected = token) } }
             }
