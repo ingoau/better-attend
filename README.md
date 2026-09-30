@@ -49,7 +49,8 @@ a navigation rail on tablets, app shortcuts, and no analytics or session recordi
 
 ## Install
 
-Grab the APK from the latest CI run (**Actions → Build APK → attend-apk**) or build it yourself,
+Grab an APK from the latest CI run (**Actions → Build APK → attend-apk**) or build it yourself —
+`app-arm64-v8a-release.apk` fits almost every phone, `app-universal-release.apk` runs everywhere —
 then open it on your phone and allow installing from that source. Android 8.0+.
 
 ## Build

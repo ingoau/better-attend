@@ -74,6 +74,16 @@ android {
         }
     }
 
+    // Per-architecture APKs (smaller downloads) plus a universal APK that runs everywhere.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
