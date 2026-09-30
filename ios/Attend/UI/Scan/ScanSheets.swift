@@ -32,7 +32,7 @@ struct FindPersonSheet: View {
                 if !state.results.isEmpty {
                     Section {
                         ForEach(state.results) { p in
-                            PersonRow(participant: p, action: action, timezone: model.event?.timezone,
+                            FindPersonRow(participant: p, action: action, timezone: model.event?.timezone,
                                       selectedContextId: model.selectedContextId) { onCheckIn(p) }
                         }
                     } header: {
@@ -122,7 +122,7 @@ private struct DirectInputRow: View {
     }
 }
 
-private struct PersonRow: View {
+private struct FindPersonRow: View {
     let participant: Participant
     let action: String
     let timezone: String?

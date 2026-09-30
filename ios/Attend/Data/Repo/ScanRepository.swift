@@ -131,9 +131,7 @@ final class ScanRepository {
         await loadQueue()
         return await queueMutex.withLock {
             var remaining = pending
-            var i = 0
-            while i < remaining.count {
-                let p = remaining[i]
+            while let p = remaining.first {
                 do {
                     var contextId = p.scanContextId
                     if contextId == nil { contextId = await fallbackContext(p.eventId) }
@@ -147,13 +145,13 @@ final class ScanRepository {
                         scannedAt: p.scannedAt
                     )
                     if let participant = result.participant { await participants.upsert(p.eventId, participant) }
-                    remaining.remove(at: i)
+                    remaining.removeFirst()
                 } catch {
                     // Offline/5xx/429, cancelled, or an auth problem the user can fix by signing in again: keep it.
                     let api = error as? APIError
                     if error.isTransient || error.isCancellation || api?.isUnauthorized == true || api?.isForbidden == true { break }
                     // Permanent failure (e.g. not registered): drop it but keep a record in the log.
-                    remaining.remove(at: i)
+                    remaining.removeFirst()
                     let failed = ScanOutcome.failed(clientScanId: p.clientScanId, message: "Offline scan rejected: \(error.friendlyMessage)",
                                                     participant: nil, notFound: false)
                     log.insert(ScanLogEntry(outcome: failed, contextName: p.scanContextName, at: Time.nowISO()), at: 0)
