@@ -3,28 +3,32 @@ package au.ingo.betterattend.ui.components
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 
+/**
+ * The in-app "Haptics" setting, readable from anywhere. Bottom sheets and dialogs run in their own
+ * window, which provides a fresh LocalHapticFeedback, so a CompositionLocal wrapper alone can't
+ * silence them; every haptic we fire goes through this gate instead.
+ */
+object HapticsGate {
+    @Volatile var enabled: Boolean = true
+}
+
 /** Wraps the platform haptics so the in-app "Haptics" setting silences everything, including Material components. */
-private class SettingsAwareHapticFeedback(
-    private val base: HapticFeedback,
-    private val enabled: () -> Boolean,
-) : HapticFeedback {
+private class SettingsAwareHapticFeedback(private val base: HapticFeedback) : HapticFeedback {
     override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
-        if (enabled()) base.performHapticFeedback(hapticFeedbackType)
+        if (HapticsGate.enabled) base.performHapticFeedback(hapticFeedbackType)
     }
 }
 
 @Composable
 fun ProvideAppHaptics(enabled: Boolean, content: @Composable () -> Unit) {
+    HapticsGate.enabled = enabled
     val base = LocalHapticFeedback.current
-    val on by rememberUpdatedState(enabled)
-    val wrapped = remember(base) { SettingsAwareHapticFeedback(base) { on } }
+    val wrapped = remember(base) { if (base is SettingsAwareHapticFeedback) base else SettingsAwareHapticFeedback(base) }
     CompositionLocalProvider(LocalHapticFeedback provides wrapped, content = content)
 }
 
@@ -38,7 +42,10 @@ fun ProvideAppHaptics(enabled: Boolean, content: @Composable () -> Unit) {
  * - [longPress]: a long-press action fired (copy, context menu)
  */
 @Immutable
-class Haptics(private val feedback: HapticFeedback) {
+class Haptics(feedback: HapticFeedback) {
+    // Gate even when called inside a sheet/dialog window whose LocalHapticFeedback isn't ours.
+    private val feedback: HapticFeedback = if (feedback is SettingsAwareHapticFeedback) feedback else SettingsAwareHapticFeedback(feedback)
+
     fun tick() = feedback.performHapticFeedback(HapticFeedbackType.SegmentTick)
     fun frequentTick() = feedback.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
     fun click() = feedback.performHapticFeedback(HapticFeedbackType.ContextClick)

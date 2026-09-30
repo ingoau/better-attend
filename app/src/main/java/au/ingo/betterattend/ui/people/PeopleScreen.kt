@@ -462,7 +462,7 @@ private fun LetterHeader(letter: String, modifier: Modifier = Modifier) {
 @Composable
 private fun SummaryCard(roster: List<Participant>, counts: Map<QuickFilter, Int>, onQuick: (QuickFilter) -> Unit) {
     val stats = remember(roster) { EventStats.from(roster) }
-    val total = maxOf(stats.confirmed, stats.checkedIn)
+    val total = stats.expected
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
