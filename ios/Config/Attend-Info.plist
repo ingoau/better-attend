@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>au.ingo.betterattend.refresh</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NFCReaderUsageDescription</key>
+	<string>Attend reads NFC badges to check people in, and writes new badges.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Attend uses the camera to scan ticket QR codes.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>au.ingo.betterattend</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>attend</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>comgooglemaps</string>
+	</array>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>au.ingo.betterattend.scan</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Scan Tickets</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>qrcode.viewfinder</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>au.ingo.betterattend.people</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Find a Person</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>person.2</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>au.ingo.betterattend.tickets</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>My Tickets</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>ticket</string>
+		</dict>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+</dict>
+</plist>
