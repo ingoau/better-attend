@@ -11,7 +11,12 @@ final class DemoBackend: @unchecked Sendable {
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "AttendDemo") }
 
     private let lock = NSLock()
-    private var data = DemoData()
+    private var data: DemoData = {
+        var d = DemoData()
+        // `-AttendDemoParticipant YES`: signed in as a participant only, so Tickets is the only tab.
+        if UserDefaults.standard.bool(forKey: "AttendDemoParticipant") { d.user.isOrganizer = false }
+        return d
+    }()
     private var seenClientScanIds: Set<String> = []
     private var offline = UserDefaults.standard.bool(forKey: "AttendDemoOffline")
     private var blastCreated: [String: Date] = [:]
@@ -69,6 +74,8 @@ final class DemoBackend: @unchecked Sendable {
         if match("DELETE", "session") != nil { return .success(Reply(status: 204, body: Data())) }
         if match("GET", "events") != nil { return ok(EventsResponse(events: data.events)) }
         if match("GET", "tickets") != nil { return ok(TicketsResponse(tickets: currentTickets())) }
+        // Wallet passes must be signed with an Apple certificate, which demo mode doesn't have.
+        if match("GET", "tickets/*/wallet") != nil { return error(422, "Apple Wallet passes aren't available in demo mode.") }
         if let c = match("GET", "tickets/*") {
             guard let t = currentTickets().first(where: { $0.id == c[0] }) else { return notFound() }
             return ok(TicketResponse(ticket: t))

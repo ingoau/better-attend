@@ -183,6 +183,7 @@ struct DemoData: Sendable {
             Ticket(id: "3b1f9a2c-8d7e-4f60-9a1b-2c3d4e5f6a7b", participantId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", status: "complete",
                    displayStatus: "Complete", confirmed: true, checkedIn: false, attendeeName: "Orpheus Dino",
                    qrPayload: "attend://checkin/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", shortCode: "A1B2C3D4",
+                   appleWalletUrl: "/api/v1/tickets/3b1f9a2c-8d7e-4f60-9a1b-2c3d4e5f6a7b/wallet",
                    onboardingUrl: "https://attend.hackclub.com/onboarding", event: campfire, canDownloadTicket: true,
                    travelInbound: TicketTravel(direction: "inbound", mode: "plane", carrier: "Qantas", flightNumber: "QF401",
                                                departureCity: "Melbourne", arrivalCity: "Sydney", departureTime: iso(-420), arrivalTime: iso(-330),
