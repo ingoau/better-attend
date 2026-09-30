@@ -1,6 +1,8 @@
 package au.ingo.betterattend.ui.blasts
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,7 +53,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,9 +76,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.SlackBlast
 import au.ingo.betterattend.ui.components.EmptyState
+import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 import java.time.Instant
@@ -127,6 +130,22 @@ fun BlastsContent(
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
+    val haptics = rememberHaptics()
+    val openComposer = { haptics.click(); controller.composerOpen = true }
+
+    // A blast we watched go out finishing: one confirm when it's delivered, a reject if it failed.
+    val watching = remember { HashSet<String>() }
+    LaunchedEffect(state.blasts) {
+        val list = state.blasts ?: return@LaunchedEffect
+        val finished = list.filter { it.id in watching && !BlastLogic.isActive(it) }
+        when {
+            finished.any { it.status == "failed" } -> haptics.reject()
+            finished.isNotEmpty() -> haptics.confirm()
+        }
+        watching.clear()
+        list.filter(BlastLogic::isActive).mapTo(watching) { it.id }
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
@@ -144,35 +163,42 @@ fun BlastsContent(
                 ExtendedFloatingActionButton(
                     text = { Text("New announcement") },
                     icon = { Icon(Icons.Outlined.Edit, null) },
-                    onClick = { controller.composerOpen = true },
+                    onClick = openComposer,
                     expanded = !listState.canScrollBackward,
                 )
             }
         },
         snackbarHost = { SnackbarHost(controller.snackbar) },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        val phase = when {
+            state.blasts == null && state.error != null -> BlastsPhase.Failed
+            state.blasts == null -> BlastsPhase.Loading
+            else -> BlastsPhase.Content
+        }
+        Crossfade(phase, Modifier.fillMaxSize().padding(padding), MaterialTheme.motionScheme.defaultEffectsSpec(), label = "blasts") { shown ->
+          Box(Modifier.fillMaxSize()) {
             val blasts = state.blasts
             when {
-                blasts == null && state.error != null -> EmptyState(
-                    Icons.Outlined.CloudOff, "Couldn't load announcements", body = state.error,
+                shown == BlastsPhase.Failed || (blasts == null && state.error != null) -> EmptyState(
+                    Icons.Outlined.CloudOff, "Couldn't load announcements", body = state.error ?: "Something went wrong.",
                     actionLabel = "Try again", onAction = onRefresh,
                 )
-                blasts == null -> LoadingState(message = "Loading announcements…")
-                else -> PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                shown == BlastsPhase.Loading || blasts == null -> LoadingState(message = "Loading announcements…")
+                else -> HapticPullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (state.error != null) item(key = "offline") { OfflineBanner(state.error, onRetry = onRefresh) }
+                        if (state.error != null) item(key = "offline") { OfflineBanner(state.error, Modifier.animateItem(), onRetry = onRefresh) }
                         if (blasts.isEmpty()) {
                             item(key = "empty") {
                                 EmptyState(
                                     Icons.Outlined.Campaign, "No announcements yet",
                                     body = "Reach everyone at once with a Slack DM, perfect for “lunch is ready” or “buses leave at 9”.",
-                                    actionLabel = "Write one", onAction = { controller.composerOpen = true },
+                                    actionLabel = "Write one", onAction = openComposer,
+                                    modifier = Modifier.animateItem(),
                                 )
                             }
                         }
@@ -180,6 +206,7 @@ fun BlastsContent(
                     }
                 }
             }
+          }
         }
     }
 
@@ -196,25 +223,32 @@ fun BlastsContent(
                 sending = state.sending,
                 error = state.sendError,
                 onCancel = { controller.composerOpen = false },
-                onReview = { controller.confirmOpen = true },
+                onReview = { haptics.click(); controller.confirmOpen = true },
                 modifier = Modifier.navigationBarsPadding().imePadding(),
             )
         }
     }
 
     // A failed send drops back to the composer, where the error is shown next to the text.
-    LaunchedEffect(state.sendError) { if (state.sendError != null) controller.confirmOpen = false }
+    LaunchedEffect(state.sendError) {
+        if (state.sendError != null) {
+            haptics.reject()
+            controller.confirmOpen = false
+        }
+    }
 
     if (controller.confirmOpen) {
         ConfirmSendDialog(
             message = controller.draft,
             recipientEstimate = state.recipientEstimate,
             sending = state.sending,
-            onConfirm = { onSend(controller.draft) },
+            onConfirm = { haptics.click(); onSend(controller.draft) },
             onDismiss = { if (!state.sending) controller.confirmOpen = false },
         )
     }
 }
+
+private enum class BlastsPhase { Failed, Loading, Content }
 
 // ---------------------------------------------------------------- history
 
@@ -223,13 +257,15 @@ internal fun BlastCard(blast: SlackBlast, now: Instant, modifier: Modifier = Mod
     var expanded by rememberSaveable(blast.id) { mutableStateOf(false) }
     val text = remember(blast.message) { BlastLogic.toPlain(blast.message) }
     val active = BlastLogic.isActive(blast)
+    // Polls land every 10 s; ease the bar between them instead of stepping.
+    val progress by animateFloatAsState(BlastLogic.fraction(blast), MaterialTheme.motionScheme.slowEffectsSpec(), label = "delivery")
     Surface(
         onClick = { expanded = !expanded },
         shape = MaterialTheme.shapes.large,
         color = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp).animateContentSize()) {
+        Column(Modifier.padding(16.dp).animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusPill(blast.status)
                 Spacer(Modifier.weight(1f))
@@ -249,7 +285,7 @@ internal fun BlastCard(blast: SlackBlast, now: Instant, modifier: Modifier = Mod
             if (active) {
                 Spacer(Modifier.height(12.dp))
                 LinearWavyProgressIndicator(
-                    progress = { BlastLogic.fraction(blast) },
+                    progress = { progress },
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = BlastLogic.progressText(blast) },
                 )
             }
