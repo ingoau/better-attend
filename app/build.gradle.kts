@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -27,9 +29,29 @@ android {
         buildConfigField("String", "OAUTH_REDIRECT_URI", "\"attend://oauth/callback\"")
     }
 
+    // Release signing: env vars (CI) or a gitignored keystore.properties; otherwise fall back to the
+    // debug key so a locally built release APK always installs.
+    val keystoreProps = Properties().apply {
+        rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    fun signingValue(env: String, prop: String): String? = System.getenv(env) ?: keystoreProps.getProperty(prop)
+    val releaseStoreFile = signingValue("ATTEND_KEYSTORE_FILE", "storeFile")?.let { rootProject.file(it) }?.takeIf { it.exists() }
+
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = signingValue("ATTEND_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("ATTEND_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("ATTEND_KEY_PASSWORD", "keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
