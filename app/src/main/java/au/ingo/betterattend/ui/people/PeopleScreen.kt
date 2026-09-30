@@ -101,10 +101,10 @@ fun PeopleScreen(nav: AppNavigator) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val eventId = state.event?.id
 
-    // Delta-sync on open and every minute while the list is on screen.
+    // Delta-sync on open and every minute while the list is on screen (RESUMED = the visible tab).
     LaunchedEffect(eventId, lifecycle) {
         if (eventId == null) return@LaunchedEffect
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 vm.sync()
                 delay(60_000)

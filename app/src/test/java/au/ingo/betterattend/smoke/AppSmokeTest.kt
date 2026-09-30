@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onRoot
@@ -128,7 +129,7 @@ class AppSmokeTest {
 
             tab("People").performClick()
             waitForText("Search name, email or code")
-            compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("Maya")
+            compose.onAllNodes(hasSetTextAction() and hasText("Search name, email or code")).onFirst().performTextInput("Maya")
             waitForText("Maya")
             compose.onAllNodes(hasText("she/her", substring = true) and hasClickAction()).onFirst().performClick()
             waitForText("Peanuts") // participant detail with sensitive alerts
@@ -143,7 +144,8 @@ class AppSmokeTest {
             // Manual check-in: Find person → search → Check in → result card.
             compose.onAllNodesWithText("Find person", useUnmergedTree = true).onFirst().performClick()
             compose.waitUntil(5_000) { compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
-            compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("Leo")
+            // The sheet's field is the newest one (all tab pages stay composed, so match the last).
+            compose.onAllNodes(hasSetTextAction()).onLast().performTextInput("Leo")
             compose.waitUntil(5_000) { compose.onAllNodesWithText("Check in", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
             compose.onAllNodesWithText("Check in", useUnmergedTree = true).onFirst().performClick()
             waitForText("Scanned")

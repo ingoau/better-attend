@@ -113,7 +113,16 @@ fun CameraScanner(
     }
     var camera by remember { mutableStateOf<Camera?>(null) }
 
-    DisposableEffect(lensFacing, lifecycleOwner) {
+    // Only run the camera while this screen is resumed: in the tab pager, neighbouring tabs are
+    // composed but not resumed, so swiping past Scan doesn't power the camera up.
+    var resumed by remember { mutableStateOf(false) }
+    LifecycleResumeEffect(Unit) {
+        resumed = true
+        onPauseOrDispose { resumed = false }
+    }
+
+    DisposableEffect(lensFacing, lifecycleOwner, resumed) {
+        if (!resumed) return@DisposableEffect onDispose { }
         var disposed = false
         var provider: ProcessCameraProvider? = null
         val analysisExecutor = Executors.newSingleThreadExecutor()

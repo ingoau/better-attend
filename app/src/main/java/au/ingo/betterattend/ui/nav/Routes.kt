@@ -23,6 +23,8 @@ enum class Tab(val label: String, val icon: ImageVector, val selectedIcon: Image
     Tickets("Tickets", Icons.Outlined.ConfirmationNumber, Icons.Filled.ConfirmationNumber),
 }
 
+/** The tab pager (Home, Scan, People, Travel, Tickets). */
+@Serializable data object MainRoute
 @Serializable data object HomeRoute
 @Serializable data object ScanRoute
 @Serializable data object PeopleRoute
