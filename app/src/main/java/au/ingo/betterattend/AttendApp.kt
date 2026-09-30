@@ -10,6 +10,7 @@ class AttendApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        container.scans.onQueued = { au.ingo.betterattend.scan.ScanSyncWorker.enqueue(this) }
     }
 }
 
