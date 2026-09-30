@@ -3,6 +3,7 @@ package au.ingo.betterattend.ui.people
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +54,7 @@ fun <T> ConnectedChoice(
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
+                contentPadding = PaddingValues(horizontal = 8.dp),
                 modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
             ) {
                 icons[value]?.let { Icon(it, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }

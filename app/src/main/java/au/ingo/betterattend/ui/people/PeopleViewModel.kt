@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -63,7 +62,7 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
             c.events.events.collect { list -> _state.update { it.copy(eventsLoaded = list != null) } }
         }
         viewModelScope.launch {
-            c.events.selectedEvent.distinctUntilChangedBy { it?.id to it }.collect { e -> onEvent(e) }
+            c.events.selectedEvent.collect { e -> onEvent(e) }
         }
     }
 
