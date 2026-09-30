@@ -13,6 +13,9 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import androidx.test.core.app.ActivityScenario
@@ -111,6 +114,12 @@ class AppSmokeTest {
         }
     }
 
+    private fun assertSelected(label: String) {
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText(label) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
     private fun tab(label: String) =
         compose.onAllNodes(hasText(label) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).onFirst()
 
@@ -156,6 +165,31 @@ class AppSmokeTest {
 
             tab("Home").performClick()
             waitForText("checked in")
+            assertSelected("Home")
+
+            // Swipe between tabs: Home → Scan → People.
+            compose.onRoot().performTouchInput { swipeLeft(startX = right * 0.9f, endX = left + right * 0.1f) }
+            compose.waitForIdle()
+            assertSelected("Scan")
+            compose.onRoot().performTouchInput { swipeLeft(startX = right * 0.9f, endX = left + right * 0.1f) }
+            compose.waitForIdle()
+            assertSelected("People")
+
+            // System back from a tab returns to Home instead of leaving the app.
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+            assertSelected("Home")
+
+            // Detail screens push over the tabs and back returns to the same tab.
+            tab("People").performClick()
+            compose.waitForIdle()
+            val accounts = compose.onAllNodes(hasContentDescription("Account and settings"))
+            val visible = (0 until accounts.fetchSemanticsNodes().size).first { i -> runCatching { accounts[i].assertIsDisplayed() }.isSuccess }
+            accounts[visible].performClick()
+            waitForText("Appearance")
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+            assertSelected("People")
         }
         synchronized(requests) {
             check(requests.any { it == "GET /events" }) { "events never requested: $requests" }

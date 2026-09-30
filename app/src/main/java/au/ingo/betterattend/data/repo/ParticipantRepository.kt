@@ -38,6 +38,9 @@ data class EventStats(
     val registered: Int = 0,
     val confirmed: Int = 0,
     val checkedIn: Int = 0,
+    /** People we expect to show up: confirmed registrations, or every active one when none are marked complete. */
+    val expected: Int = 0,
+    /** Expected people who haven't checked in yet. */
     val notArrived: Int = 0,
     val withdrawn: Int = 0,
     val byStatus: Map<String, Int> = emptyMap(),
@@ -47,13 +50,16 @@ data class EventStats(
     val highSupport: Int = 0,
     val checkedInLastHour: Int = 0,
 ) {
-    val progress: Float get() = if (confirmed == 0) 0f else checkedIn.coerceAtMost(confirmed) / confirmed.toFloat()
+    val progress: Float get() = if (expected == 0) 0f else checkedIn.coerceAtMost(expected) / expected.toFloat()
 
     companion object {
         fun from(participants: List<Participant>, now: Instant = Instant.now()): EventStats {
             val active = participants.filter { it.isActive }
             val confirmed = active.filter { it.status == "complete" }
             val checkedIn = active.filter { it.isCheckedIn }
+            // Attend's status column lags reality (it can say "in_progress" for someone who's done), so
+            // if nobody is marked complete yet, expect everyone who's registered rather than nobody.
+            val basis = if (confirmed.isNotEmpty()) confirmed else active
             val perContext = HashMap<String, Int>()
             active.forEach { p -> p.scansByContext.forEach { s -> perContext.merge(s.scanContextId, 1, Int::plus) } }
             val hourAgo = now.minus(Duration.ofHours(1))
@@ -61,7 +67,8 @@ data class EventStats(
                 registered = active.size,
                 confirmed = confirmed.size,
                 checkedIn = checkedIn.size,
-                notArrived = confirmed.count { !it.isCheckedIn },
+                expected = maxOf(basis.size, checkedIn.size),
+                notArrived = basis.count { !it.isCheckedIn },
                 withdrawn = participants.size - active.size,
                 byStatus = participants.groupingBy { it.status ?: "unknown" }.eachCount(),
                 perContext = perContext,

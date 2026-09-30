@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -52,6 +54,17 @@ class EventRepository(
     }
 
     suspend fun select(eventId: String) = settings.setSelectedEvent(eventId)
+
+    /**
+     * The selected event, waiting for the events cache and saved settings to load first. Use this
+     * from background work (widgets, workers): [selectedEvent] starts as null in a fresh process and
+     * would otherwise fall back to a different event than the one the user picked.
+     */
+    suspend fun resolveSelected(timeoutMs: Long = 3_000): Event? {
+        val list = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { events.filterNotNull().first() } ?: return null
+        val id = settings.current().selectedEventId
+        return list.firstOrNull { it.id == id } ?: suggestEvent(list)
+    }
 
     fun cachedContexts(eventId: String): List<ScanContext>? = _contexts.value[eventId]
 

@@ -91,7 +91,7 @@ class WidgetSyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val c = applicationContext.container
         var events = withTimeoutOrNull(3_000) { c.events.events.filterNotNull().first() }
         if (events.isNullOrEmpty()) events = c.events.refresh().getOrNull() // first run on a fresh install: 1 call
-        val event = c.events.selectedEvent.value ?: events?.let { EventRepository.suggestEvent(it) } ?: return
+        val event = c.events.resolveSelected() ?: events?.let { EventRepository.suggestEvent(it) } ?: return
 
         if (WidgetKind.CheckIn in placed && event.canViewParticipants) {
             val roster = c.participants.load(event.id)

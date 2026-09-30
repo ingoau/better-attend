@@ -113,7 +113,7 @@ object WidgetUpdater {
         val events = if (user.isOrganizer || user.globalAdmin) withTimeoutOrNull(3_000) { container.events.events.filterNotNull().first() }
         else container.events.events.value
         val isOrganizer = user.isOrganizer || user.globalAdmin || !events.isNullOrEmpty()
-        val event: Event? = if (isOrganizer) container.events.selectedEvent.value ?: events?.let { au.ingo.betterattend.data.repo.EventRepository.suggestEvent(it) } else null
+        val event: Event? = if (isOrganizer) container.events.resolveSelected() else null
         if (event != null) {
             if (event.canViewParticipants) container.participants.load(event.id)
             container.events.loadContexts(event.id)

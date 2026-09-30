@@ -125,7 +125,7 @@ object WidgetSnapshots {
             timezone = event.timezone,
             hasCounts = stats != null,
             checkedIn = stats?.checkedIn ?: 0,
-            expected = stats?.let { maxOf(it.confirmed, it.checkedIn) } ?: 0,
+            expected = stats?.expected ?: 0,
             notArrived = stats?.notArrived ?: 0,
             lastHour = stats?.checkedInLastHour ?: 0,
             contexts = stats?.let { contextCounts(it, usableRoster, contexts) }.orEmpty(),
