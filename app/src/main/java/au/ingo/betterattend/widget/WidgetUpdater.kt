@@ -109,7 +109,9 @@ object WidgetUpdater {
 
     private suspend fun buildFromRepos(container: AppContainer): WidgetSnapshot {
         val user = (container.auth.state.value as? AuthState.SignedIn)?.user ?: return WidgetSnapshot.SignedOut
-        val events = withTimeoutOrNull(3_000) { container.events.events.filterNotNull().first() }
+        // Only organizers need to wait for the events cache to load; participants may never have one.
+        val events = if (user.isOrganizer || user.globalAdmin) withTimeoutOrNull(3_000) { container.events.events.filterNotNull().first() }
+        else container.events.events.value
         val isOrganizer = user.isOrganizer || user.globalAdmin || !events.isNullOrEmpty()
         val event: Event? = if (isOrganizer) container.events.selectedEvent.value ?: events?.let { au.ingo.betterattend.data.repo.EventRepository.suggestEvent(it) } else null
         if (event != null) {
