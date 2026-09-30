@@ -1,6 +1,7 @@
 package au.ingo.betterattend.ui.tickets
 
 import android.widget.Toast
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,12 +78,15 @@ import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.components.SectionHeader
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -166,6 +171,8 @@ fun TicketsContent(
 ) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val (current, past) = remember(tickets, now) { TicketLogic.sorted(tickets.orEmpty(), now) }
+    val haptics = rememberHaptics()
+    val open: (Ticket) -> Unit = { haptics.click(); onOpen(it) }
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.surface,
@@ -187,6 +194,12 @@ fun TicketsContent(
         },
     ) { padding ->
         val pullState = rememberPullToRefreshState()
+        // Same feel as HapticPullToRefreshBox (kept a plain PullToRefreshBox for the expressive indicator).
+        LaunchedEffect(pullState) {
+            snapshotFlow { pullState.distanceFraction >= 1f }.distinctUntilChanged().drop(1).collect { armed ->
+                if (armed) haptics.threshold() else haptics.frequentTick()
+            }
+        }
         PullToRefreshBox(
             isRefreshing = refreshing && tickets != null,
             onRefresh = onRefresh,
@@ -200,18 +213,25 @@ fun TicketsContent(
                 )
             },
         ) {
+            val phase = when {
+                tickets.isNullOrEmpty() && error != null && !refreshing -> ListPhase.Failed
+                tickets == null -> ListPhase.Loading
+                tickets.isEmpty() -> ListPhase.Empty
+                else -> ListPhase.Tickets
+            }
+            Crossfade(phase, animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(), label = "tickets") { shown ->
             when {
-                tickets.isNullOrEmpty() && error != null && !refreshing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                shown == ListPhase.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     EmptyState(
                         icon = Icons.Outlined.CloudOff,
                         title = "Couldn't load your tickets",
-                        body = error,
+                        body = error ?: "Something went wrong.",
                         actionLabel = "Try again",
                         onAction = onRefresh,
                     )
                 }
-                tickets == null -> LoadingState(message = "Fetching your tickets…")
-                tickets.isEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
+                shown == ListPhase.Loading || tickets == null -> LoadingState(message = "Fetching your tickets…")
+                shown == ListPhase.Empty || tickets.isEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
                     item {
                         EmptyState(
                             icon = Icons.Outlined.ConfirmationNumber,
@@ -227,24 +247,27 @@ fun TicketsContent(
                 ) {
                     if (error != null) {
                         item(key = "offline") {
-                            OfflineBanner("You're offline. Showing your saved tickets — QR codes still work.", onRetry = onRefresh)
+                            OfflineBanner("You're offline. Showing your saved tickets — QR codes still work.", Modifier.animateItem(), onRetry = onRefresh)
                         }
                     }
                     items(current, key = { it.id }) { t ->
-                        TicketCard(t, now, featured = t.id == current.firstOrNull()?.id, onClick = { onOpen(t) })
+                        TicketCard(t, now, featured = t.id == current.firstOrNull()?.id, onClick = { open(t) }, modifier = Modifier.animateItem())
                     }
                     if (past.isNotEmpty()) {
-                        item(key = "past_header") { SectionHeader("Past events") }
-                        items(past, key = { it.id }) { t -> TicketCard(t, now, featured = false, past = true, onClick = { onOpen(t) }) }
+                        item(key = "past_header") { SectionHeader("Past events", Modifier.animateItem()) }
+                        items(past, key = { it.id }) { t -> TicketCard(t, now, featured = false, past = true, onClick = { open(t) }, modifier = Modifier.animateItem()) }
                     }
                 }
+            }
             }
         }
     }
 }
 
+private enum class ListPhase { Failed, Loading, Empty, Tickets }
+
 @Composable
-private fun TicketCard(t: Ticket, now: Instant, featured: Boolean, onClick: () -> Unit, past: Boolean = false) {
+private fun TicketCard(t: Ticket, now: Instant, featured: Boolean, onClick: () -> Unit, past: Boolean = false, modifier: Modifier = Modifier) {
     val status = TicketLogic.status(t)
     val cs = MaterialTheme.colorScheme
     val container = when {
@@ -261,7 +284,7 @@ private fun TicketCard(t: Ticket, now: Instant, featured: Boolean, onClick: () -
         shape = TicketShape(corner = 28.dp, notchRadius = 12.dp, notchFromTop = 104.dp),
         color = container,
         contentColor = content,
-        modifier = Modifier.fillMaxWidth().semantics { role = Role.Button; contentDescription = "${t.event.name}. ${statusLabel(status)}. $action" },
+        modifier = modifier.fillMaxWidth().semantics { role = Role.Button; contentDescription = "${t.event.name}. ${statusLabel(status)}. $action" },
     ) {
         Column {
             Row(Modifier.height(104.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
