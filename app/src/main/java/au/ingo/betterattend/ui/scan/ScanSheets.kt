@@ -121,7 +121,7 @@ fun FindPersonContent(
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), modifier = Modifier.heightIn(min = 240.dp)) {
             state.directInput?.let { input ->
                 item(key = "direct") {
-                    DirectInputRow(input, action) { onSubmitDirect(input) }
+                    DirectInputRow(input, action, Modifier.animateItem()) { onSubmitDirect(input) }
                 }
             }
             if (!state.canSearch) {
@@ -145,7 +145,7 @@ fun FindPersonContent(
                 item(key = "remote-error") { Hint("Showing offline results only. ${state.remoteError}") }
             }
             items(state.results, key = { it.participantEventId }) { p ->
-                PersonRow(p, action, timezone, selectedContextId) { onCheckIn(p) }
+                PersonRow(p, action, timezone, selectedContextId, Modifier.animateItem()) { onCheckIn(p) }
             }
         }
     }
@@ -158,7 +158,7 @@ private fun Hint(text: String) {
 }
 
 @Composable
-private fun DirectInputRow(input: ScanInput, action: String, onClick: () -> Unit) {
+private fun DirectInputRow(input: ScanInput, action: String, modifier: Modifier, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text("Use this ticket ID") },
         supportingContent = { Text(input.participantId.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -169,12 +169,12 @@ private fun DirectInputRow(input: ScanInput, action: String, onClick: () -> Unit
         },
         trailingContent = { Button(onClick = onClick, shapes = ButtonDefaults.shapes()) { Text(action) } },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(20.dp)),
+        modifier = modifier.padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(20.dp)),
     )
 }
 
 @Composable
-private fun PersonRow(p: Participant, action: String, timezone: String?, selectedContextId: String?, onAction: () -> Unit) {
+private fun PersonRow(p: Participant, action: String, timezone: String?, selectedContextId: String?, modifier: Modifier, onAction: () -> Unit) {
     val here = p.scansByContext.firstOrNull { it.scanContextId == selectedContextId }
     val statusText: String
     val statusColor: androidx.compose.ui.graphics.Color
@@ -198,7 +198,7 @@ private fun PersonRow(p: Participant, action: String, timezone: String?, selecte
             if (here != null || !p.isActive) FilledTonalButton(onClick = onAction, shapes = ButtonDefaults.shapes()) { Text(action) }
             else Button(onClick = onAction, shapes = ButtonDefaults.shapes()) { Text(action) }
         },
-        modifier = Modifier.padding(horizontal = 4.dp),
+        modifier = modifier.padding(horizontal = 4.dp),
     )
 }
 
@@ -253,6 +253,8 @@ fun PendingQueueContent(
                     trailingContent = {
                         IconButton(onClick = { onDiscard(p) }) { Icon(Icons.Outlined.DeleteOutline, "Discard scan for ${p.displayName()}") }
                     },
+                    // Synced or discarded rows slide away instead of vanishing.
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
@@ -314,7 +316,9 @@ fun RecentScansContent(
                         }
                     },
                     trailingContent = if (p != null) ({ Text("Details", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }) else null,
-                    modifier = if (p != null) Modifier.clickable(onClickLabel = "Open ${p.name}") { onOpen(p) } else Modifier,
+                    modifier = Modifier.animateItem().then(
+                        if (p != null) Modifier.clickable(onClickLabel = "Open ${p.name}") { onOpen(p) } else Modifier,
+                    ),
                 )
             }
         }

@@ -84,6 +84,13 @@ class ScanViewModel(
     private val _feedback = MutableSharedFlow<FeedbackKind>(extraBufferCapacity = 8)
     val feedback: SharedFlow<FeedbackKind> = _feedback
 
+    /**
+     * Haptic cues for staff actions that aren't scans (undo, a manual "Sync now"): true = it
+     * worked, false = it didn't. Scan outcomes use [feedback] instead, so nothing buzzes twice.
+     */
+    private val _actionResults = MutableSharedFlow<Boolean>(extraBufferCapacity = 4)
+    val actionResults: SharedFlow<Boolean> = _actionResults
+
     /** One-off messages for a snackbar. */
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages
@@ -219,6 +226,7 @@ class ScanViewModel(
                 container.scans.undo(e.id, peid, ctxId)
                 container.participants.applyUndo(e.id, peid, ctxId, contexts.value.orEmpty())
             }.onSuccess {
+                _actionResults.tryEmit(true)
                 card.gateKey?.let(gate::release)
                 _card.update {
                     if (it?.key == card.key) it.copy(kind = ResultKind.Undone, title = "Scan undone",
@@ -226,6 +234,7 @@ class ScanViewModel(
                     else it
                 }
             }.onFailure { err ->
+                _actionResults.tryEmit(false)
                 _card.update { if (it?.key == card.key) it.copy(busy = false) else it }
                 _messages.tryEmit("Couldn't undo: ${err.friendlyMessage}")
             }
@@ -234,15 +243,18 @@ class ScanViewModel(
 
     // ---------- offline queue ----------
 
-    fun syncNow() {
+    /** @param manual the user tapped "Sync now" (gets a success/failure cue); false for quiet retries. */
+    fun syncNow(manual: Boolean = true) {
         if (_syncing.value) return
         _syncing.value = true
         viewModelScope.launch {
             try {
                 val left = container.scans.flush()
+                if (manual) _actionResults.tryEmit(left == 0)
                 if (left > 0) _messages.tryEmit("Still offline. $left ${if (left == 1) "scan is" else "scans are"} waiting to sync.")
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                if (manual) _actionResults.tryEmit(false)
                 _messages.tryEmit(e.friendlyMessage)
             } finally {
                 _syncing.value = false
@@ -252,7 +264,7 @@ class ScanViewModel(
 
     /** Called whenever the scanner resumes: quietly retry anything queued. */
     fun onResume() {
-        if (container.scans.pending.value.isNotEmpty()) syncNow()
+        if (container.scans.pending.value.isNotEmpty()) syncNow(manual = false)
     }
 
     fun discard(clientScanId: String) {

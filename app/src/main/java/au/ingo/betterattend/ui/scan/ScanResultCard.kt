@@ -1,7 +1,14 @@
 package au.ingo.betterattend.ui.scan
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -16,7 +23,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,26 +50,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.theme.status
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @Composable
 fun ResultKind.badgeShape(): Shape = when (this) {
@@ -99,28 +109,53 @@ fun ScanResultCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = card.kind.colors()
+    val motion = MaterialTheme.motionScheme
+    val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     val offset = remember(card.key) { Animatable(0f) }
     val threshold = with(LocalDensity.current) { 64.dp.toPx() }
+    val springBack = motion.fastSpatialSpec<Float>()
     val p = card.participant
+
+    // Feel the commit point: a tick as the swipe passes it (letting go now dismisses), a lighter one backing off.
+    LaunchedEffect(offset) {
+        snapshotFlow { offset.value > threshold }.distinctUntilChanged().drop(1).collect { armed ->
+            if (armed) haptics.threshold() else haptics.frequentTick()
+        }
+    }
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .offset { IntOffset(0, offset.value.roundToInt()) }
+            // Drag detection sits outside the translation so the finger's deltas aren't skewed by the moving card.
             .draggable(
                 orientation = Orientation.Vertical,
-                state = rememberDraggableState { d -> scope.launch { offset.snapTo((offset.value + d).coerceAtLeast(0f)) } },
-                onDragStopped = { v ->
-                    if (offset.value > threshold || v > 1200f) onDismiss() else offset.animateTo(0f)
+                state = rememberDraggableState { d ->
+                    scope.launch {
+                        // Downwards follows the finger; upwards resists (rubber band) so it's clearly not a direction.
+                        val now = offset.value
+                        offset.snapTo((now + if (now + d < 0f) d * 0.2f else d).coerceAtLeast(-threshold / 3f))
+                    }
                 },
-            ),
+                onDragStopped = { v ->
+                    if (offset.value > threshold || v > 1200f) {
+                        // A quick flick never crossed the threshold tick, so acknowledge it here.
+                        if (offset.value <= threshold) haptics.gestureEnd()
+                        onDismiss()
+                    } else offset.animateTo(0f, springBack, initialVelocity = v)
+                },
+            )
+            .graphicsLayer {
+                translationY = offset.value
+                // Fade a little as it's pulled away so the release feels like it's already going.
+                alpha = 1f - 0.35f * (offset.value / (threshold * 2.5f)).coerceIn(0f, 1f)
+            },
         shape = RoundedCornerShape(32.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 8.dp,
         tonalElevation = 2.dp,
     ) {
-        Column(Modifier.padding(10.dp).animateContentSize()) {
+        Column(Modifier.padding(10.dp).animateContentSize(motion.defaultSpatialSpec())) {
             // Drag handle (also tappable to dismiss).
             Box(
                 Modifier.fillMaxWidth().height(14.dp).clickable(onClickLabel = "Dismiss result", onClick = onDismiss),
@@ -128,28 +163,40 @@ fun ScanResultCard(
             ) {
                 Box(Modifier.size(width = 36.dp, height = 4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outlineVariant))
             }
-            // Outcome header.
+            // Outcome header. "Checking…" crossfades into the outcome (and the tint follows) rather than cutting.
+            val container by animateColorAsState(colors.container, motion.defaultEffectsSpec(), label = "outcomeContainer")
+            val onContainer by animateColorAsState(colors.onContainer, motion.defaultEffectsSpec(), label = "outcomeContent")
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(colors.container).padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(container).padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    Modifier.weight(1f).clearAndSetSemantics {
+                AnimatedContent(
+                    targetState = card,
+                    contentKey = { it.kind to it.title },
+                    transitionSpec = {
+                        (fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.fastSpatialSpec(), initialScale = 0.92f)) togetherWith
+                            fadeOut(motion.fastEffectsSpec()) using SizeTransform(clip = false)
+                    },
+                    contentAlignment = Alignment.CenterStart,
+                    label = "outcome",
+                    modifier = Modifier.weight(1f).clearAndSetSemantics {
                         liveRegion = if (card.kind == ResultKind.Checking) LiveRegionMode.Polite else LiveRegionMode.Assertive
                         contentDescription = listOfNotNull(card.title, p?.name, card.contextName, card.message).joinToString(". ")
                     },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutcomeBadge(card.kind)
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(card.title, style = MaterialTheme.typography.headlineSmall, color = colors.onContainer, maxLines = 1)
-                        card.message?.let {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = colors.onContainer, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                ) { shown ->
+                    val c = shown.kind.colors()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutcomeBadge(shown.kind)
+                        Spacer(Modifier.width(14.dp))
+                        Column {
+                            Text(shown.title, style = MaterialTheme.typography.headlineSmall, color = c.onContainer, maxLines = 1)
+                            shown.message?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, color = c.onContainer, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
-                IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, "Dismiss result", tint = colors.onContainer) }
+                IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, "Dismiss result", tint = onContainer) }
             }
 
             if (p != null) {

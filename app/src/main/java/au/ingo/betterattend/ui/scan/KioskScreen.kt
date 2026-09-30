@@ -8,6 +8,10 @@ import androidx.camera.core.CameraSelector
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -78,12 +82,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.store.AppSettings
-import au.ingo.betterattend.scan.FeedbackKind
 import au.ingo.betterattend.scan.NfcStatus
 import au.ingo.betterattend.scan.ScanFeedback
 import au.ingo.betterattend.scan.rememberNfcReader
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.LoadingState
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
 import au.ingo.betterattend.ui.theme.status
 import kotlinx.coroutines.delay
@@ -131,6 +135,7 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
     val running = pinHash != null
 
     val ctx = contexts?.firstOrNull { it.id == selectedContextId }
+    val haptics = rememberHaptics()
 
     if (!running) {
         BackHandler { nav.back() }
@@ -147,16 +152,21 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
             error = error,
             onDigit = { d ->
                 error = null
-                if (!confirming) first += d
-                else {
+                if (!confirming) {
+                    first += d
+                    haptics.tick()
+                } else {
                     confirm += d
                     if (confirm.length == 4) {
-                        if (confirm == first) pinHash = hashPin(first)
-                        else { error = "PINs don't match. Try again."; first = ""; confirm = "" }
-                    }
+                        if (confirm == first) { haptics.confirm(); pinHash = hashPin(first) }
+                        else { haptics.reject(); error = "PINs don't match. Try again."; first = ""; confirm = "" }
+                    } else haptics.tick()
                 }
             },
-            onBackspace = { if (confirming) { if (confirm.isEmpty()) first = first.dropLast(1) else confirm = confirm.dropLast(1) } else first = first.dropLast(1) },
+            onBackspace = {
+                haptics.tick()
+                if (confirming) { if (confirm.isEmpty()) first = first.dropLast(1) else confirm = confirm.dropLast(1) } else first = first.dropLast(1)
+            },
             onCancel = nav::back,
         )
         return
@@ -218,7 +228,7 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
             nfcReady = nfc == NfcStatus.Ready,
             ready = contexts != null || contextsError != null,
         ),
-        onFlipCamera = { frontCamera = !frontCamera },
+        onFlipCamera = { haptics.click(); frontCamera = !frontCamera },
         onExit = { showExit = true },
         onRequestCamera = permission.request,
         onOpenAppSettings = permission.openSettings,
@@ -236,7 +246,6 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
             check = { hashPin(it) == pinHash },
             onUnlocked = { showExit = false; nav.back() },
             onDismiss = { showExit = false },
-            onWrong = { feedback.play(FeedbackKind.Reject, sound = false, haptic = true) },
         )
     }
 }
@@ -276,7 +285,8 @@ fun KioskContent(
             camera()
             val card = state.card
             val accent = if (card == null || card.kind == ResultKind.Checking) Color.White else card.kind.colors().strong
-            ScanFrame(accent = accent, maxSize = 360.dp, verticalBias = 0.4f)
+            val frameColor by animateColorAsState(accent, MaterialTheme.motionScheme.defaultEffectsSpec(), label = "frameColor")
+            ScanFrame(accent = frameColor, maxSize = 360.dp, verticalBias = 0.4f)
         } else {
             CameraPermissionPanel(state.camera, onRequestCamera, onOpenAppSettings, alternatives = "Staff: allow the camera, then restart kiosk mode.")
         }
@@ -301,10 +311,14 @@ fun KioskContent(
                 }
             }
             Spacer(Modifier.weight(1f))
+            val motion = MaterialTheme.motionScheme
             AnimatedContent(
                 targetState = state.card,
                 contentKey = { it?.key to it?.kind },
-                transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
+                transitionSpec = {
+                    (fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.92f)) togetherWith
+                        fadeOut(motion.fastEffectsSpec()) using SizeTransform(clip = false)
+                },
                 label = "kiosk",
                 modifier = Modifier.fillMaxWidth(),
             ) { card ->
@@ -377,15 +391,17 @@ fun PinPad(entered: Int, error: Boolean, enabled: Boolean, onDigit: (Char) -> Un
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.semantics { contentDescription = "$entered of 4 digits entered" }) {
             repeat(4) { i ->
                 val filled = i < entered
-                Box(
-                    Modifier.size(18.dp).clip(CircleShape).background(
-                        when {
-                            error -> MaterialTheme.status.danger
-                            filled -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.surfaceContainerHighest
-                        },
-                    ),
+                val dot by animateColorAsState(
+                    when {
+                        error -> MaterialTheme.status.danger
+                        filled -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    },
+                    MaterialTheme.motionScheme.fastEffectsSpec(),
+                    label = "pinDot",
                 )
+                val scale by animateFloatAsState(if (filled || error) 1f else 0.8f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "pinDotScale")
+                Box(Modifier.size(18.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape).background(dot))
             }
         }
         Spacer(Modifier.height(28.dp))
@@ -472,7 +488,9 @@ fun KioskSetupContent(
 
 /** Staff PIN prompt to leave kiosk mode, with a 30 s lockout after 3 wrong tries. */
 @Composable
-fun KioskExitDialog(check: (String) -> Boolean, onUnlocked: () -> Unit, onDismiss: () -> Unit, onWrong: () -> Unit) {
+fun KioskExitDialog(check: (String) -> Boolean, onUnlocked: () -> Unit, onDismiss: () -> Unit, onWrong: () -> Unit = {}) {
+    // Taken outside the Dialog: its window has its own LocalHapticFeedback that ignores the Haptics setting.
+    val haptics = rememberHaptics()
     var pin by remember { mutableStateOf("") }
     var wrong by rememberSaveable { mutableIntStateOf(0) }
     var lockedUntil by rememberSaveable { mutableLongStateOf(0L) }
@@ -494,14 +512,14 @@ fun KioskExitDialog(check: (String) -> Boolean, onUnlocked: () -> Unit, onDismis
                 error = false
                 pin += d
                 if (pin.length == 4) {
-                    if (check(pin)) onUnlocked()
+                    if (check(pin)) { haptics.confirm(); onUnlocked() }
                     else {
-                        onWrong(); error = true; wrong++; pin = ""
+                        haptics.reject(); onWrong(); error = true; wrong++; pin = ""
                         if (wrong >= MAX_PIN_TRIES) lockedUntil = System.currentTimeMillis() + LOCKOUT_MS
                     }
-                }
+                } else haptics.tick()
             },
-            onBackspace = { pin = pin.dropLast(1) },
+            onBackspace = { haptics.tick(); pin = pin.dropLast(1) },
             onCancel = onDismiss,
         )
     }
