@@ -44,8 +44,8 @@ object DashboardLogic {
         listOfNotNull(Time.range(event.startsAt, event.endsAt, event.timezone), event.locationCity?.takeIf { it.isNotBlank() })
             .joinToString(" · ").ifEmpty { null }
 
-    /** Checked in among confirmed participants, so "84 / 120" and "36 not here yet" always add up. */
-    fun checkedInConfirmed(stats: EventStats): Int = stats.confirmed - stats.notArrived
+    /** Checked in among expected participants, so "84 / 120" and "36 not here yet" always add up. */
+    fun checkedInConfirmed(stats: EventStats): Int = (stats.expected - stats.notArrived).coerceAtLeast(0)
 
     /** Registrations still onboarding (invited / in progress / awaiting guardian). */
     fun notComplete(stats: EventStats): Int = (stats.registered - stats.confirmed).coerceAtLeast(0)
@@ -60,7 +60,7 @@ object DashboardLogic {
             val s = Time.parse(c.startsAt)
             val e = Time.parse(c.endsAt)
             val active = s != null && e != null && !now.isBefore(s) && !now.isAfter(e)
-            ContextProgress(c, stats.perContext[c.id] ?: 0, stats.confirmed, active)
+            ContextProgress(c, stats.perContext[c.id] ?: 0, stats.expected, active)
         }
 
     /** Most recent check-ins first. */

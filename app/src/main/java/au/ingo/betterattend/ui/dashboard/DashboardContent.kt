@@ -354,7 +354,7 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
         DashboardLogic.notComplete(stats).takeIf { it > 0 }?.let { chips += Icons.Outlined.HourglassTop to "$it still onboarding" }
     } else {
         value = DashboardLogic.checkedInConfirmed(stats)
-        total = stats.confirmed
+        total = stats.expected
         caption = "checked in"
         eyebrow = if (phase == Time.Phase.Past) DashboardLogic.ended(event.endsAt, event.timezone, now) ?: "Final numbers" else "Check-in"
         chips += Icons.Outlined.PersonSearch to if (stats.notArrived == 0) "Everyone's here" else "${stats.notArrived} not here yet"
