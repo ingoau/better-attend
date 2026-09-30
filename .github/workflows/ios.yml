@@ -1,0 +1,39 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          ios = sorted((r for r in devices if "iOS" in r), reverse=True)
+          print(next(d["udid"] for r in ios for d in devices[r] if d["name"].startswith("iPhone")))')
+          echo "SIM=$UDID" >> "$GITHUB_ENV"
+      - name: Unit and UI tests
+        run: |
+          xcodebuild -project Attend.xcodeproj -scheme Attend -destination "id=$SIM" \
+            -derivedDataPath build/DerivedData -resultBundlePath build/Tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results
+          path: ios/build/Tests.xcresult

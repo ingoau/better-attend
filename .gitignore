@@ -10,3 +10,9 @@ keystore.properties
 *.jks
 *.keystore
 .claude/worktrees/
+
+# iOS
+ios/build/
+DerivedData/
+xcuserdata/
+*.xcresult
