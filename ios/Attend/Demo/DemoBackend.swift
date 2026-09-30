@@ -313,7 +313,9 @@ final class DemoURLProtocol: URLProtocol, @unchecked Sendable {
         let body = request.httpBody ?? request.httpBodyStream.map(Self.read)
         let result = DemoBackend.shared.handle(method: request.httpMethod ?? "GET", url: url, body: body)
         let delay: TimeInterval = (try? result.get().delay) ?? 0.4
-        DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
+        // URLProtocol must call its client on the thread (run loop) that started loading;
+        // answering from another queue can stall requests under load.
+        let timer = Timer(timeInterval: delay, repeats: false) { [self] _ in
             guard !cancelled else { return }
             switch result {
             case .failure(let error):
@@ -326,6 +328,7 @@ final class DemoURLProtocol: URLProtocol, @unchecked Sendable {
                 client?.urlProtocolDidFinishLoading(self)
             }
         }
+        RunLoop.current.add(timer, forMode: .common)
     }
 
     override func stopLoading() { cancelled = true }

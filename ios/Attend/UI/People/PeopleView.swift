@@ -14,6 +14,8 @@ struct PeopleView: View {
     var body: some View {
         content
             .eventToolbar(fallbackTitle: "People")
+            // Inline title: the pinned filter bar's scroll-edge blur would sit over a large title.
+            .navigationBarTitleDisplayMode(.inline)
             .modifier(UpdatedSubtitle(text: updatedText))
             .toast($model.toast)
             .onChange(of: event?.id, initial: true) { _, id in model.bind(eventId: id) }

@@ -49,6 +49,8 @@ struct SignedInView: View {
             ForEach(tabs) { tab in
                 Tab(tab.title, systemImage: tab.systemImage, value: tab) {
                     TabRoot(tab: tab, showsAccountOnly: tabs == [.tickets])
+                        // A lone tab needs no tab bar (participant-only accounts).
+                        .toolbar(tabs.count == 1 ? .hidden : .automatic, for: .tabBar)
                 }
             }
         }

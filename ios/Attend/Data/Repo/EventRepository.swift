@@ -24,15 +24,23 @@ final class EventRepository {
         return events.first { $0.id == settings.selectedEventId } ?? EventLogic.suggestEvent(events)
     }
 
+    /// Loads cached events. With nothing cached, `events` stays nil ("still loading") until the
+    /// first refresh answers, so screens never claim "no events" before the server has.
     func loadCache() async {
         guard events == nil else { return }
-        let cached = await cache.read("events", as: [Event].self)
-        if events == nil { events = cached ?? [] }
+        if let cached = await cache.read("events", as: [Event].self), events == nil { events = cached }
     }
 
     @discardableResult
     func refresh() async throws -> [Event] {
-        let list = try await api.events()
+        let list: [Event]
+        do {
+            list = try await api.events()
+        } catch {
+            // Nothing cached and the server unreachable: stop "loading" so screens can show the error.
+            if events == nil, !error.isCancellation { events = [] }
+            throw error
+        }
         events = list
         await cache.write("events", list)
         onChange()

@@ -1,12 +1,16 @@
-# Attend for Android — a better Hack Club Attend app
+# Attend for Android and iOS — a better Hack Club Attend app
 
-A native Android rewrite of Hack Club's [Attend](https://attend.hackclub.com) mobile app
-([Play Store](https://play.google.com/store/apps/details?id=com.hackclub.attend)), built with
-Kotlin, Jetpack Compose and **Material 3 Expressive**. It talks to the same backend
-([hackclub/attend](https://github.com/hackclub/attend)) and signs in with the same Hack Club
-OAuth client as the official app, so any existing Attend account works.
+Native rewrites of Hack Club's [Attend](https://attend.hackclub.com) mobile app
+([Play Store](https://play.google.com/store/apps/details?id=com.hackclub.attend)):
 
-It installs **alongside** the official app (package `au.ingo.betterattend`).
+- **[`android/`](android)** — Kotlin, Jetpack Compose and **Material 3 Expressive**.
+- **[`ios/`](ios)** — Swift and SwiftUI (iOS 18+, Liquid Glass on iOS 26), with WidgetKit widgets,
+  a Control Center control and Siri / Spotlight shortcuts. Same features, built the iOS way; see
+  [`ios/README.md`](ios/README.md).
+
+Both talk to the same backend ([hackclub/attend](https://github.com/hackclub/attend)) and sign in
+with the same Hack Club OAuth client as the official app, so any existing Attend account works.
+They install **alongside** the official app (`au.ingo.betterattend`).
 
 ## What's in it
 
@@ -47,23 +51,41 @@ staying well inside Attend's shared 300 requests / 5 min per-IP rate limit.
 Also: dark mode everywhere (System / Light / Dark), optional wallpaper colours, adaptive layout with
 a navigation rail on tablets, app shortcuts, and no analytics or session recording.
 
-## Install
+## iOS
+
+Open `ios/Attend.xcodeproj` in Xcode 26+ and run the **Attend** scheme, or from the command line:
+
+```sh
+cd ios
+xcodebuild -project Attend.xcodeproj -scheme Attend \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test   # unit + UI tests
+```
+
+Launch with `-AttendDemo YES` to try every screen against a built-in fake event (no account
+needed). Running on a device needs your Apple developer team set in Signing & Capabilities (App
+Groups for widgets, NFC Tag Reading for badges). iOS equivalents of the Android extras: Apple Wallet
+passes, Home Screen and Lock Screen widgets, a Scan Tickets control, Home Screen quick actions,
+Siri / Spotlight shortcuts and Guided Access for kiosk mode. NFC reading on iOS uses the system
+scan sheet (tap "Scan NFC Badge"), as iOS doesn't allow always-on background tag reading.
+
+## Android: Install
 
 Grab an APK from the latest CI run (**Actions → Build APK → attend-apk**) or build it yourself —
 `app-arm64-v8a-release.apk` fits almost every phone, `app-universal-release.apk` runs everywhere —
 then open it on your phone and allow installing from that source. Android 8.0+.
 
-## Build
+## Android: Build
 
 Requirements: JDK 17+ and the Android SDK (platform 37, build-tools 37).
 
 ```sh
+cd android
 ./gradlew :app:assembleRelease        # → app/build/outputs/apk/release/app-release.apk
 ./gradlew :app:testDebugUnitTest      # unit, screenshot (Roborazzi) and end-to-end smoke tests
 ```
 
 Screenshot tests render every screen in light and dark mode on the JVM into
-`app/build/outputs/roborazzi/`. `AppSmokeTest` boots the real app against a mock Attend API and
+`android/app/build/outputs/roborazzi/`. `AppSmokeTest` boots the real app against a mock Attend API and
 walks every tab, including a real check-in.
 
 ### Signing
@@ -75,7 +97,7 @@ APK always installs). Configure either via environment variables
 ATTEND_KEYSTORE_FILE, ATTEND_KEYSTORE_PASSWORD, ATTEND_KEY_ALIAS, ATTEND_KEY_PASSWORD
 ```
 
-or a gitignored `keystore.properties` in the repo root (`storeFile`, `storePassword`, `keyAlias`,
+or a gitignored `keystore.properties` in `android/` (`storeFile`, `storePassword`, `keyAlias`,
 `keyPassword`). In CI, set the `ATTEND_KEYSTORE_BASE64` secret (plus the three others) to publish
 updates signed with a stable key.
 
@@ -83,7 +105,7 @@ updates signed with a stable key.
 
 Authorization Code + PKCE against `auth.hackclub.com` using the official app's OAuth client and
 its registered redirect `attend://oauth/callback`, opened in an **Auth Tab** (falls back to a Custom
-Tab). The code is exchanged by the Attend backend (`POST /api/v1/session`), which returns a 14-day
+Tab; on iOS an `ASWebAuthenticationSession`). The code is exchanged by the Attend backend (`POST /api/v1/session`), which returns a 14-day
 mobile token that the app rotates automatically. Your account must already exist in Attend.
 
 ## Known limitations
@@ -96,9 +118,12 @@ mobile token that the app rotates automatically. Your account must already exist
 ## Layout
 
 ```
-app/src/main/java/au/ingo/betterattend/
+android/app/src/main/java/au/ingo/betterattend/
   data/api      Attend API client + models        data/repo   events, roster sync, scans + offline queue, tickets, travel
   data/auth     Hack Club OAuth (PKCE)             data/store  encrypted cache, settings
   ui/           Compose screens (dashboard, scan, people, travel, blasts, tickets, settings, login)
   widget/       Glance widgets + background sync   scan/       scan sync worker
+ios/
+  Shared/       models + pure logic (shared with widgets)   Attend/Data   API, auth, stores, repositories
+  Attend/UI/    SwiftUI screens                              AttendWidgets/ WidgetKit widgets + control
 ```
