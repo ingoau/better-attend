@@ -8,6 +8,8 @@ import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanResult
 import au.ingo.betterattend.data.store.JsonCache
 import au.ingo.betterattend.util.Time
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,8 +77,18 @@ class ScanRepository(
     /** Set by the app to schedule a WorkManager flush when something is queued. */
     var onQueued: () -> Unit = {}
 
+    /** Completes once the persisted queue has been read, so nothing races the initial load. */
+    private val queueLoaded = CompletableDeferred<Unit>()
+
     init {
-        scope.launch { _pending.value = cache.read(KEY_QUEUE, ListSerializer(PendingScan.serializer())).orEmpty() }
+        scope.launch {
+            try {
+                val saved = cache.read(KEY_QUEUE, ListSerializer(PendingScan.serializer())).orEmpty()
+                _pending.update { current -> saved + current.filter { c -> saved.none { it.clientScanId == c.clientScanId } } }
+            } finally {
+                queueLoaded.complete(Unit)
+            }
+        }
     }
 
     suspend fun submit(eventId: String, input: ScanInput, scanContextId: String?, scanContextName: String?): ScanOutcome {
@@ -97,6 +109,8 @@ class ScanRepository(
             result.participant?.let { participants.upsert(eventId, p!!) }
             if (result.isAlreadyScanned) ScanOutcome.AlreadyScanned(clientScanId, result, p)
             else ScanOutcome.Scanned(clientScanId, result, p)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (e.isTransient) {
                 val pending = PendingScan(clientScanId, eventId, scanContextId, scanContextName, input, scannedAt, 1, e.friendlyMessage, known?.name)
@@ -116,17 +130,17 @@ class ScanRepository(
         return outcome
     }
 
-    private suspend fun enqueue(p: PendingScan) = queueMutex.withLock {
+    private suspend fun enqueue(p: PendingScan) = queueLoaded.await().let { queueMutex.withLock {
         _pending.update { it + p }
         cache.write(KEY_QUEUE, ListSerializer(PendingScan.serializer()), _pending.value)
         onQueued()
-    }
+    } }
 
     /**
      * Sends queued scans oldest first. `client_scan_id` makes retries idempotent. Returns the number
      * still pending; stops early on a transient failure so we don't burn the rate limit.
      */
-    suspend fun flush(): Int = queueMutex.withLock {
+    suspend fun flush(): Int = queueLoaded.await().let { queueMutex.withLock {
         val remaining = _pending.value.toMutableList()
         val iterator = remaining.iterator()
         while (iterator.hasNext()) {
@@ -143,6 +157,8 @@ class ScanRepository(
                 )
                 result.participant?.let { participants.upsert(p.eventId, it) }
                 iterator.remove()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (e.isTransient) break
                 // Permanent failure (e.g. not registered): drop it but keep a record in the log.
@@ -155,7 +171,7 @@ class ScanRepository(
         _pending.value = remaining
         cache.write(KEY_QUEUE, ListSerializer(PendingScan.serializer()), remaining)
         remaining.size
-    }
+    } }
 
     suspend fun discardPending(clientScanId: String) = queueMutex.withLock {
         _pending.update { list -> list.filterNot { it.clientScanId == clientScanId } }
