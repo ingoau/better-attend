@@ -128,8 +128,14 @@ class AuthRepository(
         }
     }
 
+    /**
+     * The browser flow ended without a result. Ignored while a code exchange is in flight: with the
+     * Custom Tab fallback the redirect arrives via onNewIntent and the tab then reports "cancelled".
+     */
     fun cancelled(message: String? = null) {
-        if (_state.value !is AuthState.SignedIn) _state.value = AuthState.SignedOut(message)
+        val s = _state.value
+        if (s is AuthState.SignedIn || s is AuthState.Loading) return
+        _state.value = AuthState.SignedOut(message)
     }
 
     private fun fail(message: String?): String? {
