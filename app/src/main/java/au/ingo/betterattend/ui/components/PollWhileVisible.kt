@@ -7,12 +7,18 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
  * Runs [block] immediately and then every [intervalMillis] while the current screen is RESUMED
  * (i.e. actually visible: nav destinations drop below RESUMED when covered or the app is backgrounded).
  * Restarts whenever [key] changes. Polling stops as soon as the screen isn't visible.
+ *
+ * [block] is cancelled mid-flight whenever the screen stops being visible, so it must not leave state
+ * half-updated (e.g. a "refreshing" flag that's only cleared on the happy path). Work that should finish
+ * regardless — a sync whose flags the UI depends on — belongs in a longer-lived scope such as
+ * `viewModelScope`, with the block just kicking it off.
  */
 @Composable
 fun PollWhileVisible(key: Any?, intervalMillis: Long, runImmediately: Boolean = true, block: suspend () -> Unit) {
@@ -27,4 +33,16 @@ fun PollWhileVisible(key: Any?, intervalMillis: Long, runImmediately: Boolean = 
             }
         }
     }
+}
+
+/**
+ * Like [runCatching], but lets [CancellationException] propagate so a cancelled coroutine actually stops
+ * (and its `finally` blocks run) instead of carrying on as if a network call had merely failed.
+ */
+inline fun <T> catching(block: () -> T): Result<T> = try {
+    Result.success(block())
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Throwable) {
+    Result.failure(e)
 }

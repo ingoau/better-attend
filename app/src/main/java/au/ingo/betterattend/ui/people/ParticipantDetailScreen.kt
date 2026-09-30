@@ -69,7 +69,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -134,11 +133,13 @@ fun ParticipantDetailScreen(eventId: String, participantEventId: String, nav: Ap
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     // Reader mode stays on for the whole time the badge sheet is open (turning it off mid-write drops the tag).
+    // Android only allows it while the activity is resumed, so it follows RESUMED: re-enabled on resume
+    // (e.g. after rotation with the sheet open), disabled on pause and when the sheet closes.
     val activity = remember(context) { context.findActivity() }
     val nfcSheetOpen = state.nfc !is NfcWriteState.Idle && state.nfc != NfcWriteState.Unsupported && state.nfc != NfcWriteState.Disabled
-    DisposableEffect(nfcSheetOpen, activity) {
-        if (nfcSheetOpen && activity != null) NfcBadgeWriter.start(activity) { tag -> vm.onTag(tag) }
-        onDispose { if (activity != null) NfcBadgeWriter.stop(activity) }
+    LifecycleResumeEffect(nfcSheetOpen, activity) {
+        val started = nfcSheetOpen && activity != null && NfcBadgeWriter.start(activity) { tag -> vm.onTag(tag) }
+        onPauseOrDispose { if (started) activity?.let(NfcBadgeWriter::stop) }
     }
     // Came back from NFC settings: carry on if it's now on.
     LifecycleResumeEffect(state.nfc) {

@@ -24,7 +24,12 @@ import au.ingo.betterattend.data.repo.Roster
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.PollWhileVisible
 import au.ingo.betterattend.ui.nav.AppNavigator
+import au.ingo.betterattend.ui.components.catching
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -98,46 +103,69 @@ class DashboardViewModel(private val c: AppContainer) : ViewModel() {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardState())
 
+    /** The sync currently in flight, if any, and a counter so a stale job's cleanup can't clobber a newer one. */
+    private var syncJob: Job? = null
+    private var syncEventId: String? = null
+    private var syncSeq = 0
+
     /**
      * Shows cached data immediately, then syncs. The roster sync is a cheap `updated_since` delta after the
      * first time. [force] skips the throttle (pull-to-refresh); polling calls within 20 s of the last one are skipped
      * so bouncing between tabs doesn't burn the shared per-IP rate limit.
+     *
+     * The work runs in [viewModelScope], not the caller's scope: the poll that triggers it is cancelled as soon as
+     * Home leaves the screen, and a sync cut off half way used to leave `refreshing` stuck on ("Syncing…" forever,
+     * with every later refresh skipped).
      */
-    suspend fun refresh(event: Event, force: Boolean) {
+    fun refresh(event: Event, force: Boolean) {
         val id = event.id
         if (local.value.eventId != id) local.value = Local(eventId = id)
         val last = local.value.lastAttempt
         if (!force && last != null && Duration.between(last, Instant.now()) < Duration.ofSeconds(20)) return
-        if (local.value.refreshing) {
+        if (syncJob?.isActive == true && syncEventId == id) {
             // A sync is already running: let a pull show its spinner until that one finishes.
             if (force) local.update { it.copy(userRefreshing = true) }
             return
         }
 
+        val seq = ++syncSeq
+        syncEventId = id
+        local.update { it.copy(refreshing = true, userRefreshing = force, lastAttempt = Instant.now()) }
+        syncJob = viewModelScope.launch {
+            try {
+                sync(event, force)
+            } finally {
+                // Always clear the flags, even if cancelled, unless a newer sync has taken over.
+                if (seq == syncSeq) local.update { if (it.eventId == id) it.copy(refreshing = false, userRefreshing = false) else it }
+            }
+        }
+    }
+
+    private suspend fun sync(event: Event, force: Boolean) {
+        val id = event.id
         c.participants.load(id)
         c.events.loadContexts(id)
         if (event.travelEnabled) c.travel.load(id)
 
-        local.update { it.copy(refreshing = true, userRefreshing = force, lastAttempt = Instant.now()) }
         val errors = mutableListOf<Throwable>()
         var scans: List<Scan>? = null
         coroutineScope {
             if (force) launch { c.events.refresh() }
             if (event.canViewParticipants) {
-                launch { runCatching { c.participants.sync(id) }.onFailure { errors += it } }
+                launch { catching { c.participants.sync(id) }.onFailure { errors += it } }
             } else {
-                launch { runCatching { c.api.scans(id).scans }.onSuccess { scans = it }.onFailure { errors += it } }
+                launch { catching { c.api.scans(id).scans }.onSuccess { scans = it }.onFailure { errors += it } }
             }
             if (force || !local.value.contextsFetched || c.events.cachedContexts(id) == null) {
                 launch { c.events.refreshContexts(id).onSuccess { local.update { l -> l.copy(contextsFetched = true) } } }
             }
-            if (event.travelEnabled) launch { c.travel.refresh(id).onFailure { errors += it } }
+            if (event.travelEnabled) launch { c.travel.refresh(id).onFailure { if (it !is CancellationException) errors += it } }
         }
+        // The repositories' Result-returning calls swallow cancellation; don't record a cancelled sync as a success.
+        currentCoroutineContext().ensureActive()
         local.update {
             if (it.eventId != id) it
             else it.copy(
-                refreshing = false,
-                userRefreshing = false,
                 error = errors.firstOrNull()?.friendlyMessage,
                 lastUpdated = if (errors.isEmpty()) Instant.now() else it.lastUpdated,
                 scans = scans ?: it.scans,
@@ -145,7 +173,7 @@ class DashboardViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
-    fun refreshAsync(event: Event, force: Boolean = true) { viewModelScope.launch { refresh(event, force) } }
+    fun refreshAsync(event: Event, force: Boolean = true) = refresh(event, force)
 
     fun refreshEvents() { viewModelScope.launch { c.events.refresh() } }
 }

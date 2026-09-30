@@ -208,11 +208,13 @@ private fun DashboardBody(
     onAnnounce: () -> Unit,
     onKiosk: () -> Unit,
 ) {
-    val roster = state.roster
+    // A roster without `syncedAt` is partial (e.g. a few people learned from scans before the first full sync):
+    // counting it would say "3 of 3 checked in", so treat it as not loaded yet.
+    val roster = state.roster?.takeIf { it.syncedAt != null }
     val stats = remember(roster, now) { roster?.let { EventStats.from(it.participants, now) } }
     val phase = Time.phase(event.startsAt, event.endsAt, now)
     val arrivals = remember(state.travel, now) { DashboardLogic.arrivals(state.travel, now) }
-    val updated = DashboardLogic.updated(state.lastUpdated ?: Time.parse(roster?.lastSyncAt), now)
+    val updated = DashboardLogic.updated(state.lastUpdated ?: Time.parse(state.roster?.lastSyncAt), now)
 
     LazyColumn(
         Modifier.fillMaxSize(),

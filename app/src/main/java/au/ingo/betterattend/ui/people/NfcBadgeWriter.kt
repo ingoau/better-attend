@@ -56,9 +56,12 @@ object NfcBadgeWriter {
 
     /**
      * Listens for any tag while [activity] is resumed. Reader mode (rather than foreground dispatch)
-     * stops Android from also opening the tag in another app. Call [stop] when done.
+     * stops Android from also opening the tag in another app. Call [stop] when done (and on pause).
+     *
+     * Must be called while [activity] is resumed: `enableReaderMode` throws IllegalStateException otherwise.
+     * Any such failure is swallowed and reported as `false` rather than crashing the screen.
      */
-    fun start(activity: Activity, onTag: (Tag) -> Unit): Boolean {
+    fun start(activity: Activity, onTag: (Tag) -> Unit): Boolean = runCatching {
         val adapter = NfcAdapter.getDefaultAdapter(activity) ?: return false
         if (!adapter.isEnabled) return false
         val flags = NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or
@@ -66,8 +69,8 @@ object NfcBadgeWriter {
         adapter.enableReaderMode(activity, { tag -> onTag(tag) }, flags, Bundle().apply {
             putInt(NfcAdapter.EXTRA_READER_PRESENCE_CHECK_DELAY, 250)
         })
-        return true
-    }
+        true
+    }.getOrDefault(false)
 
     fun stop(activity: Activity) {
         runCatching { NfcAdapter.getDefaultAdapter(activity)?.disableReaderMode(activity) }
