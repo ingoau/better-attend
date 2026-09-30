@@ -18,12 +18,6 @@ struct TravelView: View {
     var body: some View {
         content
             .eventToolbar(fallbackTitle: "Travel")
-            .toolbar {
-                if let event, event.travelEnabled, let tz = app.travel.calendars[event.id]?.eventTimezone ?? event.timezone,
-                   TimeZone(identifier: tz) != nil {
-                    ToolbarItem(placement: .topBarLeading) { TimeZoneButton(tz: tz) }
-                }
-            }
             .animation(.smooth, value: phase)
             // The server caches travel for 5 min but busts it on pickup / check-in scans.
             .poll(every: .seconds(120), id: pollId) {
@@ -139,6 +133,24 @@ private struct TravelList: View {
 
         ScrollViewReader { proxy in
             List {
+                // Zone, filters and notices scroll away; the day headers below stay pinned.
+                Section {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let tz, TimeZone(identifier: tz) != nil {
+                            TimeZoneButton(tz: tz)
+                                .padding(.horizontal)
+                                .padding(.top, 4)
+                        }
+                        if !all.isEmpty {
+                            TravelFilterBar(all: all, query: query, filter: $filter, mode: $mode)
+                        }
+                        banner
+                    }
+                    .buttonStyle(.borderless)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
                 ForEach(sections) { section in
                     Section {
                         ForEach(section.entries) { entry in row(entry) }
@@ -150,14 +162,6 @@ private struct TravelList: View {
             }
             .listStyle(.plain)
             .overlay { emptyState(all: all, filtered: filtered) }
-            .travelTopBar {
-                VStack(spacing: 0) {
-                    if !all.isEmpty {
-                        TravelFilterBar(all: all, query: query, filter: $filter, mode: $mode)
-                    }
-                    banner
-                }
-            }
             .searchable(text: $query, prompt: "Name, route or flight")
             .refreshable { await refresh() }
             .task {
@@ -284,7 +288,7 @@ private struct TravelSectionHeader: View {
     }
 }
 
-/// "Sydney · GMT+10" in the toolbar; explains that times are in the event's zone.
+/// "Times in Sydney · GMT+10" above the filters; tap to learn that times are in the event's zone.
 private struct TimeZoneButton: View {
     let tz: String
     @State private var showsInfo = false
@@ -296,10 +300,18 @@ private struct TimeZoneButton: View {
             Haptics.tap()
             showsInfo = true
         } label: {
-            Label(TravelLogic.zoneLabel(tz, now: now) ?? tz, systemImage: differs ? "globe" : "clock")
-                .labelStyle(.titleAndIcon)
-                .font(.subheadline.weight(.medium))
+            HStack(spacing: 5) {
+                Image(systemName: differs ? "globe" : "clock")
+                Text("Times in \(TravelLogic.zoneLabel(tz, now: now) ?? tz)")
+                if differs { Text("· not your time zone") }
+                Image(systemName: "info.circle").foregroundStyle(.tertiary)
+            }
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(differs ? AnyShapeStyle(Tone.warning.color) : AnyShapeStyle(.secondary))
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
         }
+        .buttonStyle(.plain)
         .accessibilityLabel("Times shown in \(TravelLogic.zoneLongName(tz, now: now) ?? tz)")
         .popover(isPresented: $showsInfo) {
             VStack(alignment: .leading, spacing: 8) {
@@ -316,17 +328,6 @@ private struct TimeZoneButton: View {
             .padding()
             .frame(width: 300, alignment: .leading)
             .presentationCompactAdaptation(.popover)
-        }
-    }
-}
-
-private extension View {
-    /// Pins content under the navigation bar; on iOS 26 it joins the bar's scroll-edge effect.
-    @ViewBuilder func travelTopBar<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        if #available(iOS 26.0, *) {
-            safeAreaBar(edge: .top, spacing: 0, content: content)
-        } else {
-            safeAreaInset(edge: .top, spacing: 0) { content().background(.bar) }
         }
     }
 }

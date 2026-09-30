@@ -75,11 +75,8 @@ struct TravelRow: View {
     }
 
     private var badges: some View {
-        // Wraps onto a second line at large Dynamic Type sizes rather than truncating.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) { badgeContent }
-            VStack(alignment: .leading, spacing: 4) { badgeContent }
-        }
+        // Wraps onto further lines (narrow screens, large Dynamic Type) rather than truncating.
+        TravelFlowLayout(spacing: 6, lineSpacing: 4) { badgeContent }
     }
 
     @ViewBuilder private var badgeContent: some View {
@@ -90,15 +87,11 @@ struct TravelRow: View {
         if let pickup = TravelLogic.pickup(entry.pickupState) {
             Pill(text: pickup.label, tone: pickup.tone, systemImage: pickup.systemImage)
         }
-        if !entry.groups.isEmpty {
-            HStack(spacing: 6) {
-                ForEach(entry.groups.prefix(2)) { g in GroupDot(group: g) }
-                if entry.groups.count > 2 {
-                    Text("+\(entry.groups.count - 2)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+        ForEach(entry.groups.prefix(2)) { g in GroupDot(group: g) }
+        if entry.groups.count > 2 {
+            Text("+\(entry.groups.count - 2)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -125,6 +118,57 @@ private struct CompactLabelStyle: LabelStyle {
         HStack(spacing: 2) {
             configuration.icon.imageScale(.small)
             configuration.title
+        }
+    }
+}
+
+/// Lays children out left to right, wrapping to a new line when the row is full. Children are
+/// vertically centred within their line.
+private struct TravelFlowLayout: Layout {
+    var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 4
+
+    private struct Line { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func lines(_ sizes: [CGSize], maxWidth: CGFloat) -> [Line] {
+        var out: [Line] = []
+        var line = Line()
+        for (i, size) in sizes.enumerated() {
+            let w = min(size.width, maxWidth)
+            let needed = line.indices.isEmpty ? w : line.width + spacing + w
+            if needed > maxWidth, !line.indices.isEmpty {
+                out.append(line)
+                line = Line()
+            }
+            line.width = line.indices.isEmpty ? w : line.width + spacing + w
+            line.height = max(line.height, size.height)
+            line.indices.append(i)
+        }
+        if !line.indices.isEmpty { out.append(line) }
+        return out
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let ls = lines(sizes, maxWidth: maxWidth)
+        let height = ls.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(0, ls.count - 1))
+        let width = ls.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        var y = bounds.minY
+        for line in lines(sizes, maxWidth: bounds.width) {
+            var x = bounds.minX
+            for i in line.indices {
+                let w = min(sizes[i].width, bounds.width)
+                subviews[i].place(at: CGPoint(x: x, y: y + line.height / 2), anchor: .leading,
+                                  proposal: ProposedViewSize(width: w, height: sizes[i].height))
+                x += w + spacing
+            }
+            y += line.height + lineSpacing
         }
     }
 }
