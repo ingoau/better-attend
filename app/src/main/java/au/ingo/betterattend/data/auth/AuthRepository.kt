@@ -97,6 +97,8 @@ class AuthRepository(
 
     /** Completes sign-in from the redirect URI. Returns null on success or an error message. */
     suspend fun handleCallback(uri: Uri): String? {
+        // Duplicate delivery (Auth Tab result + intent filter) — the first one wins.
+        if (_state.value is AuthState.Loading || _state.value is AuthState.SignedIn) return null
         val verifier = store.pkceVerifier
         uri.getQueryParameter("error")?.let { err ->
             val desc = uri.getQueryParameter("error_description")
