@@ -10,6 +10,8 @@ import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.User
+import au.ingo.betterattend.data.repo.Roster
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,11 @@ data class PeopleUiState(
     val event: Event? = null,
     /** null = still reading the cache. */
     val roster: List<Participant>? = null,
+    /**
+     * False while [roster] is only partial (the repository has no `syncedAt` for it yet, e.g. a few people
+     * learned from scans before the first full sync). Counts and "X of Y here" wait until this is true.
+     */
+    val rosterComplete: Boolean = true,
     val contexts: List<ScanContext> = emptyList(),
     val query: String = "",
     val quick: QuickFilter = QuickFilter.All,
@@ -53,6 +60,7 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
 
     private var searchJob: Job? = null
     private var eventJob: Job? = null
+    private var syncSeq = 0
 
     init {
         viewModelScope.launch {
@@ -85,39 +93,63 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
         eventJob = viewModelScope.launch {
             launch {
                 c.events.loadContexts(event.id)
-                c.events.cachedContexts(event.id)?.let { ctx -> _state.update { it.copy(contexts = ctx) } }
-                c.events.refreshContexts(event.id).onSuccess { ctx -> _state.update { it.copy(contexts = ctx) } }
+                c.events.cachedContexts(event.id)?.let { ctx -> _state.update { if (it.event?.id == event.id) it.copy(contexts = ctx) else it } }
+                c.events.refreshContexts(event.id).onSuccess { ctx -> _state.update { if (it.event?.id == event.id) it.copy(contexts = ctx) else it } }
             }
             if (!event.canViewParticipants) {
-                _state.update { it.copy(roster = emptyList()) }
+                _state.update { if (it.event?.id != event.id) it else it.copy(roster = emptyList()) }
                 return@launch
             }
             // Cached roster first (instant), then keep following the repository.
             val cached = c.participants.load(event.id)
-            _state.update { it.copy(roster = cached?.participants ?: it.roster, lastSyncAt = cached?.lastSyncAt) }
+            _state.update {
+                if (it.event?.id != event.id) it
+                else it.copy(
+                    roster = cached?.participants ?: it.roster,
+                    rosterComplete = cached?.syncedAt != null,
+                    lastSyncAt = cached?.lastSyncAt,
+                )
+            }
             c.participants.rosters.collectLatest { map ->
                 val r = map[event.id] ?: return@collectLatest
-                _state.update { it.copy(roster = r.participants, lastSyncAt = r.lastSyncAt ?: it.lastSyncAt) }
+                _state.update { it.applyRoster(event.id, r) }
             }
         }
         if (_state.value.query.length >= 2) scheduleRemoteSearch()
     }
 
-    /** Delta sync (full every few hours, handled by the repository). Safe to call often. */
+    /**
+     * Delta sync (full every few hours, handled by the repository). Safe to call often.
+     *
+     * Results are only applied while [event] is still the selected one: a sync that was in flight when the
+     * user switched events would otherwise briefly show the previous event's people (and tapping one 404s).
+     */
     fun sync(forceFull: Boolean = false) {
         val event = _state.value.event ?: return
         if (!event.canViewParticipants || _state.value.syncing) return
+        val seq = ++syncSeq
+        _state.update { it.copy(syncing = true) }
         viewModelScope.launch {
-            _state.update { it.copy(syncing = true) }
             try {
                 val r = c.participants.sync(event.id, forceFull)
-                _state.update { it.copy(syncing = false, syncError = null, roster = r.participants, lastSyncAt = r.lastSyncAt) }
+                _state.update { if (it.event?.id != event.id) it else it.applyRoster(event.id, r).copy(syncError = null) }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                _state.update { it.copy(syncing = false, syncError = e.friendlyMessage, roster = it.roster ?: emptyList()) }
+                _state.update {
+                    if (it.event?.id != event.id) it
+                    else it.copy(syncError = e.friendlyMessage, roster = it.roster ?: emptyList())
+                }
+            } finally {
+                // A new event starts with a fresh state (syncing = false), and a newer sync owns the flag once it starts.
+                if (seq == syncSeq) _state.update { if (it.event?.id == event.id) it.copy(syncing = false) else it }
             }
         }
     }
+
+    private fun PeopleUiState.applyRoster(eventId: String, r: Roster): PeopleUiState =
+        if (event?.id != eventId || r.eventId != eventId) this
+        else copy(roster = r.participants, rosterComplete = r.syncedAt != null, lastSyncAt = r.lastSyncAt ?: lastSyncAt)
 
     fun setQuery(q: String) {
         _state.update { it.copy(query = q, remoteResults = null, remoteError = null) }
@@ -137,10 +169,13 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
             _state.update { it.copy(remoteSearching = true) }
             try {
                 val results = c.participants.search(event.id, q)
-                _state.update { if (it.query.trim() == q) it.copy(remoteResults = results, remoteSearching = false, remoteError = null) else it }
+                _state.update {
+                    if (it.query.trim() == q && it.event?.id == event.id) it.copy(remoteResults = results, remoteSearching = false, remoteError = null) else it
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                _state.update { it.copy(remoteSearching = false, remoteError = e.friendlyMessage) }
+                _state.update { if (it.event?.id == event.id) it.copy(remoteSearching = false, remoteError = e.friendlyMessage) else it }
             }
         }
     }
