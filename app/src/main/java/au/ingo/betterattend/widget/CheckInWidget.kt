@@ -98,19 +98,29 @@ private fun CheckInCounts(org: OrganizerWidgetData, now: Instant, compact: Boole
                 if (large) RefreshButton()
             }
             Spacer(GlanceModifier.defaultWeight())
-            BigCount(org, numberSize, large)
+            BigCount(org, numberSize, large, compact)
         }
         Spacer(GlanceModifier.height(4.dp))
-        LinearProgressIndicator(
-            progress = org.progress,
-            color = c.primary,
-            backgroundColor = c.secondaryContainer,
-            modifier = GlanceModifier.fillMaxWidth().height(8.dp).cornerRadiusCompat(4.dp),
-        )
+        if (org.nobodyYet) {
+            // An empty bar says nothing; keep the space so the layout doesn't jump when check-in starts.
+            Spacer(GlanceModifier.height(8.dp))
+        } else {
+            LinearProgressIndicator(
+                progress = org.progress,
+                color = c.primary,
+                backgroundColor = c.secondaryContainer,
+                modifier = GlanceModifier.fillMaxWidth().height(8.dp).cornerRadiusCompat(4.dp),
+            )
+        }
         Spacer(GlanceModifier.height(4.dp))
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (org.notArrived == 0) "Everyone's here" else "${org.notArrived} not here yet",
+                when {
+                    org.nobodyYet && compact -> "expected"
+                    org.nobodyYet -> "No one checked in yet"
+                    org.notArrived == 0 -> "Everyone's here"
+                    else -> "${org.notArrived} not here yet"
+                },
                 style = textStyle(12.sp, c.onSurface, FontWeight.Medium), maxLines = 1, modifier = GlanceModifier.defaultWeight(),
             )
             if (!compact) Text(updatedLabel(org.updatedAt, now), style = textStyle(11.sp, c.onSurfaceVariant), maxLines = 1)
@@ -138,15 +148,25 @@ private fun CheckInCounts(org: OrganizerWidgetData, now: Instant, compact: Boole
 }
 
 @Composable
-private fun BigCount(org: OrganizerWidgetData, numberSize: androidx.compose.ui.unit.TextUnit, large: Boolean) {
+private fun BigCount(org: OrganizerWidgetData, numberSize: androidx.compose.ui.unit.TextUnit, large: Boolean, compact: Boolean = false) {
     val c = GlanceTheme.colors
+    val suffixStyle = textStyle(if (numberSize.value < 36f) 15.sp else 18.sp, c.onSurfaceVariant, FontWeight.Medium)
+    val suffixPad = GlanceModifier.padding(bottom = if (large) 7.dp else 5.dp)
     Row(
         verticalAlignment = Alignment.Bottom,
-        modifier = GlanceModifier.fillMaxWidth().semantics { contentDescription = "${org.checkedIn} of ${org.expected} checked in" },
+        modifier = GlanceModifier.fillMaxWidth().semantics {
+            contentDescription = if (org.nobodyYet) "${org.expected} expected, no one checked in yet"
+                else "${org.checkedIn} of ${org.expected} checked in"
+        },
     ) {
-        Text("${org.checkedIn}", style = textStyle(numberSize, c.primary, FontWeight.Bold), maxLines = 1)
-        Text(" / ${org.expected}", style = textStyle(if (numberSize.value < 36f) 15.sp else 18.sp, c.onSurfaceVariant, FontWeight.Medium),
-            maxLines = 1, modifier = GlanceModifier.padding(bottom = if (large) 7.dp else 5.dp))
+        if (org.nobodyYet) {
+            // Before check-in starts, "0 / 120" buries the useful number: lead with who's coming.
+            Text("${org.expected}", style = textStyle(numberSize, c.primary, FontWeight.Bold), maxLines = 1)
+            if (!compact) Text(" expected", style = suffixStyle, maxLines = 1, modifier = suffixPad)
+        } else {
+            Text("${org.checkedIn}", style = textStyle(numberSize, c.primary, FontWeight.Bold), maxLines = 1)
+            Text(" / ${org.expected}", style = suffixStyle, maxLines = 1, modifier = suffixPad)
+        }
         if (large && org.lastHour > 0) {
             Spacer(GlanceModifier.defaultWeight())
             Text("+${org.lastHour} last hour", style = textStyle(13.sp, c.tertiary, FontWeight.Medium), maxLines = 1,

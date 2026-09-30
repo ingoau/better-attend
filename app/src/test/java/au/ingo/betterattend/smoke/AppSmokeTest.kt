@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.activity.BackEventCompat
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -187,9 +188,20 @@ class AppSmokeTest {
             val visible = (0 until accounts.fetchSemanticsNodes().size).first { i -> runCatching { accounts[i].assertIsDisplayed() }.isSuccess }
             accounts[visible].performClick()
             waitForText("Appearance")
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+
+            // Predictive back: drag Settings halfway, capture the frame, then release.
+            withActivity { it.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(10f, 800f, 0f, BackEventCompat.EDGE_LEFT)) }
+            for (step in 1..5) {
+                withActivity { it.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(10f + step * 60f, 800f, step * 0.1f, BackEventCompat.EDGE_LEFT)) }
+                compose.waitForIdle()
+            }
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/smoke_predictive_back_mid.png")
             withActivity { it.onBackPressedDispatcher.onBackPressed() }
             compose.waitForIdle()
             assertSelected("People")
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/smoke_predictive_back_done.png")
         }
         synchronized(requests) {
             check(requests.any { it == "GET /events" }) { "events never requested: $requests" }

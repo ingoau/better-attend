@@ -157,9 +157,11 @@ private fun SignedInApp(container: AppContainer, user: User) {
         exitTransition = AppMotion.exit,
         popEnterTransition = AppMotion.popEnter,
         popExitTransition = AppMotion.popExit,
+        predictivePopEnterTransition = AppMotion.predictivePopEnter,
+        predictivePopExitTransition = AppMotion.predictivePopExit,
     ) {
         composable<MainRoute> {
-            MainTabs(tabs, tabRequests) { tab ->
+            UnderlayFrame { MainTabs(tabs, tabRequests) { tab ->
                 when (tab) {
                     Tab.Home -> DashboardScreen(navigator)
                     Tab.Scan -> ScanScreen(navigator)
@@ -167,13 +169,13 @@ private fun SignedInApp(container: AppContainer, user: User) {
                     Tab.Travel -> TravelScreen(navigator)
                     Tab.Tickets -> TicketsScreen(navigator, showAccount = tabs.size == 1)
                 }
-            }
+            } }
         }
-        composable<ParticipantRoute> { val r = it.toRoute<ParticipantRoute>(); ParticipantDetailScreen(r.eventId, r.participantEventId, navigator) }
-        composable<TicketRoute> { TicketDetailScreen(it.toRoute<TicketRoute>().ticketId, navigator) }
-        composable<SettingsRoute> { SettingsScreen(navigator) }
-        composable<BlastsRoute> { BlastsScreen(it.toRoute<BlastsRoute>().eventId, navigator) }
-        composable<KioskRoute> { val r = it.toRoute<KioskRoute>(); KioskScreen(r.eventId, r.scanContextId, navigator) }
+        composable<ParticipantRoute> { val r = it.toRoute<ParticipantRoute>(); CardFrame { ParticipantDetailScreen(r.eventId, r.participantEventId, navigator) } }
+        composable<TicketRoute> { val id = it.toRoute<TicketRoute>().ticketId; CardFrame { TicketDetailScreen(id, navigator) } }
+        composable<SettingsRoute> { CardFrame { SettingsScreen(navigator) } }
+        composable<BlastsRoute> { val id = it.toRoute<BlastsRoute>().eventId; CardFrame { BlastsScreen(id, navigator) } }
+        composable<KioskRoute> { val r = it.toRoute<KioskRoute>(); CardFrame { KioskScreen(r.eventId, r.scanContextId, navigator) } }
     }
 
     if (pickerOpen) {

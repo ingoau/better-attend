@@ -54,6 +54,9 @@ data class OrganizerWidgetData(
     val travel: TravelWidgetData? = null,
 ) {
     val progress: Float get() = if (expected == 0) 0f else (checkedIn.coerceAtMost(expected) / expected.toFloat())
+
+    /** People are expected but check-in hasn't started: the widget leads with the expected count. */
+    val nobodyYet: Boolean get() = checkedIn == 0 && expected > 0
 }
 
 @Serializable

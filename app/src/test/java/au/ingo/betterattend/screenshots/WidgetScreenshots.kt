@@ -95,6 +95,19 @@ class WidgetScreenshots {
         listOf(WidgetSizes.Small to { CheckInContent(signedOut, now) }, WidgetSizes.Small to { CheckInContent(snap.copy(organizer = snap.organizer!!.copy(hasCounts = false)), now) }),
     ))
 
+    /** Before check-in starts: leads with the expected count instead of "0 / 120". */
+    private fun beforeSheet(dark: Boolean) = run {
+        val before = snap.copy(organizer = snap.organizer!!.copy(checkedIn = 0, notArrived = 120, lastHour = 0,
+            contexts = snap.organizer!!.contexts.map { it.copy(count = 0) }))
+        sheet("widgets_before_checkin", dark, listOf(
+            listOf(WidgetSizes.Small to { CheckInContent(before, now) }),
+            listOf(WidgetSizes.Wide to { CheckInContent(before, now) }),
+            listOf(WidgetSizes.Large to { CheckInContent(before, now) }),
+        ))
+    }
+
+    @Test fun beforeCheckInLight() = beforeSheet(false)
+    @Test fun beforeCheckInDark() = beforeSheet(true)
     @Test fun organizerLight() = organizerSheet(false)
     @Test fun organizerDark() = organizerSheet(true)
     @Test fun participantLight() = otherSheet(false)

@@ -49,7 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 /**
  * The tab screens live side by side in a pager: swipe between them or tap the bar.
  *
- * Every page stays composed (instant swipes, no reload flashes), but each gets its own lifecycle:
+ * Neighbouring pages stay composed (instant swipes, no reload flashes), and each gets its own lifecycle:
  * only the settled, visible page is RESUMED; the others are STARTED. Anything that should only run
  * while a tab is on screen (camera, NFC, polling) keys off RESUMED and so behaves like a real screen.
  */
@@ -121,7 +121,9 @@ fun MainTabs(
         val p = backProgress.value
         HorizontalPager(
             state = pager,
-            beyondViewportPageCount = tabs.size,
+            // Neighbours stay composed so swipes are instant; the rest are rebuilt on demand, which keeps
+            // returning from a detail screen (when NavHost recomposes the pager) cheap.
+            beyondViewportPageCount = 1,
             key = { tabs[it].name },
             modifier = modifier
                 .graphicsLayer {
