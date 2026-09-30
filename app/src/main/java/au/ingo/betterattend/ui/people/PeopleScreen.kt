@@ -1,5 +1,11 @@
 package au.ingo.betterattend.ui.people
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,10 +60,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -85,7 +91,9 @@ import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.AccountButton
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.EventSwitcherTitle
+import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.nav.AppNavigator
 import au.ingo.betterattend.ui.nav.Tab
@@ -126,7 +134,13 @@ fun PeopleScreen(nav: AppNavigator) {
         onQuick = vm::setQuick,
         onOptions = vm::setOptions,
         onSort = vm::setSort,
-        onOpen = { p -> state.event?.let { nav.openParticipant(it.id, p.participantEventId) } },
+        onOpen = { p, order ->
+            state.event?.let {
+                // Detail can then swipe to the previous / next person in this same list.
+                ParticipantBrowseOrder.set(it.id, p.participantEventId, order)
+                nav.openParticipant(it.id, p.participantEventId)
+            }
+        },
         onChooseEvent = nav::openEventPicker,
         onAccount = nav::openSettings,
         onOpenScanner = { nav.switchTab(Tab.Scan) },
@@ -143,11 +157,15 @@ fun PeopleContent(
     onQuick: (QuickFilter) -> Unit = {},
     onOptions: (FilterOptions) -> Unit = {},
     onSort: (SortOrder) -> Unit = {},
-    onOpen: (Participant) -> Unit = {},
+    /** A row was tapped: the person, plus the participantEventIds of the list they were tapped in, in display order. */
+    onOpen: (Participant, List<String>) -> Unit = { _, _ -> },
     onChooseEvent: () -> Unit = {},
     onAccount: () -> Unit = {},
     onOpenScanner: () -> Unit = {},
 ) {
+    val haptics = rememberHaptics()
+    // Every quick-filter change (chips, summary numbers, "Show everyone") gets the same selection tick.
+    val onQuickTick: (QuickFilter) -> Unit = { f -> if (f != state.quick) haptics.tick(); onQuick(f) }
     val event = state.event
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -201,13 +219,20 @@ fun PeopleContent(
                 )
                 else -> Column(Modifier.fillMaxSize()) {
                     SearchRow(state.query, onQuery, state.options.activeCount) { sheetOpen = true }
-                    QuickChips(state.quick, result.counts.takeIf { state.rosterComplete }, onQuick)
-                    if (state.options.activeCount > 0) {
-                        ActiveFiltersLine(state.options.activeCount) { onOptions(FilterOptions()) }
+                    QuickChips(state.quick, result.counts.takeIf { state.rosterComplete }, onQuickTick)
+                    AnimatedVisibility(
+                        visible = state.options.activeCount > 0,
+                        enter = expandVertically(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()),
+                        exit = shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
+                    ) {
+                        // Keep showing the last count while it animates away.
+                        var shown by remember { mutableIntStateOf(state.options.activeCount) }
+                        if (state.options.activeCount > 0) shown = state.options.activeCount
+                        ActiveFiltersLine(shown) { haptics.tick(); onOptions(FilterOptions()) }
                     }
-                    PullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
-                        PeopleList(state, roster, result, items, now, onOpen, onQuick) {
-                            onQuick(QuickFilter.All); onOptions(FilterOptions()); onQuery("")
+                    HapticPullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+                        PeopleList(state, roster, result, items, now, onOpen, onQuickTick) {
+                            haptics.tick(); onQuick(QuickFilter.All); onOptions(FilterOptions()); onQuery("")
                         }
                     }
                 }
@@ -221,7 +246,10 @@ fun PeopleContent(
         PeopleFilterSheet(
             options = state.options, sort = state.sort, contexts = state.contexts, statuses = statuses, dietTypes = diets,
             canViewSensitive = canSensitive, resultCount = result.participants.size,
-            onOptions = onOptions, onSort = onSort, onDismiss = { sheetOpen = false },
+            // Ticks come from this window's haptics: the sheet's own window ignores the Haptics setting.
+            onOptions = { if (it != state.options) haptics.tick(); onOptions(it) },
+            onSort = { if (it != state.sort) haptics.tick(); onSort(it) },
+            onDismiss = { sheetOpen = false },
         )
     }
 }
@@ -282,7 +310,7 @@ private fun QuickChips(selected: QuickFilter, counts: Map<QuickFilter, Int>?, on
                     Text(f.label)
                     if (count != null) {
                         Spacer(Modifier.width(6.dp))
-                        Text("$count", fontWeight = FontWeight.Bold)
+                        AnimatedCount(count, fontWeight = FontWeight.Bold)
                     }
                 },
                 leadingIcon = when {
@@ -320,31 +348,37 @@ private fun PeopleList(
     result: FilterResult,
     items: List<PeopleListItem>,
     now: Instant,
-    onOpen: (Participant) -> Unit,
+    onOpen: (Participant, List<String>) -> Unit,
     onQuick: (QuickFilter) -> Unit,
     onClearAll: () -> Unit,
 ) {
     val tz = state.event?.timezone
     val searching = state.query.isNotBlank()
+    // What detail swipes through: the list exactly as shown.
+    val order = remember(result) { result.participants.map { it.participantEventId } }
+    val remoteOrder = remember(state.remoteResults) { state.remoteResults.orEmpty().map { it.participantEventId } }
+    // Every item animates in/out and to its new place, so filtering, sorting and sync updates glide instead of jumping.
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         if (state.syncError != null) {
             item(key = "offline") {
                 OfflineBanner(
                     "Showing saved list${state.lastSyncAt?.let { " from ${Time.ago(it, now)}" } ?: ""}. ${state.syncError}",
-                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    Modifier.animateItem().padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
         }
         if (!searching && roster.isNotEmpty() && state.quick == QuickFilter.All) {
             item(key = "summary") {
-                if (state.rosterComplete) SummaryCard(roster, result.counts, onQuick) else SummaryLoadingCard(roster.size, state.syncError != null)
+                Box(Modifier.animateItem()) {
+                    if (state.rosterComplete) SummaryCard(roster, result.counts, onQuick) else SummaryLoadingCard(roster.size, state.syncError != null)
+                }
             }
         }
         items.forEach { item ->
             when (item) {
                 is PeopleListItem.Header -> stickyHeader(key = item.key, contentType = "header") { LetterHeader(item.letter) }
                 is PeopleListItem.Person -> item(key = item.key, contentType = "row") {
-                    ParticipantRow(item.participant, tz, onClick = { onOpen(item.participant) }, modifier = Modifier.animateItem())
+                    ParticipantRow(item.participant, tz, onClick = { onOpen(item.participant, order) }, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -352,36 +386,42 @@ private fun PeopleList(
             val remoteRelevant = state.query.trim().length >= 2
             when {
                 remoteRelevant && state.remoteSearching -> item(key = "remote_loading") {
-                    Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Row(Modifier.animateItem().fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                         LoadingIndicator(Modifier.size(40.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Searching all of Attend…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 remoteRelevant && !state.remoteResults.isNullOrEmpty() -> {
-                    item(key = "remote_h") { RemoteHeader() }
+                    item(key = "remote_h") { RemoteHeader(Modifier.animateItem()) }
                     items(state.remoteResults, key = { "r_" + it.participantEventId }) { p ->
-                        ParticipantRow(p, tz, onClick = { onOpen(p) })
+                        ParticipantRow(p, tz, onClick = { onOpen(p, remoteOrder) }, modifier = Modifier.animateItem())
                     }
                 }
                 roster.isEmpty() -> item(key = "empty") {
-                    EmptyState(Icons.Outlined.PersonSearch, "No one's registered yet", body = "Pull down to refresh once invitations go out.")
+                    Box(Modifier.animateItem()) {
+                        EmptyState(Icons.Outlined.PersonSearch, "No one's registered yet", body = "Pull down to refresh once invitations go out.")
+                    }
                 }
                 searching -> item(key = "nomatch") {
-                    EmptyState(
-                        Icons.Outlined.PersonSearch, "No matches for “${state.query.trim()}”",
-                        body = state.remoteError?.let { "Couldn't search Attend: $it" }
-                            ?: if (state.query.trim().length < 2) "Keep typing to search everyone registered." else "Check the spelling, or try their email or ticket code.",
-                        actionLabel = if (state.quick != QuickFilter.All || state.options.activeCount > 0) "Search everyone" else null,
-                        onAction = onClearAll,
-                    )
+                    Box(Modifier.animateItem()) {
+                        EmptyState(
+                            Icons.Outlined.PersonSearch, "No matches for “${state.query.trim()}”",
+                            body = state.remoteError?.let { "Couldn't search Attend: $it" }
+                                ?: if (state.query.trim().length < 2) "Keep typing to search everyone registered." else "Check the spelling, or try their email or ticket code.",
+                            actionLabel = if (state.quick != QuickFilter.All || state.options.activeCount > 0) "Search everyone" else null,
+                            onAction = onClearAll,
+                        )
+                    }
                 }
                 else -> item(key = "filtered_empty") {
-                    EmptyState(
-                        Icons.Outlined.FilterAltOff, emptyTitle(state.quick),
-                        body = if (state.options.activeCount > 0) "Try removing a filter." else null,
-                        actionLabel = "Show everyone", onAction = onClearAll,
-                    )
+                    Box(Modifier.animateItem()) {
+                        EmptyState(
+                            Icons.Outlined.FilterAltOff, emptyTitle(state.quick),
+                            body = if (state.options.activeCount > 0) "Try removing a filter." else null,
+                            actionLabel = "Show everyone", onAction = onClearAll,
+                        )
+                    }
                 }
             }
         }
@@ -398,18 +438,18 @@ private fun emptyTitle(q: QuickFilter) = when (q) {
 }
 
 @Composable
-private fun RemoteHeader() {
+private fun RemoteHeader(modifier: Modifier = Modifier) {
     Text(
         "Found on Attend",
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp).semantics { heading() },
+        modifier = modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp).semantics { heading() },
     )
 }
 
 @Composable
-private fun LetterHeader(letter: String) {
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+private fun LetterHeader(letter: String, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
         Text(
             letter,
             style = MaterialTheme.typography.titleSmall,
@@ -434,7 +474,7 @@ private fun SummaryCard(roster: List<Participant>, counts: Map<QuickFilter, Int>
                 verticalAlignment = Alignment.Bottom,
                 modifier = Modifier.semantics(mergeDescendants = true) {},
             ) {
-                Text("${stats.checkedIn}", style = MaterialTheme.typography.displayMedium)
+                AnimatedCount(stats.checkedIn, style = MaterialTheme.typography.displayMedium)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "of $total here",
@@ -443,17 +483,18 @@ private fun SummaryCard(roster: List<Participant>, counts: Map<QuickFilter, Int>
                 )
             }
             Spacer(Modifier.height(12.dp))
+            val progress by animateFloatAsState(stats.progress, MaterialTheme.motionScheme.defaultEffectsSpec(), label = "hereProgress")
             LinearWavyProgressIndicator(
-                progress = { stats.progress },
+                progress = { progress },
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerLowest,
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MiniStat("${counts[QuickFilter.NotHere] ?: 0}", "not here", Modifier.weight(1f)) { onQuick(QuickFilter.NotHere) }
-                MiniStat("${counts[QuickFilter.NeedsAttention] ?: 0}", "need attention", Modifier.weight(1f)) { onQuick(QuickFilter.NeedsAttention) }
-                MiniStat("${counts[QuickFilter.NotComplete] ?: 0}", "incomplete", Modifier.weight(1f)) { onQuick(QuickFilter.NotComplete) }
+                MiniStat(counts[QuickFilter.NotHere] ?: 0, "not here", Modifier.weight(1f)) { onQuick(QuickFilter.NotHere) }
+                MiniStat(counts[QuickFilter.NeedsAttention] ?: 0, "need attention", Modifier.weight(1f)) { onQuick(QuickFilter.NeedsAttention) }
+                MiniStat(counts[QuickFilter.NotComplete] ?: 0, "incomplete", Modifier.weight(1f)) { onQuick(QuickFilter.NotComplete) }
             }
         }
     }
@@ -489,7 +530,7 @@ private fun SummaryLoadingCard(known: Int, failed: Boolean) {
 }
 
 @Composable
-private fun MiniStat(value: String, label: String, modifier: Modifier, onClick: () -> Unit) {
+private fun MiniStat(value: Int, label: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier
             .clip(MaterialTheme.shapes.medium)
@@ -497,7 +538,7 @@ private fun MiniStat(value: String, label: String, modifier: Modifier, onClick: 
             .heightIn(min = 48.dp)
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
-        Text(value, style = MaterialTheme.typography.titleLarge)
+        AnimatedCount(value, style = MaterialTheme.typography.titleLarge)
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
 }
