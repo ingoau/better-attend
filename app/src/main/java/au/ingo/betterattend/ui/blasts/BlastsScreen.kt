@@ -16,6 +16,7 @@ import au.ingo.betterattend.data.model.SlackBlast
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.PollWhileVisible
 import au.ingo.betterattend.ui.components.catching
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -134,8 +135,12 @@ fun BlastsScreen(eventId: String, nav: AppNavigator) {
         PollWhileVisible(vm, BlastsViewModel.POLL_INTERVAL_MS, runImmediately = false) { vm.pollActive() }
     }
     val controller = rememberBlastsController()
+    val haptics = rememberHaptics()
     LaunchedEffect(vm) {
-        vm.sent.collect { blast -> controller.onSent(blast) }
+        vm.sent.collect { blast ->
+            haptics.confirm() // the server accepted it
+            controller.onSent(blast)
+        }
     }
     BlastsContent(
         state = state,

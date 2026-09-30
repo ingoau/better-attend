@@ -1,5 +1,6 @@
 package au.ingo.betterattend.ui.travel
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,7 +61,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -82,9 +82,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.TravelEntry
 import au.ingo.betterattend.ui.components.EmptyState
+import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.launch
@@ -141,27 +143,42 @@ fun TravelContent(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        val phase = when {
+            event == null -> TravelPhase.NoEvent
+            !event.travelEnabled -> TravelPhase.Disabled
+            cal == null && state.error != null -> TravelPhase.Failed
+            cal == null -> TravelPhase.Loading
+            else -> TravelPhase.Content
+        }
+        Crossfade(phase, Modifier.fillMaxSize().padding(padding), MaterialTheme.motionScheme.defaultEffectsSpec(), label = "travel") { shown ->
+            Box(Modifier.fillMaxSize()) {
+            // `shown` is what this layer of the crossfade draws; the live state fills in its details.
             when {
-                event == null -> EmptyState(
+                shown == TravelPhase.NoEvent || event == null -> EmptyState(
                     Icons.Outlined.EventBusy, "No event selected",
                     body = "Pick an event to see who's arriving and leaving.",
                     actionLabel = "Choose event", onAction = onPickEvent,
                 )
-                !event.travelEnabled -> EmptyState(
+                shown == TravelPhase.Disabled || !event.travelEnabled -> EmptyState(
                     Icons.Outlined.Luggage, "Travel isn't on for this event",
                     body = "Once travel is enabled on attend.hackclub.com, arrivals, departures and airport pickups show up here.",
                 )
-                cal == null && state.error != null -> EmptyState(
-                    Icons.Outlined.CloudOff, "Couldn't load travel", body = state.error,
+                shown == TravelPhase.Failed || (cal == null && state.error != null) -> EmptyState(
+                    Icons.Outlined.CloudOff, "Couldn't load travel", body = state.error ?: "Something went wrong.",
                     actionLabel = "Try again", onAction = onRefresh,
                 )
-                cal == null -> LoadingState(message = "Loading travel…")
+                shown == TravelPhase.Loading || cal == null -> LoadingState(message = "Loading travel…")
                 else -> TravelList(state, cal.entries, tz, query, onQueryChange, filter, onFilterChange, mode, onModeChange, onRefresh, onOpen, now)
+            }
             }
         }
     }
 }
+
+private enum class TravelPhase { NoEvent, Disabled, Failed, Loading, Content }
+
+/** What the list area shows; swaps crossfade rather than cut (e.g. a filter that matches nothing). */
+private enum class ListPhase { NoTravel, NoMatches, Rows }
 
 @Composable
 private fun TravelList(
@@ -186,6 +203,7 @@ private fun TravelList(
     val modeCounts = remember(all, query, filter) { TravelLogic.modeCounts(all, query, filter) }
     val showModes = remember(all) { TravelLogic.modesPresent(all).size > 1 }
     val listState = rememberLazyListState()
+    val haptics = rememberHaptics()
 
     Column(Modifier.fillMaxSize()) {
         if (all.isNotEmpty()) {
@@ -207,8 +225,9 @@ private fun TravelList(
                         selected = filter == f,
                         label = if (f == TravelFilter.Minors) "UMs" else f.label,
                         count = counts[f] ?: 0,
-                        onClick = { onFilterChange(if (filter == f) TravelFilter.All else f) },
+                        onClick = { haptics.tick(); onFilterChange(if (filter == f) TravelFilter.All else f) },
                         description = f.label,
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -223,8 +242,9 @@ private fun TravelList(
                             label = m.label,
                             count = modeCounts[m] ?: 0,
                             icon = modeIcon(m.wire, null),
-                            onClick = { onModeChange(if (mode == m) null else m) },
+                            onClick = { haptics.tick(); onModeChange(if (mode == m) null else m) },
                             description = "${m.label} journeys",
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -233,9 +253,15 @@ private fun TravelList(
         if (state.error != null) {
             OfflineBanner("Showing saved travel. ${state.error}", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onRetry = onRefresh)
         }
-        PullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                all.isEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
+        HapticPullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val listPhase = when {
+                all.isEmpty() -> ListPhase.NoTravel
+                filtered.isEmpty() -> ListPhase.NoMatches
+                else -> ListPhase.Rows
+            }
+            Crossfade(listPhase, animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(), label = "travel_list") { shown ->
+            when (shown) {
+                ListPhase.NoTravel -> LazyColumn(Modifier.fillMaxSize()) {
                     item {
                         EmptyState(
                             Icons.Outlined.FlightLand, "No travel yet",
@@ -243,24 +269,27 @@ private fun TravelList(
                         )
                     }
                 }
-                filtered.isEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
+                ListPhase.NoMatches -> LazyColumn(Modifier.fillMaxSize()) {
                     item {
                         EmptyState(
                             Icons.Outlined.SearchOff, "No matches",
                             body = if (query.isNotBlank()) "No journeys match “${query.trim()}” with these filters." else "No journeys match these filters.",
                             actionLabel = "Clear filters",
-                            onAction = { onQueryChange(""); onFilterChange(TravelFilter.All); onModeChange(null) },
+                            onAction = { haptics.click(); onQueryChange(""); onFilterChange(TravelFilter.All); onModeChange(null) },
                         )
                     }
                 }
-                else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                ListPhase.Rows -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     sections.forEach { section ->
-                        stickyHeader(key = "h_${section.key}") { SectionHeaderRow(section) }
+                        // Headers fade in/out as filtering adds or empties a day; no placement animation, which
+                        // would fight the sticky positioning.
+                        stickyHeader(key = "h_${section.key}") { SectionHeaderRow(section, Modifier.animateItem(placementSpec = null)) }
                         items(section.entries, key = { it.id }) { entry ->
-                            TravelRow(entry, tz, canOpen, onClick = { onOpen(entry) }, modifier = Modifier.animateItem())
+                            TravelRow(entry, tz, canOpen, onClick = { haptics.click(); onOpen(entry) }, modifier = Modifier.animateItem())
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -297,6 +326,7 @@ private fun CountChip(
     onClick: () -> Unit,
     description: String,
     icon: ImageVector? = null,
+    modifier: Modifier = Modifier,
 ) {
     FilterChip(
         selected = selected,
@@ -313,13 +343,13 @@ private fun CountChip(
             icon != null -> ({ Icon(icon, null, Modifier.size(FilterChipDefaults.IconSize)) })
             else -> null
         },
-        modifier = Modifier.heightIn(min = 40.dp).semantics { contentDescription = "$description, $count" },
+        modifier = modifier.heightIn(min = 40.dp).semantics { contentDescription = "$description, $count" },
     )
 }
 
 @Composable
-private fun SectionHeaderRow(section: TravelSection) {
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+private fun SectionHeaderRow(section: TravelSection, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp).semantics { heading() },
             verticalAlignment = Alignment.CenterVertically,

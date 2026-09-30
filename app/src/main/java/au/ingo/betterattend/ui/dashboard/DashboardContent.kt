@@ -1,5 +1,12 @@
 package au.ingo.betterattend.ui.dashboard
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
@@ -63,8 +71,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,12 +99,15 @@ import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.repo.EventStats
 import au.ingo.betterattend.ui.components.AccountButton
+import au.ingo.betterattend.ui.components.AnimatedNumber
+import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.MaterialShapesCookie
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.Tab
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.ui.travel.modeIcon
@@ -130,10 +142,22 @@ fun DashboardContent(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        val phase = when {
+            state.events == null -> HomePhase.Loading
+            state.events.isEmpty() -> HomePhase.NoEvents
+            event == null -> HomePhase.PickEvent
+            else -> HomePhase.Content
+        }
+        Crossfade(
+            targetState = phase,
+            animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+            modifier = Modifier.fillMaxSize().padding(padding),
+            label = "home",
+        ) { shown ->
+            Box(Modifier.fillMaxSize()) {
             when {
-                state.events == null -> LoadingState(message = "Loading your events…")
-                state.events.isEmpty() -> PullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh) {
+                shown == HomePhase.Loading || state.events == null -> LoadingState(message = "Loading your events…")
+                shown == HomePhase.NoEvents || state.events.isEmpty() -> HapticPullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh) {
                     LazyColumn(Modifier.fillMaxSize()) {
                         item {
                             EmptyState(
@@ -147,17 +171,26 @@ fun DashboardContent(
                         }
                     }
                 }
-                event == null -> EmptyState(
+                shown == HomePhase.PickEvent || event == null -> EmptyState(
                     Icons.Outlined.EventAvailable, "Pick an event",
                     body = "Choose which event you're working on. You can switch any time from the title.",
                     actionLabel = "Choose event", onAction = onPickEvent,
                 )
-                else -> PullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                else -> HapticPullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     DashboardBody(state, event, now, onRefresh, onSwitchTab, onOpenParticipant, onAnnounce, onKiosk)
                 }
             }
+            }
         }
     }
+}
+
+/** Which top-level state Home is in; changes crossfade instead of cutting. */
+private enum class HomePhase { Loading, NoEvents, PickEvent, Content }
+
+/** A Home card that fades/slides into place when it appears, moves or leaves (e.g. the offline banner). */
+private fun LazyListScope.card(key: String, content: @Composable () -> Unit) {
+    item(key = key) { Box(Modifier.animateItem()) { content() } }
 }
 
 @Composable
@@ -221,9 +254,9 @@ private fun DashboardBody(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "status") { StatusLine(state.refreshing, updated, state.pendingScans) }
+        card(key = "status") { StatusLine(state.refreshing, updated, state.pendingScans) }
         if (state.error != null) {
-            item(key = "offline") {
+            card(key = "offline") {
                 OfflineBanner(
                     if (roster != null || state.scans != null) "Showing saved numbers. ${state.error}" else state.error,
                     onRetry = onRefresh,
@@ -233,32 +266,32 @@ private fun DashboardBody(
 
         if (state.canViewParticipants) {
             if (stats == null) {
-                item(key = "hero_loading") { HeroLoading(failed = state.error != null && !state.refreshing, onRetry = onRefresh) }
+                card(key = "hero_loading") { HeroLoading(failed = state.error != null && !state.refreshing, onRetry = onRefresh) }
             } else {
-                item(key = "hero") { Hero(event, stats, phase, now) }
+                card(key = "hero") { Hero(event, stats, phase, now) }
             }
-            item(key = "actions") { QuickActions(showFind = true, onSwitchTab, onAnnounce, onKiosk) }
+            card(key = "actions") { QuickActions(showFind = true, onSwitchTab, onAnnounce, onKiosk) }
             if (stats != null) {
-                item(key = "tiles") {
+                card(key = "tiles") {
                     StatTiles(stats, DashboardLogic.needsAttention(roster!!.participants), onOpenPeople = { onSwitchTab(Tab.People) })
                 }
                 val progress = DashboardLogic.contextProgress(state.contexts, stats, now)
                 // Before doors open every bar is empty, so skip them.
-                if (progress.isNotEmpty() && (phase != Time.Phase.Upcoming || progress.any { it.count > 0 })) item(key = "contexts") { ContextsCard(progress) }
+                if (progress.isNotEmpty() && (phase != Time.Phase.Upcoming || progress.any { it.count > 0 })) card(key = "contexts") { ContextsCard(progress) }
             }
-            if (arrivals != null) item(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone) { onSwitchTab(Tab.Travel) } }
+            if (arrivals != null) card(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone) { onSwitchTab(Tab.Travel) } }
             if (roster != null && phase != Time.Phase.Upcoming) {
                 val recent = DashboardLogic.recentCheckIns(roster.participants)
-                item(key = "recent") { RecentCheckIns(recent, now, onOpenParticipant, onSeeAll = { onSwitchTab(Tab.People) }) }
+                card(key = "recent") { RecentCheckIns(recent, now, onOpenParticipant, onSeeAll = { onSwitchTab(Tab.People) }) }
             }
         } else {
-            item(key = "explain") { LimitedAccessCard(event) }
-            item(key = "scans_hero") { ScansHero(state.scans, event.timezone, now) }
-            item(key = "actions") { QuickActions(showFind = false, onSwitchTab, onAnnounce, onKiosk) }
-            if (arrivals != null) item(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone) { onSwitchTab(Tab.Travel) } }
+            card(key = "explain") { LimitedAccessCard(event) }
+            card(key = "scans_hero") { ScansHero(state.scans, event.timezone, now) }
+            card(key = "actions") { QuickActions(showFind = false, onSwitchTab, onAnnounce, onKiosk) }
+            if (arrivals != null) card(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone) { onSwitchTab(Tab.Travel) } }
             val scans = state.scans
             if (!scans.isNullOrEmpty()) {
-                item(key = "recent_scans") { RecentScans(DashboardLogic.scanFeed(scans, event.timezone, now).recent, state.travel, now) }
+                card(key = "recent_scans") { RecentScans(DashboardLogic.scanFeed(scans, event.timezone, now).recent, state.travel, now) }
             }
         }
     }
@@ -329,6 +362,8 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
     }
     val fraction = if (total <= 0) 0f else (value.toFloat() / total).coerceIn(0f, 1f)
     val percent = (fraction * 100).toInt()
+    // The ring sweeps to the new value instead of jumping when a sync brings in more check-ins.
+    val ring by animateFloatAsState(fraction, MaterialTheme.motionScheme.slowSpatialSpec(), label = "ring")
 
     HeroCard {
         Column(Modifier.clearAndSetSemantics {
@@ -339,7 +374,7 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
                     Text(eyebrow, style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text("$value", style = MaterialTheme.typography.displayLarge)
+                        AnimatedNumber(value, style = MaterialTheme.typography.displayLarge)
                         Text(
                             " / $total", style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.padding(bottom = 8.dp),
@@ -352,14 +387,14 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
                     val density = LocalDensity.current
                     val stroke = with(density) { Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round) }
                     CircularWavyProgressIndicator(
-                        progress = { fraction },
+                        progress = { ring },
                         modifier = Modifier.size(124.dp),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.6f),
                         stroke = stroke,
                         trackStroke = stroke,
                     )
-                    Text("$percent%", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                    AnimatedNumber(percent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, suffix = "%")
                 }
             }
             if (chips.isNotEmpty()) {
@@ -415,12 +450,13 @@ private data class QuickAction(val label: String, val icon: ImageVector, val pri
 
 @Composable
 private fun QuickActions(showFind: Boolean, onSwitchTab: (Tab) -> Unit, onAnnounce: () -> Unit, onKiosk: () -> Unit) {
+    val haptics = rememberHaptics()
     val actions = buildList {
         add(QuickAction("Scan", Icons.Outlined.QrCodeScanner, true) { onSwitchTab(Tab.Scan) })
         if (showFind) add(QuickAction("Find", Icons.Outlined.Search, false) { onSwitchTab(Tab.People) })
         add(QuickAction("Announce", Icons.Outlined.Campaign, false, onAnnounce))
         add(QuickAction("Kiosk", Icons.Outlined.StayCurrentPortrait, false, onKiosk))
-    }
+    }.map { a -> a.copy(onClick = { haptics.click(); a.onClick() }) }
     ButtonGroup(
         overflowIndicator = { menuState -> ButtonGroupDefaults.OverflowIndicator(menuState) },
         modifier = Modifier.fillMaxWidth(),
@@ -460,6 +496,8 @@ private fun QuickActions(showFind: Boolean, onSwitchTab: (Tab) -> Unit, onAnnoun
 
 @Composable
 private fun StatTiles(stats: EventStats, attention: Int, onOpenPeople: () -> Unit) {
+    val haptics = rememberHaptics()
+    val onOpenPeople = { haptics.click(); onOpenPeople() }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatTile("Registered", stats.registered, Icons.Outlined.Groups, "Not withdrawn", Modifier.weight(1f), onOpenPeople)
@@ -488,7 +526,7 @@ private fun StatTile(label: String, value: Int, icon: ImageVector, hint: String,
                 Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
             Spacer(Modifier.height(6.dp))
-            Text("$value", style = MaterialTheme.typography.headlineMedium)
+            AnimatedNumber(value, style = MaterialTheme.typography.headlineMedium)
             Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -610,7 +648,7 @@ private fun ArrivalsCard(a: ArrivalsSummary, tz: String?, onOpen: () -> Unit) {
 private fun MiniStat(label: String, value: Int, container: Color, content: Color, modifier: Modifier) {
     Surface(color = container, contentColor = content, shape = MaterialTheme.shapes.medium, modifier = modifier) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text("$value", style = MaterialTheme.typography.headlineSmall)
+            AnimatedNumber(value, style = MaterialTheme.typography.headlineSmall)
             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -620,14 +658,26 @@ private fun MiniStat(label: String, value: Int, container: Color, content: Color
 
 @Composable
 private fun RecentCheckIns(recent: List<Participant>, now: Instant, onOpen: (String) -> Unit, onSeeAll: () -> Unit) {
+    val haptics = rememberHaptics()
+    // People already listed when the card first appeared show straight away; anyone who checks in after that
+    // (picked up by a background sync) slides in at the top while the rest of the list eases down.
+    val initial = remember { recent.mapTo(HashSet()) { it.participantEventId } }
     DashCard(title = "Recently checked in", action = "People", onAction = onSeeAll) {
+        Column(Modifier.animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
         if (recent.isEmpty()) {
             Text("No one's checked in yet. Scans at a check-in point show up here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         recent.forEachIndexed { i, p ->
+          key(p.participantEventId) {
+            val visible = remember { MutableTransitionState(p.participantEventId in initial).apply { targetState = true } }
+            AnimatedVisibility(
+                visibleState = visible,
+                enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
+            ) {
+            Column {
             if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             Surface(
-                onClick = { onOpen(p.participantEventId) },
+                onClick = { haptics.click(); onOpen(p.participantEventId) },
                 color = Color.Transparent,
                 shape = MaterialTheme.shapes.small,
                 modifier = Modifier.fillMaxWidth(),
@@ -649,6 +699,10 @@ private fun RecentCheckIns(recent: List<Participant>, now: Instant, onOpen: (Str
                     Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            }
+            }
+          }
+        }
         }
     }
 }
@@ -693,7 +747,7 @@ private fun ScansHero(scans: List<Scan>?, tz: String?, now: Instant) {
         ) {
             Column(Modifier.weight(1f)) {
                 Text("Today", style = MaterialTheme.typography.titleMedium)
-                Text("${feed.today}${if (feed.capped) "+" else ""}", style = MaterialTheme.typography.displayLarge)
+                AnimatedNumber(feed.today, style = MaterialTheme.typography.displayLarge, suffix = if (feed.capped) "+" else "")
                 Text("scans", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
                 HeroChip(Icons.Outlined.Groups, "${feed.uniquePeopleToday} people scanned")
@@ -751,6 +805,9 @@ private fun DashCard(
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val haptics = rememberHaptics()
+    val onAction = onAction?.let { go -> { haptics.click(); go() } }
+    val onClick = onClick?.let { go -> { haptics.click(); go() } }
     val body: @Composable () -> Unit = {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {

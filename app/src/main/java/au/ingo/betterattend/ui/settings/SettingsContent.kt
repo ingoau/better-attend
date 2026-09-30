@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.store.ThemeMode
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.dashboard.DashboardLogic
 import au.ingo.betterattend.ui.theme.status
 
@@ -147,7 +148,7 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
 
             item { GroupTitle("Scanning") }
             item { SwitchRow(0, 3, Icons.Outlined.VolumeUp, "Sounds", "A different sound for each scan result", state.settings.sounds, onChange = actions.onSounds) }
-            item { SwitchRow(1, 3, Icons.Outlined.Vibration, "Haptics", "Feel each scan result", state.settings.haptics, onChange = actions.onHaptics) }
+            item { SwitchRow(1, 3, Icons.Outlined.Vibration, "Haptics", "Feel scans, taps and gestures", state.settings.haptics, onChange = actions.onHaptics) }
             item { SwitchRow(2, 3, Icons.Outlined.ScreenLockPortrait, "Keep screen on", "While the scanner is open", state.settings.keepScreenOn, onChange = actions.onKeepScreenOn) }
 
             item { GroupTitle("Data") }
@@ -339,6 +340,7 @@ private fun SwitchRow(
     enabled: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
+    val haptics = rememberHaptics()
     Segment(index, count) {
         ListItem(
             headlineContent = { Text(title) },
@@ -346,7 +348,7 @@ private fun SwitchRow(
             leadingContent = { Icon(icon, null) },
             trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+            modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.toggle(it); onChange(it) },
         )
     }
 }
@@ -371,11 +373,12 @@ private fun ThemePicker(mode: ThemeMode, onChange: (ThemeMode) -> Unit) {
         Triple(ThemeMode.Light, "Light", Icons.Outlined.LightMode),
         Triple(ThemeMode.Dark, "Dark", Icons.Outlined.DarkMode),
     )
+    val haptics = rememberHaptics()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
         options.forEachIndexed { i, (value, label, icon) ->
             ToggleButton(
                 checked = mode == value,
-                onCheckedChange = { onChange(value) },
+                onCheckedChange = { if (mode != value) haptics.tick(); onChange(value) },
                 shapes = when (i) {
                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
