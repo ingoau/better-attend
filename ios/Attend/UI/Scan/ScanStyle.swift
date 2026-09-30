@@ -71,6 +71,7 @@ struct CameraIconButton: View {
                 .frame(width: 52, height: 52)
                 .floatingGlass(in: Circle(), interactive: true, tint: isOn ? .white : nil)
                 .contentShape(Circle())
+                .environment(\.colorScheme, .dark)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

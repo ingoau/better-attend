@@ -22,6 +22,7 @@ private struct ScanScreen: View {
 
     @Environment(Router.self) private var router
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
     init(app: AppModel) {
         _model = State(initialValue: ScanModel(app: app))
@@ -147,6 +148,7 @@ private struct ScanScreen: View {
             .buttonStyle(.bordered)
             .buttonBorderShape(.capsule)
             .controlSize(.small)
+            .tint(Tone.info.color)
             .disabled(model.syncing)
         }
         .padding(.leading, 14)
@@ -183,14 +185,21 @@ private struct ScanScreen: View {
                     .environment(\.colorScheme, .dark)
                     .animation(.smooth(duration: 0.35), value: accent)
                     .animation(.spring(duration: 0.45, bounce: 0.2), value: model.card == nil)
-            } else {
+            } else if model.card == nil {
                 CameraPermissionPanel(access: camera, onRequest: requestCamera, onFindPerson: openFind)
-                    .padding(.bottom, model.card == nil ? 80 : 0)
+                    .padding(.bottom, 80)
+                    .transition(.opacity)
             }
         }
+        .animation(.smooth(duration: 0.25), value: model.card == nil)
         .overlay(alignment: .top) { topChips }
         .overlay(alignment: .bottom) { bottomStack }
         .clipShape(.rect(cornerRadius: 32, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.1 : 0), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
     }
 
     private var topChips: some View {

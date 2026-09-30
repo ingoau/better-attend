@@ -146,16 +146,24 @@ private struct KioskScreen: View {
             }
             .opacity(0.6)
             Spacer(minLength: 0)
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: model.selectedContext?.systemImage ?? "qrcode.viewfinder")
-                Text([model.event?.name, model.selectedContext?.name].compactMap { $0 }.joined(separator: " · "))
-                    .lineLimit(1)
+                    .font(.body.weight(.semibold))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.selectedContext?.name ?? model.event?.name ?? "Check-in")
+                        .font(.subheadline.weight(.semibold))
+                    if model.selectedContext != nil, let name = model.event?.name {
+                        Text(name).font(.caption).opacity(0.75)
+                    }
+                }
+                .lineLimit(1)
             }
-            .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 40)
+            .padding(.leading, 14)
+            .padding(.trailing, 18)
+            .frame(minHeight: 48)
             .floatingGlass(in: Capsule())
+            .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
             CameraIconButton(title: facing == .front ? "Switch to rear camera" : "Switch to front camera",
                              systemImage: "arrow.triangle.2.circlepath.camera", isEnabled: camera == .granted) {
@@ -477,7 +485,11 @@ struct PinField: View {
                 LinearKeyframe(0, duration: 0.06)
             }
         }
-        .onAppear { focused = isEnabled }
+        .task {
+            // Focus once the presentation has settled, so the number pad comes up reliably.
+            try? await Task.sleep(for: .milliseconds(350))
+            focused = isEnabled
+        }
         .onChange(of: isEnabled) { _, on in if on { focused = true } }
         .onChange(of: pin) { _, value in
             let clean = KioskLogic.sanitizePin(value)
