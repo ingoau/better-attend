@@ -11,6 +11,7 @@ import au.ingo.betterattend.data.api.AttendApi
 import au.ingo.betterattend.data.api.AttendJson
 import au.ingo.betterattend.data.api.TokenStore
 import au.ingo.betterattend.data.api.friendlyMessage
+import au.ingo.betterattend.data.model.SessionResponse
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.store.SecureBox
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,6 +93,13 @@ class AuthRepository(
             .build()
     }
 
+    /** Stores a freshly issued session and switches to the signed-in state. */
+    fun signInWith(session: SessionResponse) {
+        store.update(session.token, session.expiresAt)
+        store.user = session.user
+        _state.value = AuthState.SignedIn(session.user)
+    }
+
     fun isOAuthCallback(uri: Uri?): Boolean =
         uri != null && uri.scheme == "attend" && uri.host == "oauth" && uri.path?.startsWith("/callback") == true
 
@@ -113,11 +121,9 @@ class AuthRepository(
         _state.value = AuthState.Loading
         return try {
             val session = apiProvider().createSession(code, BuildConfig.OAUTH_REDIRECT_URI, verifier, deviceName())
-            store.update(session.token, session.expiresAt)
-            store.user = session.user
             store.pkceVerifier = null
             store.oauthState = null
-            _state.value = AuthState.SignedIn(session.user)
+            signInWith(session)
             null
         } catch (e: ApiException) {
             fail(

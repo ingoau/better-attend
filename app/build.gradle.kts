@@ -123,6 +123,8 @@ dependencies {
 
     robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-13954326-i7")
     testImplementation(libs.junit)
+    testImplementation(libs.mockwebserver)
+    testImplementation(libs.work.testing)
     testImplementation(libs.robolectric)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)

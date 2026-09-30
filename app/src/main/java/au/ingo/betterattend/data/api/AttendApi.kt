@@ -75,7 +75,8 @@ val AttendJson = Json {
 class AttendApi(
     private val tokens: TokenStore,
     private val onSessionExpired: () -> Unit,
-    private val baseUrl: String = BuildConfig.API_BASE_URL,
+    /** Mutable only so tests can point the app at a local mock server. */
+    @androidx.annotation.VisibleForTesting var baseUrl: String = BuildConfig.API_BASE_URL,
     client: OkHttpClient? = null,
 ) {
     val http: OkHttpClient = client ?: OkHttpClient.Builder()
