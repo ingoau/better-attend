@@ -67,6 +67,7 @@ fun EventPickerContent(events: List<Event>, selectedId: String?, onSelect: (Even
             "Undated" to byPhase[Time.Phase.Unknown].orEmpty(),
         ).filter { it.second.isNotEmpty() }
     }
+    val haptics = rememberHaptics()
     Column(Modifier.fillMaxWidth()) {
         Text("Choose event", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 24.dp))
         Spacer(Modifier.height(12.dp))
@@ -88,9 +89,12 @@ fun EventPickerContent(events: List<Event>, selectedId: String?, onSelect: (Even
         }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             grouped.forEach { (title, list) ->
-                item(key = "h_$title") { SectionHeader(title, Modifier.padding(horizontal = 8.dp)) }
+                item(key = "h_$title") { SectionHeader(title, Modifier.animateItem().padding(horizontal = 8.dp)) }
                 items(list, key = { it.id }) { event ->
-                    EventRow(event, event.id == selectedId, title == "Happening now") { onSelect(event) }
+                    EventRow(event, event.id == selectedId, title == "Happening now", Modifier.animateItem()) {
+                        haptics.confirm()
+                        onSelect(event)
+                    }
                 }
             }
         }
@@ -98,12 +102,12 @@ fun EventPickerContent(events: List<Event>, selectedId: String?, onSelect: (Even
 }
 
 @Composable
-private fun EventRow(event: Event, selected: Boolean, live: Boolean, onClick: () -> Unit) {
+private fun EventRow(event: Event, selected: Boolean, live: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = MaterialTheme.shapes.large,
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Avatar(event.name, event.logoUrl, size = 44.dp)

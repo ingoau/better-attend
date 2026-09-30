@@ -38,11 +38,15 @@ import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.ui.components.MaterialShapesClover
 import au.ingo.betterattend.ui.components.MaterialShapesCookie
 import au.ingo.betterattend.ui.components.MaterialShapesSoftBurst
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.theme.HackClub
 
 @Composable
 fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val haptics = rememberHaptics()
+    // Sign-in failed (or was cancelled on the web): a short buzz alongside the error card.
+    androidx.compose.runtime.LaunchedEffect(error) { if (error != null) haptics.reject() }
     Box(Modifier.fillMaxSize().background(cs.surface)) {
         // Decorative expressive shapes.
         Box(Modifier.size(280.dp).offset(x = (-90).dp, y = (-60).dp).rotate(12f).clip(MaterialShapesCookie).background(cs.primaryContainer))
@@ -79,7 +83,7 @@ fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
                 }
             }
             Button(
-                onClick = onSignIn,
+                onClick = { haptics.click(); onSignIn() },
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).widthIn(max = 480.dp),
                 shapes = ButtonDefaults.shapes(),

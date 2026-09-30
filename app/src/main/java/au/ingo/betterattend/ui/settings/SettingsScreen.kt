@@ -16,6 +16,7 @@ import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.store.AppSettings
 import au.ingo.betterattend.ui.LocalAppContainer
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
 import kotlinx.coroutines.launch
 
@@ -53,6 +54,7 @@ fun SettingsScreen(nav: AppNavigator) {
     val c = LocalAppContainer.current
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
+    val haptics = rememberHaptics()
     val settings by c.settings.settings.collectAsStateWithLifecycle(initialValue = null)
     val auth by c.auth.state.collectAsStateWithLifecycle()
     val event by c.events.selectedEvent.collectAsStateWithLifecycle()
@@ -85,10 +87,12 @@ fun SettingsScreen(nav: AppNavigator) {
                 syncing = true
                 message = try {
                     when (val left = c.scans.flush()) {
-                        0 -> "All scans synced"
+                        0 -> "All scans synced".also { haptics.confirm() }
                         else -> "$left scan${if (left == 1) "" else "s"} still waiting. We'll keep trying when you're back online."
+                            .also { haptics.reject() }
                     }
                 } catch (e: Exception) {
+                    haptics.reject()
                     e.friendlyMessage
                 }
                 syncing = false
@@ -104,11 +108,17 @@ fun SettingsScreen(nav: AppNavigator) {
                 launch { c.events.refresh() }
                 launch { c.tickets.refresh() }
                 clearing = false
+                haptics.confirm()
                 message = "Cached data cleared. It'll download again as you use the app."
             }
         },
-        onSignOut = { scope.launch { c.auth.signOut() } },
-        onOpenUrl = { runCatching { uri.openUri(it) } },
+        onSignOut = {
+            scope.launch {
+                c.auth.signOut()
+                haptics.confirm()
+            }
+        },
+        onOpenUrl = { haptics.click(); runCatching { uri.openUri(it) }.onFailure { haptics.reject() } },
         onMessageShown = { message = null },
     )
 
