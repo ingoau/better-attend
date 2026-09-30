@@ -2,6 +2,14 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.roborazzi)
+}
+
+val robolectricRuntime: Configuration by configurations.creating
+val robolectricRuntimeDir = layout.buildDirectory.dir("robolectric-runtime")
+val copyRobolectricRuntime = tasks.register<Copy>("copyRobolectricRuntime") {
+    from(robolectricRuntime)
+    into(robolectricRuntimeDir)
 }
 
 android {
@@ -28,6 +36,20 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.maxHeapSize = "1536m"
+                // Robolectric can't download its runtime through the sandbox proxy, so Gradle fetches it.
+                it.dependsOn(copyRobolectricRuntime)
+                it.systemProperty("robolectric.offline", "true")
+                it.systemProperty("robolectric.dependency.dir", robolectricRuntimeDir.get().asFile.absolutePath)
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            }
+        }
     }
 
     buildFeatures {
@@ -76,4 +98,16 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.zxing.core)
+
+    robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-13954326-i7")
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
+    implementation(libs.material.color.utilities)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.okhttp)
 }

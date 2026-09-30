@@ -1,0 +1,6 @@
+<resources>
+    <color name="hc_red">#EC3750</color>
+    <color name="window_background">#FFFBF8F8</color>
+    <color name="splash_background">#EC3750</color>
+    <color name="widget_brand">#EC3750</color>
+</resources>
