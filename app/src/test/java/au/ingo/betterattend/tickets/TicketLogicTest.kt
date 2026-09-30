@@ -66,6 +66,22 @@ class TicketLogicTest {
         assertNull(TicketLogic.next(listOf(past), now))
     }
 
+    @Test fun pagerIdsFollowListOrderAndSkipUnconfirmed() {
+        val now = Instant.parse("2026-09-30T00:00:00Z")
+        val past = SampleData.ticket.copy(id = "past", event = event.copy(startsAt = "2026-06-01T00:00:00Z", endsAt = "2026-06-02T00:00:00Z"))
+        val later = SampleData.ticket.copy(id = "later", event = event.copy(startsAt = "2026-12-01T00:00:00Z", endsAt = "2026-12-02T00:00:00Z"))
+        val soon = SampleData.ticket.copy(id = "soon")
+        val pending = SampleData.ticket.copy(id = "pending", confirmed = false, event = event.copy(startsAt = "2026-11-01T00:00:00Z", endsAt = "2026-11-02T00:00:00Z"))
+        val all = listOf(past, pending, later, soon)
+        assertEquals(listOf("soon", "later", "past"), TicketLogic.pagerIds(all, "later", now))
+        // An unconfirmed ticket only appears when it's the one opened.
+        assertEquals(listOf("soon", "pending", "later", "past"), TicketLogic.pagerIds(all, "pending", now))
+        // Until the list is known (or if the ticket isn't in it), just the opened one.
+        assertEquals(listOf("x"), TicketLogic.pagerIds(null, "x", now))
+        assertEquals(listOf("x"), TicketLogic.pagerIds(all, "x", now))
+        assertEquals(listOf("soon"), TicketLogic.pagerIds(listOf(soon), "soon", now))
+    }
+
     @Test fun directions() {
         assertEquals("geo:-33.8688,151.2093?q=-33.8688,151.2093(Campfire%20Sydney)", TicketLogic.geoUri(event))
         val noCoords = TicketEvent(id = "x", name = "X", locationAddress = "1 Example St", locationCity = "Sydney")

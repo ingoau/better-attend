@@ -2,6 +2,7 @@ package au.ingo.betterattend.screenshots
 
 import au.ingo.betterattend.ui.preview.SampleData
 import au.ingo.betterattend.ui.tickets.FullScreenQr
+import au.ingo.betterattend.ui.tickets.QrOverlayFrame
 import au.ingo.betterattend.ui.tickets.TicketDetailContent
 import au.ingo.betterattend.ui.tickets.TicketsContent
 import org.junit.Test
@@ -60,4 +61,19 @@ class TicketsScreenshots : ScreenshotTest() {
     }
 
     @Test fun ticketFullScreenQr() = snap("ticket_fullscreen_qr") { FullScreenQr(SampleData.ticket, onClose = {}) }
+
+    /** Halfway through a predictive back gesture from the left edge: shrunk, rounded, the pass showing behind. */
+    @Test fun ticketFullScreenQrBackGesture() = snap("ticket_fullscreen_qr_back") {
+        TicketDetailContent(SampleData.ticket, loading = false, error = null, now = before)
+        QrOverlayFrame(SampleData.ticket, appear = { 1f }, back = { 0.6f }, fromLeft = { true }, origin = { null }, onClose = {})
+    }
+
+    /** Early in the open animation, growing out of where the pass's QR sits. */
+    @Test fun ticketFullScreenQrOpening() = snap("ticket_fullscreen_qr_opening") {
+        TicketDetailContent(SampleData.ticket, loading = false, error = null, now = before)
+        QrOverlayFrame(
+            SampleData.ticket, appear = { 0.35f }, back = { 0f }, fromLeft = { true },
+            origin = { androidx.compose.ui.geometry.Rect(250f, 600f, 1000f, 1350f) }, onClose = {},
+        )
+    }
 }

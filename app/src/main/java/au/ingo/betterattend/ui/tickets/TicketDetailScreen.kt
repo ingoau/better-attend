@@ -1,11 +1,9 @@
 package au.ingo.betterattend.ui.tickets
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.togetherWith
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,7 +25,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -71,21 +72,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
@@ -96,6 +106,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.util.lerp
 import androidx.core.text.HtmlCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import au.ingo.betterattend.data.api.friendlyMessage
@@ -108,13 +120,17 @@ import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.MaterialShapesCookie
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Callbacks for [TicketDetailContent]. */
 class TicketDetailActions(
@@ -126,89 +142,144 @@ class TicketDetailActions(
     val onReportIncident: () -> Unit = {},
     val onCallHotline: () -> Unit = {},
     val onRetry: () -> Unit = {},
+    /** Where the pass's QR code sits on screen (root coordinates), so full-screen mode can grow out of it. */
+    val onQrBounds: (Rect) -> Unit = {},
 )
 
+/** Per-ticket screen state; kept per id so swiping between passes doesn't mix up spinners and errors. */
+private data class PageState(val loading: Boolean = true, val error: String? = null, val walletLoading: Boolean = false)
+
+/**
+ * A participant's pass. With several confirmed tickets they can swipe sideways between them (same order as the
+ * tickets list). Each pass refreshes once when first shown; screen brightness follows the visible pass.
+ */
 @Composable
 fun TicketDetailScreen(ticketId: String, nav: AppNavigator) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     val tickets by container.tickets.tickets.collectAsStateWithLifecycle()
-    val ticket = tickets?.firstOrNull { it.id == ticketId }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var walletLoading by remember { mutableStateOf(false) }
+    val pageIds = remember(tickets, ticketId) { TicketLogic.pagerIds(tickets, ticketId) }
+    var visibleId by rememberSaveable(ticketId) { mutableStateOf(ticketId) }
+    if (visibleId !in pageIds) visibleId = ticketId
+    val visible = tickets?.firstOrNull { it.id == visibleId }
     var fullScreen by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val now by produceState(Instant.now()) { while (true) { delay(1_000); value = Instant.now() } }
 
-    suspend fun refresh() {
-        loading = true
-        container.tickets.refreshTicket(ticketId)
-            .onSuccess { error = null }
-            .onFailure { error = it.friendlyMessage }
-        loading = false
+    val pages = remember { mutableStateMapOf<String, PageState>() }
+    fun page(id: String) = pages[id] ?: PageState()
+    fun update(id: String, f: (PageState) -> PageState) { pages[id] = f(page(id)) }
+    val listStates = remember { HashMap<String, LazyListState>() }
+    fun listState(id: String) = listStates.getOrPut(id) { LazyListState() }
+    val qrBounds = remember { HashMap<String, Rect>() }
+
+    fun refresh(id: String) = scope.launch {
+        update(id) { it.copy(loading = true) }
+        container.tickets.refreshTicket(id)
+            .onSuccess { update(id) { it.copy(loading = false, error = null) } }
+            .onFailure { e -> update(id) { it.copy(loading = false, error = e.friendlyMessage) } }
     }
-    LaunchedEffect(ticketId) { refresh() }
+    // Each pass refreshes the first time it's shown, not every time it's swiped past.
+    val refreshed = remember { HashSet<String>() }
+    LaunchedEffect(visibleId) { if (refreshed.add(visibleId)) refresh(visibleId) }
 
     fun say(msg: String) { scope.launch { snackbar.showSnackbar(msg) } }
+    fun failed(msg: String) { haptics.reject(); say(msg) }
 
-    val actions = TicketDetailActions(
-        onBack = nav::back,
-        onShowQr = { fullScreen = true },
-        onWallet = {
-            if (!walletLoading) scope.launch {
-                walletLoading = true
-                container.tickets.googleWalletUrl(ticketId)
-                    .onSuccess { url -> if (!context.openUri(url) && !context.openWeb(url)) say("Couldn't open Google Wallet on this device.") }
-                    .onFailure { e ->
-                        val api = e as? au.ingo.betterattend.data.api.ApiException
-                        say(if (api?.status == 422) "Google Wallet couldn't create your pass right now. Try again later — your QR code here works either way." else e.friendlyMessage)
-                    }
-                walletLoading = false
-            }
-        },
-        onDirections = {
-            val e = ticket?.event
-            val ok = e != null && (TicketLogic.geoUri(e)?.let(context::openUri) == true || TicketLogic.webDirectionsUrl(e)?.let(context::openWeb) == true)
-            if (!ok) say("No maps app found for directions.")
-        },
-        onCompleteRegistration = {
-            val url = ticket?.onboardingUrl
-            if (url == null || !context.openWeb(url)) say("Couldn't open your registration. Check you have a web browser installed.")
-        },
-        onReportIncident = { if (!context.openWeb(TicketLogic.INCIDENT_URL)) say("Couldn't open the incident form.") },
-        onCallHotline = { if (!context.openUri(TicketLogic.HOTLINE_TEL)) say("Call ${TicketLogic.HOTLINE_DISPLAY} from any phone.") },
-        onRetry = { scope.launch { refresh() } },
-    )
+    fun actionsFor(id: String): TicketDetailActions {
+        val ticket = tickets?.firstOrNull { it.id == id }
+        return TicketDetailActions(
+            onBack = nav::back,
+            onShowQr = { haptics.click(); fullScreen = true },
+            onWallet = {
+                if (!page(id).walletLoading) scope.launch {
+                    haptics.click()
+                    update(id) { it.copy(walletLoading = true) }
+                    container.tickets.googleWalletUrl(id)
+                        .onSuccess { url -> if (!context.openUri(url) && !context.openWeb(url)) failed("Couldn't open Google Wallet on this device.") }
+                        .onFailure { e ->
+                            val api = e as? au.ingo.betterattend.data.api.ApiException
+                            failed(if (api?.status == 422) "Google Wallet couldn't create your pass right now. Try again later — your QR code here works either way." else e.friendlyMessage)
+                        }
+                    update(id) { it.copy(walletLoading = false) }
+                }
+            },
+            onDirections = {
+                haptics.click()
+                val e = ticket?.event
+                val ok = e != null && (TicketLogic.geoUri(e)?.let(context::openUri) == true || TicketLogic.webDirectionsUrl(e)?.let(context::openWeb) == true)
+                if (!ok) failed("No maps app found for directions.")
+            },
+            onCompleteRegistration = {
+                haptics.click()
+                val url = ticket?.onboardingUrl
+                if (url == null || !context.openWeb(url)) failed("Couldn't open your registration. Check you have a web browser installed.")
+            },
+            onReportIncident = { haptics.click(); if (!context.openWeb(TicketLogic.INCIDENT_URL)) failed("Couldn't open the incident form.") },
+            onCallHotline = { haptics.click(); if (!context.openUri(TicketLogic.HOTLINE_TEL)) failed("Call ${TicketLogic.HOTLINE_DISPLAY} from any phone.") },
+            onRetry = { haptics.click(); refresh(id) },
+            onQrBounds = { qrBounds[id] = it },
+        )
+    }
 
-    BackHandler(enabled = fullScreen) { fullScreen = false }
-    val listState = rememberLazyListState()
-    val qrOnScreen by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
-    BrightScreenEffect(enabled = ticket?.confirmed == true && (fullScreen || qrOnScreen))
-
-    AnimatedContent(
-        targetState = fullScreen && ticket?.confirmed == true,
-        transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.92f)) togetherWith fadeOut() },
-        label = "qr",
-    ) { full ->
-        if (full && ticket != null) {
-            FullScreenQr(ticket, onClose = { fullScreen = false })
-        } else {
-            TicketDetailContent(
-                ticket = ticket,
-                loading = loading,
-                error = error,
-                now = now,
-                walletLoading = walletLoading,
-                actions = actions,
-                snackbar = snackbar,
-                listState = listState,
-            )
+    // A fresh pager state whenever the set of passes changes (e.g. the list finishes loading), opened on the
+    // pass being looked at so nothing jumps.
+    val pager = remember(pageIds) { PagerState(currentPage = pageIds.indexOf(visibleId).coerceAtLeast(0)) { pageIds.size } }
+    val currentIds by rememberUpdatedState(pageIds)
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.currentPage }.distinctUntilChanged().drop(1).collect { p ->
+            currentIds.getOrNull(p)?.let { visibleId = it }
+            haptics.tick()
         }
+    }
+
+    val overlayOpen = fullScreen && visible?.confirmed == true
+    val qrOnScreen by remember { derivedStateOf { listState(visibleId).firstVisibleItemIndex == 0 } }
+    BrightScreenEffect(enabled = visible?.confirmed == true && (overlayOpen || qrOnScreen))
+
+    var screenOrigin by remember { mutableStateOf(Offset.Zero) }
+    Box(Modifier.fillMaxSize().onGloballyPositioned { screenOrigin = it.positionInRoot() }) {
+        val visibleActions = actionsFor(visibleId)
+        TicketDetailScaffold(
+            ticket = visible,
+            actions = visibleActions,
+            snackbar = snackbar,
+            subtitle = if (pageIds.size > 1) "${pager.currentPage + 1} of ${pageIds.size}" else null,
+            // The pass underneath is hidden from accessibility while the full-screen QR is up.
+            modifier = if (overlayOpen) Modifier.clearAndSetSemantics { } else Modifier,
+        ) { padding ->
+            HorizontalPager(
+                state = pager,
+                key = { pageIds.getOrElse(it) { "gone_$it" } },
+                userScrollEnabled = !overlayOpen,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            ) { index ->
+                val id = pageIds.getOrElse(index) { ticketId }
+                val state = page(id)
+                TicketDetailBody(
+                    ticket = tickets?.firstOrNull { it.id == id },
+                    loading = state.loading,
+                    error = state.error,
+                    now = now,
+                    walletLoading = state.walletLoading,
+                    actions = if (id == visibleId) visibleActions else actionsFor(id),
+                    listState = listState(id),
+                )
+            }
+        }
+        QrOverlay(
+            ticket = visible?.takeIf { it.confirmed },
+            open = overlayOpen,
+            onClose = { fullScreen = false },
+            // Grow out of the pass's QR when it's on screen; otherwise just from the middle.
+            origin = { if (qrOnScreen) qrBounds[visibleId]?.translate(-screenOrigin) else null },
+        )
     }
 }
 
+/** A single pass with its top bar; screenshot tests and previews use this. */
 @Composable
 fun TicketDetailContent(
     ticket: Ticket?,
@@ -218,29 +289,75 @@ fun TicketDetailContent(
     walletLoading: Boolean = false,
     actions: TicketDetailActions = TicketDetailActions(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
-    listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
+    listState: LazyListState = rememberLazyListState(),
+) {
+    TicketDetailScaffold(ticket, actions, snackbar) { padding ->
+        TicketDetailBody(ticket, loading, error, now, walletLoading, actions, listState, Modifier.padding(padding))
+    }
+}
+
+@Composable
+private fun TicketDetailScaffold(
+    ticket: Ticket?,
+    actions: TicketDetailActions,
+    snackbar: SnackbarHostState,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
+        modifier = modifier,
         containerColor = MaterialTheme.colorScheme.surface,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text(if (ticket?.confirmed == false) "Registration" else "Your pass", maxLines = 1) },
-                navigationIcon = {
-                    IconButton(onClick = actions.onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
-                },
-                actions = {
-                    if (ticket?.confirmed == true) {
-                        IconButton(onClick = actions.onShowQr) { Icon(Icons.Outlined.Fullscreen, "Show QR code full screen") }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-            )
+            val title: @Composable () -> Unit = { Text(if (ticket?.confirmed == false) "Registration" else "Your pass", maxLines = 1) }
+            val nav: @Composable () -> Unit = {
+                IconButton(onClick = actions.onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
+            }
+            val barActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+                if (ticket?.confirmed == true) {
+                    IconButton(onClick = actions.onShowQr) { Icon(Icons.Outlined.Fullscreen, "Show QR code full screen") }
+                }
+            }
+            val colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            if (subtitle != null) {
+                TopAppBar(
+                    title = title,
+                    subtitle = {
+                        Text(subtitle, modifier = Modifier.semantics { contentDescription = "Pass $subtitle. Swipe sideways for your other passes." })
+                    },
+                    navigationIcon = nav, actions = barActions, colors = colors,
+                )
+            } else {
+                TopAppBar(title = title, navigationIcon = nav, actions = barActions, colors = colors)
+            }
         },
-    ) { padding ->
+        content = content,
+    )
+}
+
+private enum class DetailPhase { Loading, Failed, Pass }
+
+@Composable
+private fun TicketDetailBody(
+    ticket: Ticket?,
+    loading: Boolean,
+    error: String?,
+    now: Instant,
+    walletLoading: Boolean,
+    actions: TicketDetailActions,
+    listState: LazyListState,
+    modifier: Modifier = Modifier,
+) {
+    val phase = when {
+        ticket == null && loading -> DetailPhase.Loading
+        ticket == null -> DetailPhase.Failed
+        else -> DetailPhase.Pass
+    }
+    Crossfade(phase, modifier.fillMaxSize(), MaterialTheme.motionScheme.defaultEffectsSpec(), label = "ticket") { shown ->
         when {
-            ticket == null && loading -> LoadingState(Modifier.padding(padding), message = "Loading your ticket…")
-            ticket == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            shown == DetailPhase.Loading -> LoadingState(message = "Loading your ticket…")
+            shown == DetailPhase.Failed || ticket == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 EmptyState(
                     icon = Icons.Outlined.CloudOff,
                     title = "Couldn't load this ticket",
@@ -249,7 +366,7 @@ fun TicketDetailContent(
                     onAction = actions.onRetry,
                 )
             }
-            else -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.widthIn(max = 560.dp).fillMaxSize(),
@@ -258,13 +375,13 @@ fun TicketDetailContent(
                 ) {
                     item(key = "pass") { PassCard(ticket, actions) }
                     if (error != null) {
-                        item(key = "offline") { OfflineBanner("Couldn't refresh — showing your saved pass. It still works offline.", onRetry = actions.onRetry) }
+                        item(key = "offline") { OfflineBanner("Couldn't refresh — showing your saved pass. It still works offline.", Modifier.animateItem(), onRetry = actions.onRetry) }
                     }
-                    if (ticket.confirmed) item(key = "wallet") { WalletButton(walletLoading, actions.onWallet) }
+                    if (ticket.confirmed) item(key = "wallet") { WalletButton(walletLoading, actions.onWallet, Modifier.animateItem()) }
                     item(key = "countdown") { CountdownCard(ticket, now) }
                     item(key = "venue") { VenueCard(ticket, actions.onDirections) }
-                    ticket.travelInbound?.let { tr -> item(key = "travel") { TravelCard(tr, ticket.event.timezone) } }
-                    if (ticket.messages.isNotEmpty()) item(key = "messages") { MessagesCard(ticket.messages, now) }
+                    ticket.travelInbound?.let { tr -> item(key = "travel") { TravelCard(tr, ticket.event.timezone, Modifier.animateItem()) } }
+                    if (ticket.messages.isNotEmpty()) item(key = "messages") { MessagesCard(ticket.messages, now, Modifier.animateItem()) }
                     item(key = "safety") { SafetyCard(actions) }
                 }
             }
@@ -315,6 +432,7 @@ private fun PassCard(t: Ticket, actions: TicketDetailActions) {
                         color = Color.White, // QR always black on white for scanners
                         shadowElevation = 1.dp,
                         modifier = Modifier.widthIn(max = 300.dp).fillMaxWidth()
+                            .onGloballyPositioned { actions.onQrBounds(Rect(it.positionInRoot(), it.size.toSize())) }
                             .semantics { role = Role.Button; contentDescription = "Check-in QR code. Tap to enlarge" },
                     ) {
                         QrCode(t.qrPayload, Modifier.padding(12.dp).fillMaxWidth())
@@ -378,13 +496,13 @@ private fun StubTile(label: String, value: String, sub: String?, modifier: Modif
 }
 
 @Composable
-private fun WalletButton(loading: Boolean, onClick: () -> Unit) {
+private fun WalletButton(loading: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Button(
         onClick = onClick,
         enabled = !loading,
         shapes = ButtonDefaults.shapes(),
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
     ) {
         if (loading) LoadingIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.inverseOnSurface)
         else Icon(Icons.Outlined.AccountBalanceWallet, null)
@@ -493,8 +611,8 @@ private fun modeIcon(mode: String?): ImageVector = when (mode) {
 }
 
 @Composable
-private fun TravelCard(tr: TicketTravel, tz: String?) {
-    InfoCard(modeIcon(tr.mode), "Arriving") {
+private fun TravelCard(tr: TicketTravel, tz: String?, modifier: Modifier = Modifier) {
+    InfoCard(modeIcon(tr.mode), "Arriving", modifier) {
         if (tr.legs.isNotEmpty()) {
             tr.legs.forEachIndexed { i, leg ->
                 if (i > 0) HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -529,8 +647,8 @@ internal fun htmlToText(html: String?): String =
     html?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim() }.orEmpty()
 
 @Composable
-private fun MessagesCard(messages: List<TicketMessage>, now: Instant) {
-    InfoCard(Icons.Outlined.Mail, if (messages.size == 1) "Message from the organisers" else "Messages from the organisers") {
+private fun MessagesCard(messages: List<TicketMessage>, now: Instant, modifier: Modifier = Modifier) {
+    InfoCard(Icons.Outlined.Mail, if (messages.size == 1) "Message from the organisers" else "Messages from the organisers", modifier) {
         messages.forEachIndexed { i, m ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
             Text(
@@ -611,6 +729,106 @@ fun FullScreenQr(t: Ticket, onClose: () -> Unit) {
                 if (t.checkedIn) "You're checked in ✓" else "Brightness turned up for scanning",
                 style = MaterialTheme.typography.bodyMedium, color = ink.copy(alpha = 0.6f), textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+/**
+ * Hosts [FullScreenQr] over the pass. Opening grows it out of the pass's QR code ([origin], in this box's
+ * coordinates; null grows it from the middle). A predictive back gesture shrinks it towards ~90 % with rounded
+ * corners and a slight fade, following the finger; letting go closes it back into the QR, cancelling springs back.
+ */
+@Composable
+private fun QrOverlay(ticket: Ticket?, open: Boolean, onClose: () -> Unit, origin: () -> Rect?) {
+    val appear = remember { Animatable(if (open) 1f else 0f) }
+    val back = remember { Animatable(0f) }
+    var fromLeft by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    val openSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    val closeSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+    val cancelSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+    // Remember what was shown so the closing animation still has something to draw.
+    var shown by remember { mutableStateOf(ticket) }
+    if (open && ticket != null) shown = ticket
+
+    LaunchedEffect(open) {
+        if (open) {
+            back.snapTo(0f)
+            appear.animateTo(1f, openSpec)
+        } else {
+            appear.animateTo(0f, closeSpec)
+            back.snapTo(0f)
+        }
+    }
+
+    PredictiveBackHandler(enabled = open) { events ->
+        try {
+            events.collect { e ->
+                fromLeft = e.swipeEdge == BackEventCompat.EDGE_LEFT
+                back.snapTo(e.progress)
+            }
+            haptics.gestureEnd()
+            onClose()
+        } catch (e: CancellationException) {
+            scope.launch { back.animateTo(0f, cancelSpec) }
+            throw e
+        }
+    }
+
+    val visible by remember { derivedStateOf { appear.value > 0.001f } }
+    val t = shown
+    if (t == null || (!open && !visible)) return
+
+    QrOverlayFrame(t, appear = { appear.value }, back = { back.value }, fromLeft = { fromLeft }, origin = origin, onClose = onClose)
+}
+
+/**
+ * The full-screen QR drawn at a point of its open/close animation ([appear], 0 = collapsed into the pass's QR,
+ * 1 = open) and of a predictive back gesture ([back], 0..1). Lambdas so the animation only redraws, never recomposes.
+ */
+@Composable
+internal fun QrOverlayFrame(
+    ticket: Ticket,
+    appear: () -> Float,
+    back: () -> Float,
+    fromLeft: () -> Boolean,
+    origin: () -> Rect?,
+    onClose: () -> Unit,
+) {
+    // Dim the pass behind while the QR is up, so the shrinking card reads as floating above it.
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = appear().coerceIn(0f, 1f) }.background(Color.Black.copy(alpha = 0.4f)))
+    Box(
+        Modifier.fillMaxSize()
+            // Swallow touches so nothing underneath reacts while the QR is up.
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+            .graphicsLayer {
+                val a = appear()
+                val b = back().coerceIn(0f, 1f)
+                val from = origin()
+                val startScale = from?.let { (it.width / size.width).coerceIn(0.2f, 1f) } ?: 0.85f
+                val scale = lerp(startScale, 1f, a) * lerp(1f, 0.9f, b)
+                scaleX = scale
+                scaleY = scale
+                // Travel from the QR's centre to the middle of the screen as it opens.
+                val dx = from?.let { it.center.x - size.width / 2f } ?: 0f
+                val dy = from?.let { it.center.y - size.height / 2f } ?: 0f
+                // During the gesture, drift a little away from the edge being swiped from.
+                translationX = dx * (1f - a) + (if (fromLeft()) 1f else -1f) * 12.dp.toPx() * b
+                translationY = dy * (1f - a)
+                // The white card turns opaque quickly so the pass never shows through the QR; see the content fade below.
+                alpha = (a * 3f).coerceIn(0f, 1f)
+                // Corners: rounded like the QR tile while small, square when open, rounding again with the gesture.
+                // Divided by the scale so the radius looks the same on screen at any size.
+                val radius = maxOf(lerp(24.dp.toPx(), 0f, a.coerceIn(0f, 1f)), 32.dp.toPx() * b)
+                shape = RoundedCornerShape(radius / scale.coerceAtLeast(0.01f))
+                clip = true
+            }
+            .background(Color.White),
+    ) {
+        // The QR and text fade in a touch behind the card, and dim slightly as a back gesture progresses.
+        Box(Modifier.graphicsLayer { alpha = (appear() * 1.6f).coerceIn(0f, 1f) * lerp(1f, 0.8f, back().coerceIn(0f, 1f)) }) {
+            FullScreenQr(ticket, onClose = onClose)
         }
     }
 }

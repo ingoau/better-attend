@@ -101,6 +101,17 @@ object TicketLogic {
             past.sortedByDescending { Time.parse(it.event.startsAt) ?: Instant.MIN }
     }
 
+    /**
+     * The passes the detail screen can swipe between: confirmed tickets in the same order as the tickets list,
+     * always including [openedId] (even if it isn't confirmed). Just [openedId] until the list is known or when
+     * it isn't in the list.
+     */
+    fun pagerIds(tickets: List<Ticket>?, openedId: String, now: Instant = Instant.now()): List<String> {
+        if (tickets == null || tickets.none { it.id == openedId }) return listOf(openedId)
+        val (current, past) = sorted(tickets, now)
+        return (current + past).filter { it.confirmed || it.id == openedId }.map { it.id }.distinct()
+    }
+
     /** The ticket to feature (e.g. in the widget): live or next upcoming, confirmed ones preferred. */
     fun next(tickets: List<Ticket>, now: Instant = Instant.now()): Ticket? {
         val current = sorted(tickets, now).first.filter { status(it) !is Status.Closed }
