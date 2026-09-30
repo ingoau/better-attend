@@ -99,6 +99,11 @@ class ParticipantDetailScreenshots : ScreenshotTest() {
         ParticipantDetailContent(DetailFixtures.state(DetailFixtures.eventSensitive, DetailFixtures.sensitive), now = now)
     }
 
+    /** Opened from the People list: the bar shows where you are while you swipe between people. */
+    @Test fun browsing() = snap("detail_browsing") {
+        ParticipantDetailContent(DetailFixtures.state(DetailFixtures.eventSensitive, DetailFixtures.sensitive), now = now, position = "3 of 42")
+    }
+
     @Test fun limitedTop() = snap("detail_limited_top") {
         ParticipantDetailContent(DetailFixtures.state(DetailFixtures.eventLimited, DetailFixtures.limited), now = now)
     }

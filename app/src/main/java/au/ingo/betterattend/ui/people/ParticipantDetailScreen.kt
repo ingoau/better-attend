@@ -8,11 +8,20 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,16 +75,19 @@ import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,7 +100,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import au.ingo.betterattend.data.model.Participant
@@ -96,11 +114,16 @@ import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.EmptyState
+import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
+import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.nav.AppNavigator
 import au.ingo.betterattend.util.Time
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import java.time.Instant
 
 /** Everything the detail screen can ask for, bundled so the stateless content stays readable. */
@@ -120,8 +143,81 @@ data class DetailCallbacks(
     val contact: ContactActions = ContactActions(),
 )
 
+/** Holds this visit's browse order so it survives rotation (and is taken from [ParticipantBrowseOrder] exactly once). */
+private class BrowseOrderHolder(val ids: List<String>) : ViewModel()
+
+/**
+ * Participant detail. Opened from the People list, it's a pager over that list (same filter and
+ * sort): swipe sideways for the previous / next person. Opened from anywhere else, it's just this
+ * person. Each page has its own ViewModel and its own lifecycle, capped at STARTED unless it's the
+ * settled page, so NFC reader mode and other RESUMED-only work only runs for the person on screen.
+ */
 @Composable
 fun ParticipantDetailScreen(eventId: String, participantEventId: String, nav: AppNavigator) {
+    val browse: BrowseOrderHolder = viewModel(key = "browse_$participantEventId") {
+        BrowseOrderHolder(ParticipantBrowseOrder.take(eventId, participantEventId))
+    }
+    val order = browse.ids
+    if (order.size <= 1) {
+        ParticipantDetailPage(eventId, participantEventId, nav, position = null)
+        return
+    }
+
+    val haptics = rememberHaptics()
+    val pager = rememberPagerState(initialPage = order.indexOf(participantEventId).coerceAtLeast(0)) { order.size }
+    // A tick as a swipe commits to the next person, like flipping a card.
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.targetPage }.distinctUntilChanged().drop(1).collect {
+            if (pager.isScrollInProgress) haptics.tick()
+        }
+    }
+    HorizontalPager(
+        state = pager,
+        key = { order[it] },
+        pageSpacing = 8.dp,
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
+    ) { page ->
+        DetailPageLifecycle(active = page == pager.settledPage) {
+            ParticipantDetailPage(eventId, order[page], nav, position = "${page + 1} of ${order.size}")
+        }
+    }
+}
+
+/** A page's lifecycle: RESUMED only while [active] (and the screen itself is), otherwise at most STARTED. */
+private class DetailPageLifecycleOwner : LifecycleOwner {
+    val registry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = registry
+}
+
+// Mirrors PageLifecycle in ui/nav/TabPager.kt.
+@Composable
+private fun DetailPageLifecycle(active: Boolean, content: @Composable () -> Unit) {
+    val parent = LocalLifecycleOwner.current
+    val owner = remember { DetailPageLifecycleOwner() }
+    DisposableEffect(parent, active) {
+        fun sync() {
+            val cap = if (active) Lifecycle.State.RESUMED else Lifecycle.State.STARTED
+            val parentState = parent.lifecycle.currentState
+            val target = if (parentState < cap) parentState else cap
+            // Can't move an INITIALIZED lifecycle straight to DESTROYED.
+            if (target == Lifecycle.State.DESTROYED && owner.registry.currentState == Lifecycle.State.INITIALIZED) return
+            owner.registry.currentState = target
+        }
+        val observer = LifecycleEventObserver { _, _ -> sync() }
+        parent.lifecycle.addObserver(observer)
+        sync()
+        onDispose { parent.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (owner.registry.currentState.isAtLeast(Lifecycle.State.CREATED)) owner.registry.currentState = Lifecycle.State.DESTROYED
+        }
+    }
+    CompositionLocalProvider(LocalLifecycleOwner provides owner, content = content)
+}
+
+@Composable
+private fun ParticipantDetailPage(eventId: String, participantEventId: String, nav: AppNavigator, position: String?) {
     val c = LocalAppContainer.current
     val vm: ParticipantDetailViewModel = viewModel(
         key = "participant_$participantEventId",
@@ -129,8 +225,28 @@ fun ParticipantDetailScreen(eventId: String, participantEventId: String, nav: Ap
     )
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val haptics = rememberHaptics()
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(vm) {
+        vm.cues.collect { cue ->
+            when (cue) {
+                DetailCue.Confirm -> haptics.confirm()
+                DetailCue.Reject -> haptics.reject()
+                DetailCue.Click -> haptics.click()
+            }
+        }
+    }
+
+    fun copy(label: String, value: String) {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText(label, value))
+        // Android 13+ shows its own clipboard confirmation; only older versions need ours.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar("$label copied") }
+        }
+    }
 
     // Reader mode stays on for the whole time the badge sheet is open (turning it off mid-write drops the tag).
     // Android only allows it while the activity is resumed, so it follows RESUMED: re-enabled on resume
@@ -156,16 +272,19 @@ fun ParticipantDetailScreen(eventId: String, participantEventId: String, nav: Ap
     }
 
     val contact = ContactActions(
-        call = { launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(it))), "No phone app found") },
-        sms = { launch(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(it))), "No messaging app found") },
-        whatsApp = { launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + it.filter(Char::isDigit))), "WhatsApp isn't installed") },
-        email = { launch(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(it))), "No email app found") },
-        openUrl = { launch(Intent(Intent.ACTION_VIEW, Uri.parse(it)), "No browser found") },
+        call = { haptics.click(); launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(it))), "No phone app found") },
+        sms = { haptics.click(); launch(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(it))), "No messaging app found") },
+        whatsApp = { haptics.click(); launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + it.filter(Char::isDigit))), "WhatsApp isn't installed") },
+        email = { haptics.click(); launch(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(it))), "No email app found") },
+        openUrl = { haptics.click(); launch(Intent(Intent.ACTION_VIEW, Uri.parse(it)), "No browser found") },
+        // The long-press haptic comes from the long-pressed row itself.
+        copy = { label, value -> copy(label, value) },
     )
 
     ParticipantDetailContent(
         state = state,
         snackbar = snackbar,
+        position = position,
         callbacks = DetailCallbacks(
             back = nav::back,
             refresh = vm::refresh,
@@ -177,10 +296,7 @@ fun ParticipantDetailScreen(eventId: String, participantEventId: String, nav: Ap
             openWeb = {
                 state.event?.let { e -> contact.openUrl("https://attend.hackclub.com/admin/events/${e.slug}/participants/$participantEventId") }
             },
-            copyId = {
-                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("Participant ID", participantEventId))
-            },
+            copyId = { haptics.click(); copy("Participant ID", participantEventId) },
             addNote = vm::addNote,
             retryNote = vm::retryNote,
             discardNote = vm::discardNote,
@@ -211,6 +327,8 @@ fun ParticipantDetailContent(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     now: Instant = Instant.now(),
     callbacks: DetailCallbacks = DetailCallbacks(),
+    /** "3 of 42" when swiping through a list; shown in the bar until the name scrolls under it. */
+    position: String? = null,
 ) {
     val p = state.participant
     val tz = state.event?.timezone
@@ -218,6 +336,7 @@ fun ParticipantDetailContent(
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
+    val motion = MaterialTheme.motionScheme
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -225,8 +344,21 @@ fun ParticipantDetailContent(
         topBar = {
             TopAppBar(
                 title = {
-                    AnimatedVisibility(scrolled && p != null, enter = fadeIn(), exit = fadeOut()) {
-                        Text(p?.name.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // The name once the header has scrolled away; otherwise the position in the list, if any.
+                    val showName = scrolled && p != null
+                    AnimatedContent(
+                        targetState = if (showName) p?.name else position,
+                        transitionSpec = {
+                            (fadeIn(motion.fastEffectsSpec()) + slideInVertically(motion.fastSpatialSpec()) { it / 3 }) togetherWith
+                                fadeOut(motion.fastEffectsSpec())
+                        },
+                        label = "detailTitle",
+                    ) { t ->
+                        when {
+                            t == null -> Spacer(Modifier.fillMaxWidth())
+                            t == position -> Text(t, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            else -> Text(t, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 },
                 navigationIcon = { IconButton(onClick = callbacks.back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
@@ -235,16 +367,29 @@ fun ParticipantDetailContent(
             )
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when {
-                p == null && state.loading -> LoadingState(message = "Loading…")
-                p == null -> EmptyState(
-                    Icons.Outlined.PersonOff, "Couldn't open this person",
-                    body = state.error ?: "They may have been removed from this event.",
-                    actionLabel = "Try again", onAction = callbacks.refresh,
-                )
-                else -> PullToRefreshBox(isRefreshing = state.loading && state.detailLoaded, onRefresh = callbacks.refresh) {
-                    DetailBody(state, p, tz, now, list, callbacks) { dialog = it }
+        // Loading → person → error crossfade instead of cutting over.
+        val phase = when {
+            p == null && state.loading -> 0
+            p == null -> 1
+            else -> 2
+        }
+        AnimatedContent(
+            targetState = phase,
+            transitionSpec = { fadeIn(motion.defaultEffectsSpec()) togetherWith fadeOut(motion.fastEffectsSpec()) },
+            label = "detailPhase",
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) { shown ->
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    shown == 0 -> LoadingState(message = "Loading…")
+                    shown == 1 || p == null -> EmptyState(
+                        Icons.Outlined.PersonOff, "Couldn't open this person",
+                        body = state.error ?: "They may have been removed from this event.",
+                        actionLabel = "Try again", onAction = callbacks.refresh,
+                    )
+                    else -> HapticPullToRefreshBox(isRefreshing = state.loading && state.detailLoaded, onRefresh = callbacks.refresh) {
+                        DetailBody(state, p, tz, now, list, callbacks) { dialog = it }
+                    }
                 }
             }
         }
@@ -327,14 +472,16 @@ private fun DetailBody(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "header") { Header(p, tz) }
+        // Sections fill in as the full profile arrives: each one fades in / grows and the rest glide
+        // down to make room, rather than the page popping into a new layout.
+        section("header") { Header(p, tz) }
         if (state.error != null && !state.detailLoaded) {
-            item(key = "err") { OfflineBanner("Showing saved details. ${state.error}", onRetry = callbacks.refresh) }
+            section("err") { OfflineBanner("Showing saved details. ${state.error}", onRetry = callbacks.refresh) }
         }
-        items(alerts.size, key = { "alert_$it" }) { i -> SafetyAlertCard(alerts[i]) }
-        item(key = "actions") { ActionsPanel(state, p, callbacks, onDialog) }
+        alerts.forEachIndexed { i, alert -> section("alert_$i") { SafetyAlertCard(alert) } }
+        section("actions") { ActionsPanel(state, p, callbacks, onDialog) }
         if (!state.detailLoaded && state.loading) {
-            item(key = "loading") {
+            section("loading") {
                 Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     LoadingIndicator(Modifier.size(36.dp))
                     Spacer(Modifier.width(8.dp))
@@ -342,26 +489,31 @@ private fun DetailBody(
                 }
             }
         }
-        item(key = "contact") { ContactSection(p, state.canViewPii, callbacks.contact) }
-        item(key = "scans") { ScansSection(p, tz) }
-        p.travelInbound?.let { t -> item(key = "travel_in") { TravelSection(t, tz, state.canViewPii) } }
-        p.travelOutbound?.let { t -> item(key = "travel_out") { TravelSection(t, tz, state.canViewPii) } }
-        item(key = "personal") { PersonalSection(p) }
-        item(key = "accommodation") { AccommodationSection(p) }
+        section("contact") { ContactSection(p, state.canViewPii, callbacks.contact) }
+        section("scans") { ScansSection(p, tz) }
+        p.travelInbound?.let { t -> section("travel_in") { TravelSection(t, tz, state.canViewPii) } }
+        p.travelOutbound?.let { t -> section("travel_out") { TravelSection(t, tz, state.canViewPii) } }
+        section("personal") { PersonalSection(p) }
+        section("accommodation") { AccommodationSection(p) }
         if (state.canViewSensitive) {
-            item(key = "medical") { MedicalSection(p) }
-            item(key = "access") { AccessibilitySection(p.accessibility) }
+            section("medical") { MedicalSection(p) }
+            section("access") { AccessibilitySection(p.accessibility) }
         }
-        item(key = "safeguarding") { SafeguardingSection(p, state.canViewSensitive) }
-        item(key = "guardians") { GuardiansSection(p, callbacks.contact) }
-        item(key = "consents") { ConsentsSection(p.consents, tz, callbacks.contact) }
-        item(key = "groups") { GroupsSection(p) }
+        section("safeguarding") { SafeguardingSection(p, state.canViewSensitive) }
+        section("guardians") { GuardiansSection(p, callbacks.contact) }
+        section("consents") { ConsentsSection(p.consents, tz, callbacks.contact) }
+        section("groups") { GroupsSection(p) }
         if (!state.notesHidden) {
-            item(key = "notes") {
+            section("notes") {
                 NotesSection(state.notes, state.notesError, now, callbacks.addNote, callbacks.retryNote, callbacks.discardNote)
             }
         }
     }
+}
+
+/** A detail section that animates in, out, to its new place, and as its own content grows or shrinks. */
+private fun LazyListScope.section(key: String, content: @Composable () -> Unit) = item(key = key) {
+    Box(Modifier.fillMaxWidth().animateItem().animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) { content() }
 }
 
 @Composable
@@ -402,7 +554,16 @@ private fun Header(p: Participant, tz: String?) {
 @Composable
 private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        CheckInButtons(state, p, callbacks, onDialog)
+        val motion = MaterialTheme.motionScheme
+        // "Check in" and "Undo check-in" crossfade as the status flips.
+        AnimatedContent(
+            targetState = p.isCheckedIn,
+            transitionSpec = {
+                (fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.fastSpatialSpec(), initialScale = 0.96f)) togetherWith
+                    fadeOut(motion.fastEffectsSpec()) using SizeTransform(clip = false)
+            },
+            label = "checkInButtons",
+        ) { checkedIn -> CheckInButtons(state, p, checkedIn, callbacks, onDialog) }
         val phone = p.phone?.takeIf { state.canViewPii && it.isNotBlank() }
         val email = p.email?.takeIf { state.canViewPii && it.isNotBlank() }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -418,11 +579,11 @@ private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: Detail
 }
 
 @Composable
-private fun CheckInButtons(state: DetailUiState, p: Participant, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
+private fun CheckInButtons(state: DetailUiState, p: Participant, checkedIn: Boolean, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
     val busy = state.busy
     val options = state.checkInContexts
     val default = state.defaultCheckInContext
-    if (p.isCheckedIn) {
+    if (checkedIn) {
         FilledTonalButton(
             onClick = { onDialog("undo") },
             enabled = busy == null,
