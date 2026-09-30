@@ -60,6 +60,11 @@ class MainActivity : ComponentActivity() {
             "travel" -> ExternalNavRequests.tab.value = Tab.Travel
             "tickets", "my-tickets" -> ExternalNavRequests.tab.value = Tab.Tickets
         }
+        // Widgets/notifications can deep-link straight to a ticket. Consume the extras so a
+        // configuration change doesn't replay the navigation.
+        intent?.getStringExtra(EXTRA_OPEN_TICKET)?.let { ExternalNavRequests.ticket.value = it }
+        intent?.removeExtra(EXTRA_OPEN_TICKET)
+        intent?.removeExtra(EXTRA_OPEN_TAB)
     }
 
     private fun completeSignIn(uri: Uri) {
@@ -81,5 +86,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_TAB = "open_tab"
+        const val EXTRA_OPEN_TICKET = "open_ticket"
     }
 }

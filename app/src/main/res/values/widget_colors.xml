@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colours for app shortcuts and the static widget preview layouts (live widgets use GlanceTheme). -->
+<resources>
+    <color name="shortcut_background">#FFFFDADB</color>
+    <color name="shortcut_glyph">#FFC0183A</color>
+    <color name="widget_preview_background">#FFFFF8F7</color>
+    <color name="widget_preview_on_background">#FF231919</color>
+    <color name="widget_preview_on_background_variant">#FF534343</color>
+    <color name="widget_preview_accent">#FFEC3750</color>
+    <color name="widget_preview_on_accent">#FFFFFFFF</color>
+    <color name="widget_preview_track">#FFF5DDDC</color>
+    <color name="widget_preview_container">#FFFFDADB</color>
+    <color name="widget_preview_on_container">#FF40000D</color>
+</resources>

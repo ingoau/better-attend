@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static widget-picker preview (Android 12-14; 15+ uses Glance generated previews). RemoteViews-safe views only. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_preview_container">
+    <ImageView
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_gravity="center"
+        android:contentDescription="@string/widget_quickscan_label"
+        android:src="@drawable/ic_widget_qr_scan"
+        android:tint="@color/widget_preview_on_container" />
+</FrameLayout>

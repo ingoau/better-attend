@@ -35,6 +35,57 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="attend" android:host="oauth" android:pathPrefix="/callback" />
             </intent-filter>
+            <!-- Launcher long-press shortcuts (Scan, People, My tickets) -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- Home-screen widgets (Glance) -->
+        <receiver
+            android:name=".widget.CheckInWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_checkin_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_checkin_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.ArrivalsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_arrivals_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_arrivals_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.QuickScanWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_quickscan_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quickscan_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TicketWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_ticket_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_ticket_info" />
+        </receiver>
     </application>
 </manifest>

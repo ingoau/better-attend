@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols (Apache 2.0) glyph used by the home-screen widgets; tinted at runtime. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M10.3,7.7 L10.3,7.7 c-0.39,0.39 -0.39,1.01 0,1.4 l1.9,1.9 H3 c-0.55,0 -1,0.45 -1,1 v0 c0,0.55 0.45,1 1,1 h9.2 l-1.9,1.9 c-0.39,0.39 -0.39,1.01 0,1.4 l0,0 c0.39,0.39 1.01,0.39 1.4,0 l3.59,-3.59 c0.39,-0.39 0.39,-1.02 0,-1.41 L11.7,7.7 C11.31,7.31 10.69,7.31 10.3,7.7 Z M20,19 h-7 c-0.55,0 -1,0.45 -1,1 v0 c0,0.55 0.45,1 1,1 h7 c1.1,0 2,-0.9 2,-2 V5 c0,-1.1 -0.9,-2 -2,-2 h-7 c-0.55,0 -1,0.45 -1,1 v0 c0,0.55 0.45,1 1,1 h7 V19 Z" />
+</vector>

@@ -10,6 +10,7 @@ class AttendApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        au.ingo.betterattend.widget.WidgetUpdater.start(this, container)
     }
 }
 

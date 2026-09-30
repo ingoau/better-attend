@@ -61,6 +61,8 @@ val LocalAppContainer = staticCompositionLocalOf<AppContainer> { error("No AppCo
 /** Requests from outside Compose (widgets, shortcuts, notifications) to open a tab. */
 object ExternalNavRequests {
     val tab = MutableStateFlow<Tab?>(null)
+    /** A ticket (participant_event id) to open, e.g. from the "My ticket" widget. */
+    val ticket = MutableStateFlow<String?>(null)
 }
 
 @Composable
@@ -130,6 +132,14 @@ private fun SignedInApp(container: AppContainer, user: User) {
         val t = external ?: return@LaunchedEffect
         if (t in tabs) nav.navigateToTab(t)
         ExternalNavRequests.tab.value = null
+    }
+
+    val externalTicket by ExternalNavRequests.ticket.collectAsStateWithLifecycle()
+    LaunchedEffect(externalTicket) {
+        val id = externalTicket ?: return@LaunchedEffect
+        if (Tab.Tickets in tabs) nav.navigateToTab(Tab.Tickets)
+        nav.navigate(TicketRoute(id)) { launchSingleTop = true }
+        ExternalNavRequests.ticket.value = null
     }
 
     val backStack by nav.currentBackStackEntryAsState()
