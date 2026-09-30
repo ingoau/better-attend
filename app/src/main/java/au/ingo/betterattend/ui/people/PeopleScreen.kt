@@ -193,13 +193,15 @@ fun PeopleContent(
                     actionLabel = "Open scanner", onAction = onOpenScanner,
                 )
                 state.roster == null -> LoadingState(message = "Loading people…")
+                // Only a partial roster so far and the full sync is still coming.
+                !state.rosterComplete && roster.isEmpty() && state.syncError == null -> LoadingState(message = "Loading people…")
                 roster.isEmpty() && state.syncError != null -> EmptyState(
                     Icons.Outlined.CloudOff, "Couldn't load people",
                     body = state.syncError, actionLabel = "Try again", onAction = onRefresh,
                 )
                 else -> Column(Modifier.fillMaxSize()) {
                     SearchRow(state.query, onQuery, state.options.activeCount) { sheetOpen = true }
-                    QuickChips(state.quick, result.counts, onQuick)
+                    QuickChips(state.quick, result.counts.takeIf { state.rosterComplete }, onQuick)
                     if (state.options.activeCount > 0) {
                         ActiveFiltersLine(state.options.activeCount) { onOptions(FilterOptions()) }
                     }
@@ -263,7 +265,8 @@ private fun SearchRow(query: String, onQuery: (String) -> Unit, activeFilters: I
 }
 
 @Composable
-private fun QuickChips(selected: QuickFilter, counts: Map<QuickFilter, Int>, onQuick: (QuickFilter) -> Unit) {
+/** [counts] is null while the roster is only partially loaded, so chips don't show misleading numbers. */
+private fun QuickChips(selected: QuickFilter, counts: Map<QuickFilter, Int>?, onQuick: (QuickFilter) -> Unit) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -271,23 +274,25 @@ private fun QuickChips(selected: QuickFilter, counts: Map<QuickFilter, Int>, onQ
     ) {
         items(QuickFilter.entries, key = { it.name }) { f ->
             val on = f == selected
-            val count = counts[f] ?: 0
+            val count = counts?.get(f) ?: counts?.let { 0 }
             FilterChip(
                 selected = on,
                 onClick = { onQuick(f) },
                 label = {
                     Text(f.label)
-                    Spacer(Modifier.width(6.dp))
-                    Text("$count", fontWeight = FontWeight.Bold)
+                    if (count != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Text("$count", fontWeight = FontWeight.Bold)
+                    }
                 },
                 leadingIcon = when {
                     on -> { { Icon(Icons.Outlined.Check, null, Modifier.size(FilterChipDefaults.IconSize)) } }
-                    f == QuickFilter.NeedsAttention && count > 0 -> {
+                    f == QuickFilter.NeedsAttention && (count ?: 0) > 0 -> {
                         { Icon(Icons.Outlined.Warning, null, Modifier.size(FilterChipDefaults.IconSize), tint = MaterialTheme.colorScheme.error) }
                     }
                     else -> null
                 },
-                modifier = Modifier.heightIn(min = 40.dp).semantics { contentDescription = "${f.label}, $count" },
+                modifier = Modifier.heightIn(min = 40.dp).semantics { contentDescription = if (count != null) "${f.label}, $count" else f.label },
             )
         }
     }
@@ -331,7 +336,9 @@ private fun PeopleList(
             }
         }
         if (!searching && roster.isNotEmpty() && state.quick == QuickFilter.All) {
-            item(key = "summary") { SummaryCard(roster, result.counts, onQuick) }
+            item(key = "summary") {
+                if (state.rosterComplete) SummaryCard(roster, result.counts, onQuick) else SummaryLoadingCard(roster.size, state.syncError != null)
+            }
         }
         items.forEach { item ->
             when (item) {
@@ -447,6 +454,35 @@ private fun SummaryCard(roster: List<Participant>, counts: Map<QuickFilter, Int>
                 MiniStat("${counts[QuickFilter.NotHere] ?: 0}", "not here", Modifier.weight(1f)) { onQuick(QuickFilter.NotHere) }
                 MiniStat("${counts[QuickFilter.NeedsAttention] ?: 0}", "need attention", Modifier.weight(1f)) { onQuick(QuickFilter.NeedsAttention) }
                 MiniStat("${counts[QuickFilter.NotComplete] ?: 0}", "incomplete", Modifier.weight(1f)) { onQuick(QuickFilter.NotComplete) }
+            }
+        }
+    }
+}
+
+/** Stands in for [SummaryCard] while only part of the roster is known, instead of a misleading "3 of 3 here". */
+@Composable
+private fun SummaryLoadingCard(known: Int, failed: Boolean) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(20.dp).semantics(mergeDescendants = true) {}) {
+            Text(if (failed) "Full list not loaded yet" else "Loading everyone…", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Showing $known ${if (known == 1) "person" else "people"} seen so far. " +
+                    if (failed) "Numbers will appear once the full list syncs." else "Numbers will appear once the full list is in.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (!failed) {
+                Spacer(Modifier.height(12.dp))
+                LinearWavyProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                )
             }
         }
     }
