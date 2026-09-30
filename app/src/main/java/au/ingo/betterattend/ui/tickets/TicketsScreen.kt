@@ -188,14 +188,14 @@ fun TicketsContent(
     ) { padding ->
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
-            isRefreshing = refreshing && !tickets.isNullOrEmpty(),
+            isRefreshing = refreshing && tickets != null,
             onRefresh = onRefresh,
             state = pullState,
             modifier = Modifier.fillMaxSize().padding(padding),
             indicator = {
                 PullToRefreshDefaults.LoadingIndicator(
                     state = pullState,
-                    isRefreshing = refreshing && !tickets.isNullOrEmpty(),
+                    isRefreshing = refreshing && tickets != null,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
             },

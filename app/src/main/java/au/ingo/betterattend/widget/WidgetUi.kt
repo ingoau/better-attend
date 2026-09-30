@@ -40,8 +40,32 @@ import au.ingo.betterattend.MainActivity
 import au.ingo.betterattend.R
 import au.ingo.betterattend.ui.theme.brandColorScheme
 
-/** Brand colours for launchers without dynamic colour (Android < 12) and for deterministic tests. */
-val BrandGlanceColors: ColorProviders by lazy { ColorProviders(light = brandColorScheme(false), dark = brandColorScheme(true)) }
+/**
+ * Brand colours for launchers without dynamic colour (Android < 12) and for deterministic tests.
+ * Glance's default mapping uses secondaryContainer as the widget background, which is loud with the
+ * vibrant Hack Club scheme, so the background uses the calm surface container instead.
+ */
+val BrandGlanceColors: ColorProviders by lazy {
+    val l = brandColorScheme(false)
+    val d = brandColorScheme(true)
+    fun p(day: androidx.compose.ui.graphics.Color, night: androidx.compose.ui.graphics.Color) = androidx.glance.color.ColorProvider(day, night)
+    androidx.glance.color.colorProviders(
+        primary = p(l.primary, d.primary), onPrimary = p(l.onPrimary, d.onPrimary),
+        primaryContainer = p(l.primaryContainer, d.primaryContainer), onPrimaryContainer = p(l.onPrimaryContainer, d.onPrimaryContainer),
+        secondary = p(l.secondary, d.secondary), onSecondary = p(l.onSecondary, d.onSecondary),
+        secondaryContainer = p(l.secondaryContainer, d.secondaryContainer), onSecondaryContainer = p(l.onSecondaryContainer, d.onSecondaryContainer),
+        tertiary = p(l.tertiary, d.tertiary), onTertiary = p(l.onTertiary, d.onTertiary),
+        tertiaryContainer = p(l.tertiaryContainer, d.tertiaryContainer), onTertiaryContainer = p(l.onTertiaryContainer, d.onTertiaryContainer),
+        error = p(l.error, d.error), errorContainer = p(l.errorContainer, d.errorContainer),
+        onError = p(l.onError, d.onError), onErrorContainer = p(l.onErrorContainer, d.onErrorContainer),
+        background = p(l.background, d.background), onBackground = p(l.onBackground, d.onBackground),
+        surface = p(l.surface, d.surface), onSurface = p(l.onSurface, d.onSurface),
+        surfaceVariant = p(l.surfaceContainerHighest, d.surfaceContainerHighest), onSurfaceVariant = p(l.onSurfaceVariant, d.onSurfaceVariant),
+        outline = p(l.outline, d.outline), inverseOnSurface = p(l.inverseOnSurface, d.inverseOnSurface),
+        inverseSurface = p(l.inverseSurface, d.inverseSurface), inversePrimary = p(l.inversePrimary, d.inversePrimary),
+        widgetBackground = p(l.surfaceContainer, d.surfaceContainer),
+    )
+}
 
 /** Material You on Android 12+ (matches the wallpaper like system widgets), Hack Club red otherwise. */
 @Composable
@@ -86,7 +110,7 @@ fun RefreshButton() {
         onClick = refreshAction,
         backgroundColor = null,
         contentColor = GlanceTheme.colors.onSurfaceVariant,
-        modifier = GlanceModifier.size(36.dp),
+        modifier = GlanceModifier.size(30.dp),
     )
 }
 

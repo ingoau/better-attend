@@ -72,7 +72,7 @@ private fun TicketSummary(t: TicketWidgetData, now: Instant, compact: Boolean) {
     val c = GlanceTheme.colors
     val countdown = TicketLogic.relativeLabel(t.startsAt, t.endsAt, t.timezone, now)
     val live = countdown == "Happening now"
-    Column(GlanceModifier.fillMaxSize().padding(vertical = 12.dp)) {
+    Column(GlanceModifier.fillMaxSize().padding(top = 10.dp, bottom = 12.dp)) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Glyph(R.drawable.ic_widget_ticket, c.primary, 16.dp)
             Spacer(GlanceModifier.width(6.dp))

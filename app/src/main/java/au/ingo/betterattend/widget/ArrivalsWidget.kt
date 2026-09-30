@@ -75,7 +75,7 @@ fun ArrivalsContent(snap: WidgetSnapshot, now: Instant) {
 @Composable
 private fun ArrivalCounts(eventName: String, tz: String?, t: TravelWidgetData, now: Instant, compact: Boolean) {
     val c = GlanceTheme.colors
-    Column(GlanceModifier.fillMaxSize().padding(vertical = 12.dp)) {
+    Column(GlanceModifier.fillMaxSize().padding(top = 6.dp, bottom = 8.dp)) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Glyph(R.drawable.ic_widget_flight_land, c.primary, 16.dp)
             Spacer(GlanceModifier.width(6.dp))
@@ -85,19 +85,19 @@ private fun ArrivalCounts(eventName: String, tz: String?, t: TravelWidgetData, n
         }
         Spacer(GlanceModifier.defaultWeight())
         if (compact) {
-            Text("${t.awaitingPickup}", style = textStyle(36.sp, c.primary, FontWeight.Bold), maxLines = 1,
+            Text("${t.awaitingPickup}", style = textStyle(32.sp, c.primary, FontWeight.Bold), maxLines = 1,
                 modifier = GlanceModifier.semantics { contentDescription = "${t.awaitingPickup} awaiting pickup" })
             Text("awaiting pickup", style = textStyle(12.sp, c.onSurface, FontWeight.Medium), maxLines = 1)
         } else {
             Row(GlanceModifier.fillMaxWidth()) {
-                StatTile("${t.awaitingPickup}", "Awaiting pickup", c.primaryContainer, c.onPrimaryContainer, GlanceModifier.defaultWeight())
+                StatTile("${t.awaitingPickup}", "Waiting", c.primaryContainer, c.onPrimaryContainer, GlanceModifier.defaultWeight())
                 Spacer(GlanceModifier.width(6.dp))
                 StatTile("${t.collected}", "Collected", c.secondaryContainer, c.onSecondaryContainer, GlanceModifier.defaultWeight())
                 Spacer(GlanceModifier.width(6.dp))
                 StatTile("${t.checkedIn}", "Checked in", c.secondaryContainer, c.onSecondaryContainer, GlanceModifier.defaultWeight())
             }
         }
-        Spacer(GlanceModifier.height(6.dp))
+        Spacer(GlanceModifier.height(4.dp))
         Text(nextArrivalLabel(t, tz, compact), style = textStyle(12.sp, c.onSurfaceVariant), maxLines = 1)
     }
 }
@@ -105,11 +105,11 @@ private fun ArrivalCounts(eventName: String, tz: String?, t: TravelWidgetData, n
 @Composable
 private fun StatTile(value: String, label: String, bg: ColorProvider, fg: ColorProvider, modifier: GlanceModifier) {
     Column(
-        modifier.cornerRadiusCompat(14.dp).background(bg).padding(horizontal = 10.dp, vertical = 6.dp)
+        modifier.cornerRadiusCompat(14.dp).background(bg).padding(horizontal = 8.dp, vertical = 4.dp)
             .semantics { contentDescription = "$value $label" },
     ) {
-        Text(value, style = textStyle(22.sp, fg, FontWeight.Bold), maxLines = 1)
-        Text(label, style = textStyle(11.sp, fg), maxLines = 1)
+        Text(value, style = textStyle(20.sp, fg, FontWeight.Bold), maxLines = 1)
+        Text(label, style = textStyle(10.sp, fg), maxLines = 1)
     }
 }
 
