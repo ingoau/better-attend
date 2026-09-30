@@ -51,8 +51,8 @@ object OrganizerSamples {
             if (checkedIn && i % 4 != 3) add(ContextScanSummary("c3", "Saturday lunch", scanCount = 1, firstScannedAt = iso(-5), lastScannedAt = iso(-5)))
         }
         Participant(
-            participantId = "p-%04d-0000-4000-8000-000000000000".format(i),
-            participantEventId = "pe-%04d-0000-4000-8000-000000000000".format(i),
+            participantId = "%08x-e5f6-4a7b-8c9d-0e1f2a3b4c5d".format(0x5a1b2000 + i * 7919),
+            participantEventId = "%08x-8d7e-4f60-9a1b-2c3d4e5f6a7b".format(0x3b1f9000 + i * 104729),
             displayName = fn, fullName = "$fn $ln", email = "${fn.lowercase()}.${ln.lowercase()}$i@example.com",
             status = status, checkedInAt = checkedInAt,
             hasAnaphylaxisRisk = i == 3 || i == 57 || i == 101,
@@ -110,7 +110,8 @@ object OrganizerSamples {
             i % 3 == 0 -> ScanContextRef("c1", "Check-in desk", checksIn = true)
             else -> ScanContextRef("c3", "Saturday lunch")
         }
-        val p = participants[(i * 7) % 120]
+        // Every other scan is someone with travel, so the read-only feed can show their name.
+        val p = participants[if (i % 2 == 0) (i / 2 % 11) * 5 + 40 else (i * 7) % 120]
         Scan(
             id = "s$i", participantId = p.participantId, participantEventId = p.participantEventId,
             scannedAt = iso(-(i * 6L + 1)), scannedBy = if (i % 2 == 0) "Heidi" else "Orpheus Dino", scanContext = ctx,

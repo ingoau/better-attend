@@ -233,7 +233,7 @@ private fun TravelList(
         if (state.error != null) {
             OfflineBanner("Showing saved travel. ${state.error}", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), onRetry = onRefresh)
         }
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f).fillMaxWidth()) {
+        PullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 all.isEmpty() -> LazyColumn(Modifier.fillMaxSize()) {
                     item {

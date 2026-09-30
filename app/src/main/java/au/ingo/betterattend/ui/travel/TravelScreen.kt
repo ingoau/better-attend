@@ -32,6 +32,8 @@ data class TravelUiState(
     val event: Event? = null,
     val calendar: TravelCalendar? = null,
     val refreshing: Boolean = false,
+    /** Refresh the user asked for (pull-to-refresh spinner); the 60 s poll stays silent. */
+    val userRefreshing: Boolean = false,
     /** Last refresh failure (cached data, if any, is still shown). */
     val error: String? = null,
     val lastUpdated: Instant? = null,
@@ -42,6 +44,7 @@ data class TravelUiState(
 private data class LoadState(
     val eventId: String? = null,
     val refreshing: Boolean = false,
+    val userRefreshing: Boolean = false,
     val error: String? = null,
     val lastUpdated: Instant? = null,
 )
@@ -55,27 +58,28 @@ class TravelViewModel(private val c: AppContainer) : ViewModel() {
             event = event,
             calendar = event?.let { cals[it.id] },
             refreshing = sameEvent && l.refreshing,
+            userRefreshing = sameEvent && l.refreshing && l.userRefreshing,
             error = if (sameEvent) l.error else null,
             lastUpdated = if (sameEvent) l.lastUpdated else null,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TravelUiState())
 
     /** Shows the cached calendar straight away, then refreshes from the server. */
-    suspend fun refresh(eventId: String) {
+    suspend fun refresh(eventId: String, userInitiated: Boolean = false) {
         if (load.value.eventId != eventId) load.value = LoadState(eventId)
         c.travel.load(eventId)
-        load.update { it.copy(refreshing = true) }
+        load.update { it.copy(refreshing = true, userRefreshing = userInitiated) }
         val result = c.travel.refresh(eventId)
         load.update {
             if (it.eventId != eventId) it
             else result.fold(
-                onSuccess = { _ -> it.copy(refreshing = false, error = null, lastUpdated = Instant.now()) },
-                onFailure = { e -> it.copy(refreshing = false, error = e.friendlyMessage) },
+                onSuccess = { _ -> it.copy(refreshing = false, userRefreshing = false, error = null, lastUpdated = Instant.now()) },
+                onFailure = { e -> it.copy(refreshing = false, userRefreshing = false, error = e.friendlyMessage) },
             )
         }
     }
 
-    fun refreshAsync(eventId: String) { viewModelScope.launch { refresh(eventId) } }
+    fun refreshAsync(eventId: String) { viewModelScope.launch { refresh(eventId, userInitiated = true) } }
 }
 
 @Composable
