@@ -12,7 +12,6 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.browser.auth.AuthTabIntent
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.lifecycleScope
 import au.ingo.betterattend.ui.AttendRoot
 import au.ingo.betterattend.ui.ExternalNavRequests
 import au.ingo.betterattend.ui.nav.Tab
@@ -68,7 +67,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun completeSignIn(uri: Uri) {
-        lifecycleScope.launch { container.auth.handleCallback(uri) }
+        // App scope, not lifecycleScope: a rotation mid-exchange must not cancel the one-time code.
+        container.scope.launch { container.auth.handleCallback(uri) }
     }
 
     private fun startSignIn() {

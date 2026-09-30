@@ -129,7 +129,8 @@ class ParticipantRepository(
 
     /** Merge a participant we learned about elsewhere (scan response, detail fetch) into the roster. */
     suspend fun upsert(eventId: String, participant: Participant) {
-        val roster = load(eventId) ?: Roster(eventId)
+        // Never invent a roster from a single scan/detail: stats would read "3 of 3 checked in".
+        val roster = load(eventId) ?: return
         val merged = roster.byEventId.toMutableMap()
         merged[participant.participantEventId] = mergeKeepingDetail(merged[participant.participantEventId], participant)
         val updated = roster.copy(participants = merged.values.sortedBy { it.name.lowercase() })

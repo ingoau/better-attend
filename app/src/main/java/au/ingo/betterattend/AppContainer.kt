@@ -36,6 +36,10 @@ class AppContainer(context: Context) {
     val travel = TravelRepository(api, cache)
 
     init {
+        scans.fallbackContext = { eventId ->
+            events.loadContexts(eventId)
+            events.cachedContexts(eventId)?.let { list -> (list.firstOrNull { it.checksIn } ?: list.firstOrNull())?.id }
+        }
         // Whenever the session ends (sign-out or expiry), wipe cached account data.
         scope.launch {
             var wasSignedIn = false
@@ -48,11 +52,18 @@ class AppContainer(context: Context) {
 
     /** Wipes every cached byte of account data (sign-out / session expiry). */
     suspend fun clearAccountData() {
-        scans.clear()
-        participants.clear() // also clears the encrypted file cache
-        events.clear()
-        tickets.clear()
-        travel.clear()
-        settings.clearAccountData()
+        // Each step independently: a failing disk shouldn't leave the rest of the data behind.
+        runCatching { scans.clear() }
+        runCatching { participants.clear() } // also clears the encrypted file cache
+        runCatching { events.clear() }
+        runCatching { tickets.clear() }
+        runCatching { travel.clear() }
+        runCatching { settings.clearAccountData() }
+        // Participant headshots (minors) live in Coil's caches.
+        runCatching {
+            val loader = coil3.SingletonImageLoader.get(appContext)
+            loader.memoryCache?.clear()
+            loader.diskCache?.clear()
+        }
     }
 }

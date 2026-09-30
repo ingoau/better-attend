@@ -14,6 +14,7 @@ import au.ingo.betterattend.data.api.friendlyMessage
 import au.ingo.betterattend.data.model.SessionResponse
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.store.SecureBox
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -125,6 +126,9 @@ class AuthRepository(
             store.oauthState = null
             signInWith(session)
             null
+        } catch (e: CancellationException) {
+            _state.value = AuthState.SignedOut()
+            throw e
         } catch (e: ApiException) {
             fail(
                 if (e.status == 401) "We couldn't find an Attend account for that Hack Club login. " +

@@ -146,6 +146,13 @@ private fun SignedInApp(container: AppContainer, user: User) {
     val dest = backStack?.destination
     val currentTab = tabs.firstOrNull { t -> dest?.hasRoute(t.route()::class) == true }
     val showBar = tabs.size > 1 && currentTab != null
+
+    // Switching to an event without travel (or without participant access) removes a tab; don't strand
+    // the user on it with no navigation bar.
+    val onRemovedTab = Tab.entries.firstOrNull { t -> t !in tabs && dest?.hasRoute(t.route()::class) == true }
+    LaunchedEffect(onRemovedTab, tabs) {
+        if (onRemovedTab != null) nav.navigateToTab(tabs.first())
+    }
     val wide = LocalConfiguration.current.screenWidthDp >= 600
 
     val host: @Composable (Modifier) -> Unit = { modifier ->

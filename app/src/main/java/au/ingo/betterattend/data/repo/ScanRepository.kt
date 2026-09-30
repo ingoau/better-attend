@@ -74,6 +74,12 @@ class ScanRepository(
 
     private val queueMutex = Mutex()
 
+    /**
+     * Resolves a scan context for scans queued before contexts could load (the server rejects a
+     * context-less scan when an event has several). Set by AppContainer.
+     */
+    var fallbackContext: suspend (eventId: String) -> String? = { null }
+
     /** Set by the app to schedule a WorkManager flush when something is queued. */
     var onQueued: () -> Unit = {}
 
@@ -146,11 +152,12 @@ class ScanRepository(
         while (iterator.hasNext()) {
             val p = iterator.next()
             try {
+                val contextId = p.scanContextId ?: fallbackContext(p.eventId)
                 val result = api.createScan(
                     eventId = p.eventId,
                     participantId = p.input.participantId,
                     badgeToken = p.input.badgeToken,
-                    scanContextId = p.scanContextId,
+                    scanContextId = contextId,
                     source = p.input.source.takeIf { it == "manual" },
                     clientScanId = p.clientScanId,
                     scannedAt = p.scannedAt,
@@ -160,7 +167,8 @@ class ScanRepository(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (e.isTransient) break
+                // Offline/5xx/429, or an auth problem the user can fix by signing in again: keep it.
+                if (e.isTransient || (e as? ApiException)?.let { it.isUnauthorized || it.isForbidden } == true) break
                 // Permanent failure (e.g. not registered): drop it but keep a record in the log.
                 iterator.remove()
                 _log.update {

@@ -28,9 +28,13 @@ class JsonCache(context: Context) {
 
     suspend fun <T> write(key: String, serializer: KSerializer<T>, value: T) = withContext(Dispatchers.IO) {
         val f = file(key)
-        val tmp = File(f.parentFile, f.name + ".tmp")
-        tmp.writeBytes(SecureBox.encrypt(AttendJson.encodeToString(serializer, value).toByteArray()))
-        tmp.renameTo(f)
+        val tmp = File(f.parentFile, f.name + "." + java.util.UUID.randomUUID() + ".tmp")
+        try {
+            tmp.writeBytes(SecureBox.encrypt(AttendJson.encodeToString(serializer, value).toByteArray()))
+            if (!tmp.renameTo(f)) tmp.delete()
+        } catch (e: java.io.IOException) {
+            tmp.delete() // e.g. disk full: keep the previous cache rather than crash
+        }
     }
 
     suspend fun remove(key: String) = withContext(Dispatchers.IO) { file(key).delete() }

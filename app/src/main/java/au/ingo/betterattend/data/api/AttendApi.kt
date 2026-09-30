@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -95,7 +97,10 @@ class AttendApi(
     private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
         enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) { if (cont.isActive) cont.resumeWithException(e) }
-            override fun onResponse(call: Call, response: Response) { cont.resume(response) }
+            override fun onResponse(call: Call, response: Response) {
+                // If the caller was cancelled in the meantime, don't leak the connection.
+                cont.resume(response) { _, _, _ -> response.close() }
+            }
         })
         cont.invokeOnCancellation { runCatching { cancel() } }
     }
@@ -116,31 +121,47 @@ class AttendApi(
         }.build()
     }
 
-    /** Performs a request, returning the raw body. Retries once after a concurrent token refresh. */
+    /** Token a background rotation has been started for, so parallel responses don't each rotate. */
+    private val rotatingFor = AtomicReference<String?>(null)
+
+    /**
+     * Performs a request on the IO dispatcher, returning the raw body. A 401 caused by a concurrent
+     * token rotation is retried once with the new token instead of signing the user out.
+     */
     suspend fun raw(
         method: String,
         path: String,
         query: Map<String, String?> = emptyMap(),
         body: JsonObject? = null,
         authenticated: Boolean = true,
-    ): String {
+    ): String = withContext(Dispatchers.IO) {
         val usedToken = if (authenticated) tokens.token else null
         var response = http.newCall(buildRequest(method, path, query, body, usedToken)).await()
-        if (response.code == 401 && authenticated && tokens.token != null && tokens.token != usedToken) {
-            // Token was rotated while this call was in flight; retry with the new one.
-            response.close()
-            response = http.newCall(buildRequest(method, path, query, body, tokens.token)).await()
+        if (response.code == 401 && authenticated && usedToken != null) {
+            // Let any in-flight rotation finish, then retry if the token changed underneath us.
+            refreshMutex.withLock { }
+            val current = tokens.token
+            if (current != null && current != usedToken) {
+                response.close()
+                response = http.newCall(buildRequest(method, path, query, body, current)).await()
+            }
         }
         response.use { res ->
             val text = res.body.string()
             if (!res.isSuccessful) {
-                if (res.code == 401 && authenticated) onSessionExpired()
+                // Only expire the session if the token that failed is still the current one.
+                if (res.code == 401 && authenticated && res.request.header("Authorization") == "Bearer ${tokens.token}") {
+                    onSessionExpired()
+                }
                 throw ApiException(res.code, parseError(res.code, text))
             }
-            if (authenticated && res.header("X-Token-Refresh-Recommended") == "true") {
-                scope.launch { runCatching { refreshSession() } }
+            val token = tokens.token
+            if (authenticated && token != null && res.header("X-Token-Refresh-Recommended") == "true" &&
+                rotatingFor.getAndSet(token) != token
+            ) {
+                scope.launch { runCatching { refreshSession(expected = token) } }
             }
-            return text
+            text
         }
     }
 
@@ -153,31 +174,40 @@ class AttendApi(
         }
     }
 
-    private suspend inline fun <reified T> get(path: String, query: Map<String, String?> = emptyMap()): T =
-        json.decodeFromString(raw("GET", path, query))
+    private suspend inline fun <reified T> get(path: String, query: Map<String, String?> = emptyMap()): T {
+        val text = raw("GET", path, query)
+        return withContext(Dispatchers.Default) { json.decodeFromString<T>(text) }
+    }
 
-    private suspend inline fun <reified T> send(method: String, path: String, body: JsonObject? = null, query: Map<String, String?> = emptyMap()): T =
-        json.decodeFromString(raw(method, path, query, body))
+    private suspend inline fun <reified T> send(method: String, path: String, body: JsonObject? = null, query: Map<String, String?> = emptyMap()): T {
+        val text = raw(method, path, query, body)
+        return withContext(Dispatchers.Default) { json.decodeFromString<T>(text) }
+    }
 
     // ---------------- session ----------------
 
-    suspend fun createSession(code: String, redirectUri: String, codeVerifier: String, deviceName: String): SessionResponse =
-        json.decodeFromString(
-            raw("POST", "/session", body = buildJsonObject {
-                put("code", code)
-                put("redirect_uri", redirectUri)
-                put("code_verifier", codeVerifier)
-                put("device_name", deviceName)
-            }, authenticated = false)
-        )
+    suspend fun createSession(code: String, redirectUri: String, codeVerifier: String, deviceName: String): SessionResponse {
+        val text = raw("POST", "/session", body = buildJsonObject {
+            put("code", code)
+            put("redirect_uri", redirectUri)
+            put("code_verifier", codeVerifier)
+            put("device_name", deviceName)
+        }, authenticated = false)
+        return json.decodeFromString(SessionResponse.serializer(), text)
+    }
 
-    /** Rotates the token. Serialized: the server revokes the old token immediately. */
-    suspend fun refreshSession(): SessionResponse? = refreshMutex.withLock {
+    /**
+     * Rotates the token. Serialized, and skipped if [expected] has already been rotated away:
+     * the server revokes the old token immediately, so rotating twice would sign us out.
+     */
+    suspend fun refreshSession(expected: String? = tokens.token): SessionResponse? = refreshMutex.withLock {
         val current = tokens.token ?: return null
-        val text = http.newCall(buildRequest("POST", "/session/refresh", emptyMap(), null, current)).await().use { res ->
-            if (!res.isSuccessful) return null
-            res.body.string()
-        }
+        if (expected != null && current != expected) return null
+        val text = withContext(Dispatchers.IO) {
+            http.newCall(buildRequest("POST", "/session/refresh", emptyMap(), null, current)).await().use { res ->
+                if (!res.isSuccessful) null else res.body.string()
+            }
+        } ?: return null
         val session = json.decodeFromString(SessionResponse.serializer(), text)
         tokens.update(session.token, session.expiresAt)
         session
