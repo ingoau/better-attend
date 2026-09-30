@@ -48,8 +48,8 @@ struct DetailList: View {
                 }
             }
 
-            if let t = p.travelInbound { TravelSection(travel: t, timezone: tz, canViewPii: pii) }
-            if let t = p.travelOutbound { TravelSection(travel: t, timezone: tz, canViewPii: pii) }
+            if let t = p.travelInbound { ParticipantTravelSection(travel: t, timezone: tz, canViewPii: pii) }
+            if let t = p.travelOutbound { ParticipantTravelSection(travel: t, timezone: tz, canViewPii: pii) }
 
             if !p.groups.isEmpty {
                 Section("Groups") {
@@ -414,7 +414,7 @@ struct BusyLabel: View {
 
 // MARK: - Travel
 
-private struct TravelSection: View {
+private struct ParticipantTravelSection: View {
     let travel: Travel
     let timezone: String?
     let canViewPii: Bool
