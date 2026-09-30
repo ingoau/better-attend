@@ -18,6 +18,9 @@ import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.PollWhileVisible
 import au.ingo.betterattend.ui.nav.AppNavigator
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -64,22 +67,43 @@ class TravelViewModel(private val c: AppContainer) : ViewModel() {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TravelUiState())
 
-    /** Shows the cached calendar straight away, then refreshes from the server. */
-    suspend fun refresh(eventId: String, userInitiated: Boolean = false) {
+    private var refreshJob: Job? = null
+    private var refreshEventId: String? = null
+    private var refreshSeq = 0
+
+    /**
+     * Shows the cached calendar straight away, then refreshes from the server. Runs in [viewModelScope] so the
+     * poll being cancelled (screen left mid-refresh) can't leave `refreshing` stuck on; a refresh already in
+     * flight for the same event is reused rather than doubled up.
+     */
+    fun refresh(eventId: String, userInitiated: Boolean = false) {
         if (load.value.eventId != eventId) load.value = LoadState(eventId)
-        c.travel.load(eventId)
+        if (refreshJob?.isActive == true && refreshEventId == eventId) {
+            if (userInitiated) load.update { it.copy(userRefreshing = true) }
+            return
+        }
+        val seq = ++refreshSeq
+        refreshEventId = eventId
         load.update { it.copy(refreshing = true, userRefreshing = userInitiated) }
-        val result = c.travel.refresh(eventId)
-        load.update {
-            if (it.eventId != eventId) it
-            else result.fold(
-                onSuccess = { _ -> it.copy(refreshing = false, userRefreshing = false, error = null, lastUpdated = Instant.now()) },
-                onFailure = { e -> it.copy(refreshing = false, userRefreshing = false, error = e.friendlyMessage) },
-            )
+        refreshJob = viewModelScope.launch {
+            try {
+                c.travel.load(eventId)
+                val result = c.travel.refresh(eventId)
+                currentCoroutineContext().ensureActive()
+                load.update {
+                    if (it.eventId != eventId) it
+                    else result.fold(
+                        onSuccess = { _ -> it.copy(error = null, lastUpdated = Instant.now()) },
+                        onFailure = { e -> it.copy(error = e.friendlyMessage) },
+                    )
+                }
+            } finally {
+                if (seq == refreshSeq) load.update { if (it.eventId == eventId) it.copy(refreshing = false, userRefreshing = false) else it }
+            }
         }
     }
 
-    fun refreshAsync(eventId: String) { viewModelScope.launch { refresh(eventId, userInitiated = true) } }
+    fun refreshAsync(eventId: String) = refresh(eventId, userInitiated = true)
 }
 
 @Composable
