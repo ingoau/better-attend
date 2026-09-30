@@ -157,7 +157,6 @@ private struct DetailHeader: View {
                         }
                         .accessibilityLabel("Ticket code \(p.shortCode.map(String.init).joined(separator: " "))")
                 }
-                .fixedSize()
                 if canViewPii {
                     ContactTiles(participant: p)
                         .padding(.top, 4)

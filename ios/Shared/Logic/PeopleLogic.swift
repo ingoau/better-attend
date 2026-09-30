@@ -316,6 +316,13 @@ enum PeopleText {
         }
     }
 
+    /// Row title: the full name when it starts with the preferred name ("Leo" → "Leo Nguyen"), else
+    /// both ("Sam (Samantha Lee)"), so people who share a first name are told apart.
+    static func listTitle(_ p: Participant) -> String {
+        guard let full = p.fullName?.nonBlank?.trimmingCharacters(in: .whitespaces), full != p.name else { return p.name }
+        return PeopleFilter.normalize(full).hasPrefix(PeopleFilter.normalize(p.name)) ? full : "\(p.name) (\(full))"
+    }
+
     /// "3 Oct 2026" from "2026-10-03" (falls back to the raw text).
     static func date(_ iso: String?) -> String? {
         guard let iso, !iso.isBlank else { return nil }

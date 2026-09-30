@@ -333,7 +333,7 @@ struct PersonRow: View {
                 .opacity(p.isActive ? 1 : 0.5)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(p.name)
+                    Text(PeopleText.listTitle(p))
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                         .layoutPriority(1)

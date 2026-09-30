@@ -37,6 +37,8 @@ final class ParticipantDetailModel {
     /// True once the full profile has arrived.
     private(set) var detailLoaded = false
     private(set) var loading = false
+    /// True once a detail fetch has finished (successfully or not).
+    private(set) var attempted = false
     private(set) var error: String?
     private(set) var notes: [NoteItem]?
     private(set) var notesError: String?
@@ -47,6 +49,7 @@ final class ParticipantDetailModel {
     var toast: Toast?
 
     @ObservationIgnored private var writer: BadgeWriter?
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
 
     init(eventId: String, participantEventId: String) {
         self.eventId = eventId
@@ -77,7 +80,14 @@ final class ParticipantDetailModel {
             if !error.isCancellation { self.error = error.friendlyMessage }
         }
         loading = false
+        attempted = true
         _ = await (notes, contexts)
+    }
+
+    /// Starts the first load once. Unstructured, so view churn (tab switches, deep links) can't cancel it halfway.
+    func start(_ app: AppModel) {
+        guard loadTask == nil else { return }
+        loadTask = Task { await refresh(app) }
     }
 
     private func loadContexts(_ app: AppModel) async {

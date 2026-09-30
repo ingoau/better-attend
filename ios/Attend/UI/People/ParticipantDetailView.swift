@@ -67,7 +67,7 @@ private struct ParticipantPage: View {
         Group {
             if let p {
                 DetailList(participant: p, model: model, confirm: $confirm, addingNote: $addingNote, headerHidden: $headerHidden)
-            } else if model.loading || (model.error == nil && !model.detailLoaded) {
+            } else if !model.attempted || model.loading {
                 ProgressView().controlSize(.large)
             } else {
                 ContentUnavailableView {
@@ -127,7 +127,7 @@ private struct ParticipantPage: View {
         } message: {
             if case let .failed(message, _) = model.badge { Text(message) }
         }
-        .task { await model.refresh(app) }
+        .task { model.start(app) }
     }
 
     private func perform(_ c: DetailConfirmation) {
