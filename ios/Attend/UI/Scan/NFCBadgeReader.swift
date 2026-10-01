@@ -21,7 +21,7 @@ final class NFCBadgeReader {
         let delegate = Delegate { [weak self] result in
             guard let self else { return }
             reads += 1
-            session?.alertMessage = reads == 1 ? "Got it. Tap the next badge, or tap Done." : "\(reads) badges read. Tap the next one, or tap Done."
+            self.session?.alertMessage = reads == 1 ? "Got it. Tap the next badge, or tap Done." : "\(reads) badges read. Tap the next one, or tap Done."
             onResult(result)
         } onEnd: { [weak self] message in
             self?.session = nil
