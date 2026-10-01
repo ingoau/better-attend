@@ -7,6 +7,8 @@ struct DashboardView: View {
     @State private var model = DashboardModel()
     /// Keeps "Updated 2 min ago", countdowns and "in the last hour" honest between syncs.
     @State private var now = Date()
+    /// The share card's look, kept between shares (and events) while the app runs.
+    @State private var shareOptions = ShareCardOptions()
 
     var body: some View {
         content
@@ -28,7 +30,7 @@ struct DashboardView: View {
         } else if events?.isEmpty == true {
             NoEventsView()
         } else if let event = app.events.selectedEvent {
-            DashboardBody(event: event, model: model, now: now)
+            DashboardBody(event: event, model: model, now: now, shareOptions: $shareOptions)
                 .id(event.id)
                 .transition(.opacity)
         } else {
@@ -114,10 +116,13 @@ private struct DashboardBody: View {
     let event: Event
     let model: DashboardModel
     let now: Date
+    @Binding var shareOptions: ShareCardOptions
 
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// Set by long-pressing a number; opens the share sheet starting with that number.
+    @State private var share: ShareRequest?
 
     // A roster without `syncedAt` is partial (a few people learned from scans before the first full
     // sync): counting it would say "3 of 3 checked in", so treat it as not loaded yet.
@@ -130,6 +135,8 @@ private struct DashboardBody: View {
         let roster = self.roster
         let stats = roster.map { EventStats.from($0.participants, now: now) }
         let arrivals = DashboardLogic.arrivals(travel, now: now)
+        let progress = stats.map { DashboardLogic.contextProgress(app.events.cachedContexts(event.id) ?? [], stats: $0, now: now) } ?? []
+        let feed = event.canViewParticipants ? nil : model.scans.map { DashboardLogic.scanFeed($0, tz: event.timezone, now: now) }
 
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -141,9 +148,9 @@ private struct DashboardBody: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if event.canViewParticipants {
-                    organizerCards(roster: roster, stats: stats, arrivals: arrivals)
+                    organizerCards(roster: roster, stats: stats, progress: progress, arrivals: arrivals)
                 } else {
-                    limitedCards(arrivals: arrivals)
+                    limitedCards(feed: feed, arrivals: arrivals)
                 }
             }
             .padding(.horizontal, 16)
@@ -157,7 +164,15 @@ private struct DashboardBody: View {
         .background(Color(.systemGroupedBackground))
         .refreshable { await model.refresh(event, app: app, force: true) }
         .poll(every: .seconds(60), id: event.id) { await model.refresh(event, app: app, force: false) }
+        .sheet(item: $share) { request in
+            let available = ShareStats.available(event: event, stats: stats, contexts: progress, arrivals: arrivals, feed: feed, now: now)
+            if !available.isEmpty {
+                ShareStatsSheet(event: event, available: available, startId: request.startId, options: $shareOptions, now: now)
+            }
+        }
     }
+
+    private func onShare(_ id: String) { share = ShareRequest(startId: id) }
 
     // MARK: Header
 
@@ -196,15 +211,14 @@ private struct DashboardBody: View {
     // MARK: Organizer (roster access)
 
     @ViewBuilder
-    private func organizerCards(roster: Roster?, stats: EventStats?, arrivals: ArrivalsSummary?) -> some View {
-        let progress = stats.map { DashboardLogic.contextProgress(app.events.cachedContexts(event.id) ?? [], stats: $0, now: now) } ?? []
+    private func organizerCards(roster: Roster?, stats: EventStats?, progress: [ContextProgress], arrivals: ArrivalsSummary?) -> some View {
         // Before doors open every bar is empty, so skip them.
         let showContexts = !progress.isEmpty && (phase != .upcoming || progress.contains { $0.count > 0 })
         let attention = roster.map { DashboardLogic.needsAttention($0.participants) } ?? 0
 
         let primary = VStack(spacing: 16) {
             if let stats {
-                HomeHeroCard(event: event, stats: stats, phase: phase, now: now)
+                HomeHeroCard(event: event, stats: stats, phase: phase, now: now) { onShare(ShareStats.heroId(event, now: now)) }
             } else {
                 HomeHeroLoadingCard(failed: model.error != nil && !model.refreshing) {
                     Task { await model.refresh(event, app: app, force: true) }
@@ -212,7 +226,7 @@ private struct DashboardBody: View {
             }
             HomeQuickActions(showFind: true, event: event)
             if let stats {
-                HomeStatTiles(stats: stats) { router.switchTab(.people) }
+                HomeStatTiles(stats: stats, onShare: onShare) { router.switchTab(.people) }
                 if attention > 0 {
                     HomeAttentionCard(stats: stats, count: attention) { router.switchTab(.people) }
                         .transition(.opacity)
@@ -221,10 +235,10 @@ private struct DashboardBody: View {
         }
         let secondary = VStack(spacing: 16) {
             if showContexts {
-                HomeContextsCard(rows: progress)
+                HomeContextsCard(rows: progress, onShare: onShare)
             }
             if let arrivals {
-                HomeArrivalsCard(summary: arrivals, tz: event.timezone ?? travel?.eventTimezone, onOpen: openTravel)
+                HomeArrivalsCard(summary: arrivals, tz: event.timezone ?? travel?.eventTimezone, onShare: onShare, onOpen: openTravel)
             }
             if let roster, phase != .upcoming {
                 HomeRecentCheckInsCard(recent: DashboardLogic.recentCheckIns(roster.participants), now: now) { p in
@@ -240,12 +254,11 @@ private struct DashboardBody: View {
     // MARK: Limited roles (no roster)
 
     @ViewBuilder
-    private func limitedCards(arrivals: ArrivalsSummary?) -> some View {
-        let feed = model.scans.map { DashboardLogic.scanFeed($0, tz: event.timezone, now: now) }
+    private func limitedCards(feed: ScanFeedSummary?, arrivals: ArrivalsSummary?) -> some View {
         let primary = VStack(spacing: 16) {
             HomeLimitedAccessCard(event: event)
             if let feed {
-                HomeScansHeroCard(feed: feed)
+                HomeScansHeroCard(feed: feed) { onShare(ShareStats.scansToday) }
             } else {
                 HomeHeroLoadingCard(failed: model.error != nil && !model.refreshing, title: "Loading scans…",
                                 detail: "Fetching the latest scan activity for this event.") {
@@ -256,7 +269,7 @@ private struct DashboardBody: View {
         }
         let secondary = VStack(spacing: 16) {
             if let arrivals {
-                HomeArrivalsCard(summary: arrivals, tz: event.timezone ?? travel?.eventTimezone, onOpen: openTravel)
+                HomeArrivalsCard(summary: arrivals, tz: event.timezone ?? travel?.eventTimezone, onShare: onShare, onOpen: openTravel)
             }
             if let feed, !feed.recent.isEmpty {
                 HomeRecentScansCard(scans: feed.recent, travel: travel, now: now)

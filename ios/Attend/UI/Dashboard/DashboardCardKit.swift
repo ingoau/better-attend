@@ -54,6 +54,16 @@ extension View {
     }
 }
 
+extension View {
+    /// Press and hold a Home number to share it as an image card (see `ShareStatsSheet`).
+    func shareStatMenu(cornerRadius: CGFloat, _ share: @escaping () -> Void) -> some View {
+        contentShape(.contextMenuPreview, .rect(cornerRadius: cornerRadius, style: .continuous))
+            .contextMenu {
+                Button("Share as Image…", systemImage: "square.and.arrow.up", action: share)
+            }
+    }
+}
+
 /// A whole-card tap target that still looks like a card (no blue text, gentle press state).
 struct DashCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

@@ -8,6 +8,7 @@ struct HomeHeroCard: View {
     let stats: EventStats
     let phase: Time.Phase
     let now: Date
+    let onShare: () -> Void
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .largeTitle) private var numberSize: CGFloat = 56
@@ -112,6 +113,7 @@ struct HomeHeroCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(eyebrow.text). \(value) of \(total) \(caption), \(percent) percent.")
         .accessibilityValue(facts.map { f in [f.value.map { "\(f.prefix)\($0)" }, f.text].compactMap { $0 }.joined(separator: " ") }.joined(separator: ". "))
+        .shareStatMenu(cornerRadius: 26, onShare)
     }
 
     @ViewBuilder private var factViews: some View {
@@ -229,18 +231,19 @@ struct HomeQuickActions: View {
 
 struct HomeStatTiles: View {
     let stats: EventStats
+    let onShare: (String) -> Void
     let open: () -> Void
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-            tile("Registered", stats.registered, "person.3", "Not withdrawn")
-            tile("Confirmed", stats.confirmed, "checkmark.seal", "Registration complete")
-            tile("Not Complete", DashboardLogic.notComplete(stats), "hourglass", "Still onboarding")
-            tile("Withdrawn", stats.withdrawn, "person.slash", "Incl. rejected")
+            tile("Registered", stats.registered, "person.3", "Not withdrawn", ShareStats.registered)
+            tile("Confirmed", stats.confirmed, "checkmark.seal", "Registration complete", ShareStats.confirmed)
+            tile("Not Complete", DashboardLogic.notComplete(stats), "hourglass", "Still onboarding", ShareStats.notComplete)
+            tile("Withdrawn", stats.withdrawn, "person.slash", "Incl. rejected", ShareStats.withdrawn)
         }
     }
 
-    private func tile(_ label: String, _ value: Int, _ icon: String, _ hint: String) -> some View {
+    private func tile(_ label: String, _ value: Int, _ icon: String, _ hint: String, _ shareId: String) -> some View {
         Button {
             Haptics.tap()
             open()
@@ -268,6 +271,7 @@ struct HomeStatTiles: View {
         .accessibilityLabel("\(label): \(value). \(hint)")
         .accessibilityHint("Opens People")
         .accessibilityAddTraits(.isButton)
+        .shareStatMenu(cornerRadius: 22) { onShare(shareId) }
     }
 }
 
@@ -326,6 +330,7 @@ struct HomeAttentionCard: View {
 
 struct HomeContextsCard: View {
     let rows: [ContextProgress]
+    let onShare: (String) -> Void
 
     var body: some View {
         DashCard(title: "Scan Points") {
@@ -361,6 +366,7 @@ struct HomeContextsCard: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(row.context.name)\(row.active ? ", happening now" : "")")
                     .accessibilityValue("\(row.count) of \(row.total)")
+                    .shareStatMenu(cornerRadius: 14) { onShare(ShareStats.context(row.context.id)) }
                 }
             }
         }
@@ -372,15 +378,16 @@ struct HomeContextsCard: View {
 struct HomeArrivalsCard: View {
     let summary: ArrivalsSummary
     let tz: String?
+    let onShare: (String) -> Void
     /// nil when the Travel tab isn't available.
     let onOpen: (() -> Void)?
 
     var body: some View {
         DashCard(title: "Arrivals", actionTitle: onOpen == nil ? nil : "Travel", action: onOpen) {
             HStack(spacing: 8) {
-                mini("To collect", summary.awaitingPickup, .warning)
-                mini("Picked up", summary.collected, .success)
-                mini("Checked in", summary.checkedIn, .info)
+                mini("To collect", summary.awaitingPickup, .warning, ShareStats.toCollect)
+                mini("Picked up", summary.collected, .success, ShareStats.pickedUp)
+                mini("Checked in", summary.checkedIn, .info, ShareStats.arrived)
             }
             if !summary.next.isEmpty {
                 Text("Next to Collect")
@@ -404,7 +411,7 @@ struct HomeArrivalsCard: View {
         }
     }
 
-    private func mini(_ label: String, _ value: Int, _ tone: Tone) -> some View {
+    private func mini(_ label: String, _ value: Int, _ tone: Tone, _ shareId: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             DashNumber(value: value).font(.stat(24))
             Text(label).font(.caption.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
@@ -415,6 +422,7 @@ struct HomeArrivalsCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tone.container, in: .rect(cornerRadius: 14, style: .continuous))
         .accessibilityElement(children: .combine)
+        .shareStatMenu(cornerRadius: 14) { onShare(shareId) }
     }
 
     private func row(_ e: TravelEntry) -> some View {
@@ -531,6 +539,7 @@ struct HomeLimitedAccessCard: View {
 /// Today's scan count for roles without roster access.
 struct HomeScansHeroCard: View {
     let feed: ScanFeedSummary
+    let onShare: () -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var numberSize: CGFloat = 56
     @ScaledMetric(relativeTo: .largeTitle) private var badgeSize: CGFloat = 96
 
@@ -565,6 +574,7 @@ struct HomeScansHeroCard: View {
         .dashCardBackground()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(feed.today)\(feed.capped ? " or more" : "") scans today, \(feed.uniquePeopleToday) people")
+        .shareStatMenu(cornerRadius: 22, onShare)
     }
 }
 

@@ -10,6 +10,8 @@
 	<false/>
 	<key>NFCReaderUsageDescription</key>
 	<string>Attend reads NFC badges to check people in, and writes new badges.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Attend saves stat cards you create to your photo library.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Attend uses the camera to scan ticket QR codes.</string>
 	<key>CFBundleURLTypes</key>
