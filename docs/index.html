@@ -147,16 +147,28 @@
       box-shadow: 0 24px 48px -16px rgba(40, 0, 10, .35);
     }
     .screen { position: relative; border-radius: 34px; overflow: hidden; background: var(--surface); }
+    /* Android status bar and gesture handle, sized in dp of a 411dp-wide phone so they scale with the frame. */
+    .screen { container-type: inline-size; }
     .status {
-      display: flex; align-items: center; justify-content: space-between; padding: 10px 20px 2px;
-      font: 600 12px/1 var(--font); font-variant-numeric: tabular-nums; color: var(--on-surface);
+      --dp: calc(100cqw / 411);
+      position: relative; display: flex; align-items: center; justify-content: space-between;
+      height: calc(40 * var(--dp)); padding-inline: calc(26 * var(--dp)) calc(24 * var(--dp));
+      color: var(--on-surface); font: 500 calc(14 * var(--dp)) / 1 var(--font); letter-spacing: .01em;
+      font-variant-numeric: tabular-nums; font-variation-settings: "ROND" 0, "opsz" 14;
     }
-    .status .cam { width: 10px; height: 10px; border-radius: 50%; background: var(--bezel); }
-    .status svg { height: 11px; width: auto; fill: currentColor; }
-    .status .sys { display: flex; gap: 5px; align-items: center; }
+    .status .cam {
+      position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+      width: calc(22 * var(--dp)); height: calc(22 * var(--dp)); border-radius: 50%;
+      background: radial-gradient(circle at 50% 50%, #1d2230 0 22%, #07080b 32% 100%);
+      box-shadow: 0 0 0 calc(1 * var(--dp)) rgba(0, 0, 0, .9);
+    }
+    .status .sys { display: flex; align-items: center; gap: calc(5 * var(--dp)); }
+    .status svg { display: block; height: calc(14 * var(--dp)); width: auto; fill: currentColor; }
+    .status svg.battery { height: calc(12 * var(--dp)); }
     .screen::after {
-      content: ""; position: absolute; left: 50%; bottom: 7px; width: 34%; height: 4px; translate: -50% 0;
-      border-radius: 4px; background: var(--on-surface); opacity: .5;
+      content: ""; position: absolute; left: 50%; bottom: calc(100cqw / 411 * 7); translate: -50% 0;
+      width: calc(100cqw / 411 * 108); height: calc(100cqw / 411 * 4); border-radius: 99px;
+      background: var(--on-surface); opacity: .55;
     }
 
     /* Sections */
@@ -264,7 +276,7 @@
         <div class="hero-art">
           <div class="phone">
             <div class="screen">
-              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x=".6" y=".6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 24 18"><path d="M12 17.6.2 4.5C3.5 1.7 7.6 0 12 0s8.5 1.7 11.8 4.5Z"/></svg><svg viewBox="0 0 18 18"><path d="M1 17.2 16.6 1.6c.5-.5 1.4-.1 1.4.6V17a1 1 0 0 1-1 1H1.6c-.7 0-1-.5-.6-.8Z"/></svg><svg class="battery" viewBox="0 0 27 13"><defs><clipPath id="bc"><rect width="24" height="13" rx="4"/></clipPath></defs><rect width="24" height="13" rx="4" opacity=".35"/><rect width="18.5" height="13" clip-path="url(#bc)"/><rect x="25" y="4" width="2" height="5" rx="1" opacity=".35"/></svg></span></div>
               <picture><source srcset="screenshots/home-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/home-light.png" alt="The Home screen for Campfire Canberra: 84 of 120 people checked in" width="540" height="1171"></picture>
             </div>
           </div>
@@ -285,7 +297,7 @@
           </div>
           <div class="pane-art">
             <div class="phone"><div class="screen">
-              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x=".6" y=".6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 24 18"><path d="M12 17.6.2 4.5C3.5 1.7 7.6 0 12 0s8.5 1.7 11.8 4.5Z"/></svg><svg viewBox="0 0 18 18"><path d="M1 17.2 16.6 1.6c.5-.5 1.4-.1 1.4.6V17a1 1 0 0 1-1 1H1.6c-.7 0-1-.5-.6-.8Z"/></svg><svg class="battery" viewBox="0 0 27 13"><defs><clipPath id="bc"><rect width="24" height="13" rx="4"/></clipPath></defs><rect width="24" height="13" rx="4" opacity=".35"/><rect width="18.5" height="13" clip-path="url(#bc)"/><rect x="25" y="4" width="2" height="5" rx="1" opacity=".35"/></svg></span></div>
               <picture><source srcset="screenshots/scan-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/scan-light.png" alt="Scanner with Maya Chen checked in at the check-in desk" loading="lazy" width="540" height="1171"></picture>
             </div></div>
           </div>
@@ -301,11 +313,11 @@
           </div>
           <div class="pane-art two">
             <div class="phone"><div class="screen">
-              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x=".6" y=".6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 24 18"><path d="M12 17.6.2 4.5C3.5 1.7 7.6 0 12 0s8.5 1.7 11.8 4.5Z"/></svg><svg viewBox="0 0 18 18"><path d="M1 17.2 16.6 1.6c.5-.5 1.4-.1 1.4.6V17a1 1 0 0 1-1 1H1.6c-.7 0-1-.5-.6-.8Z"/></svg><svg class="battery" viewBox="0 0 27 13"><defs><clipPath id="bc"><rect width="24" height="13" rx="4"/></clipPath></defs><rect width="24" height="13" rx="4" opacity=".35"/><rect width="18.5" height="13" clip-path="url(#bc)"/><rect x="25" y="4" width="2" height="5" rx="1" opacity=".35"/></svg></span></div>
               <picture><source srcset="screenshots/people-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/people-light.png" alt="People list for Campfire Canberra, 7 of 10 here" loading="lazy" width="540" height="1171"></picture>
             </div></div>
             <div class="phone"><div class="screen">
-              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x=".6" y=".6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 24 18"><path d="M12 17.6.2 4.5C3.5 1.7 7.6 0 12 0s8.5 1.7 11.8 4.5Z"/></svg><svg viewBox="0 0 18 18"><path d="M1 17.2 16.6 1.6c.5-.5 1.4-.1 1.4.6V17a1 1 0 0 1-1 1H1.6c-.7 0-1-.5-.6-.8Z"/></svg><svg class="battery" viewBox="0 0 27 13"><defs><clipPath id="bc"><rect width="24" height="13" rx="4"/></clipPath></defs><rect width="24" height="13" rx="4" opacity=".35"/><rect width="18.5" height="13" clip-path="url(#bc)"/><rect x="25" y="4" width="2" height="5" rx="1" opacity=".35"/></svg></span></div>
               <picture><source srcset="screenshots/participant-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/participant-light.png" alt="Maya's profile with her safety alerts first" loading="lazy" width="540" height="1171"></picture>
             </div></div>
           </div>
@@ -320,7 +332,7 @@
           </div>
           <div class="pane-art">
             <div class="phone"><div class="screen">
-              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x=".6" y=".6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 24 18"><path d="M12 17.6.2 4.5C3.5 1.7 7.6 0 12 0s8.5 1.7 11.8 4.5Z"/></svg><svg viewBox="0 0 18 18"><path d="M1 17.2 16.6 1.6c.5-.5 1.4-.1 1.4.6V17a1 1 0 0 1-1 1H1.6c-.7 0-1-.5-.6-.8Z"/></svg><svg class="battery" viewBox="0 0 27 13"><defs><clipPath id="bc"><rect width="24" height="13" rx="4"/></clipPath></defs><rect width="24" height="13" rx="4" opacity=".35"/><rect width="18.5" height="13" clip-path="url(#bc)"/><rect x="25" y="4" width="2" height="5" rx="1" opacity=".35"/></svg></span></div>
               <picture><source srcset="screenshots/travel-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/travel-light.png" alt="Flights and trains arriving in Canberra, with pickup status" loading="lazy" width="540" height="1171"></picture>
             </div></div>
           </div>
@@ -336,7 +348,7 @@
           </div>
           <div class="pane-art">
             <div class="phone"><div class="screen">
-              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x=".6" y=".6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <div class="status" aria-hidden="true"><span>11:30</span><span class="cam"></span><span class="sys"><svg viewBox="0 0 24 18"><path d="M12 17.6.2 4.5C3.5 1.7 7.6 0 12 0s8.5 1.7 11.8 4.5Z"/></svg><svg viewBox="0 0 18 18"><path d="M1 17.2 16.6 1.6c.5-.5 1.4-.1 1.4.6V17a1 1 0 0 1-1 1H1.6c-.7 0-1-.5-.6-.8Z"/></svg><svg class="battery" viewBox="0 0 27 13"><defs><clipPath id="bc"><rect width="24" height="13" rx="4"/></clipPath></defs><rect width="24" height="13" rx="4" opacity=".35"/><rect width="18.5" height="13" clip-path="url(#bc)"/><rect x="25" y="4" width="2" height="5" rx="1" opacity=".35"/></svg></span></div>
               <picture><source srcset="screenshots/ticket-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/ticket-light.png" alt="Attendee pass for Campfire Canberra with a QR code" loading="lazy" width="540" height="1171"></picture>
             </div></div>
           </div>
