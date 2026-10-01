@@ -15,12 +15,14 @@ struct LoginView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("HACK CLUB")
+                    Text("FOR HACK CLUB ATTEND")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.tint)
                         .tracking(1.5)
-                    Text("Attend")
+                    Text("BetterAttend")
                         .font(.system(size: 56, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                     Text("Check people in, keep track of who's here, and carry your event pass — all in one place.")
                         .font(.title3)
                         .foregroundStyle(.secondary)

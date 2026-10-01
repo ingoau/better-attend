@@ -411,10 +411,10 @@ struct CameraPermissionPanel: View {
     private var message: String {
         switch access {
         case .notDetermined:
-            "Attend uses the camera to read ticket QR codes. Nothing is recorded."
+            "BetterAttend uses the camera to read ticket QR codes. Nothing is recorded."
         case .denied:
-            alternatives ? "Turn on Camera for Attend in Settings to scan tickets. You can still find people by name."
-                : "Turn on Camera for Attend in Settings, then start kiosk mode again."
+            alternatives ? "Turn on Camera for BetterAttend in Settings to scan tickets. You can still find people by name."
+                : "Turn on Camera for BetterAttend in Settings, then start kiosk mode again."
         case .unavailable, .granted:
             alternatives ? "This device doesn't have a camera. Find people by name, paste a ticket ID, or scan NFC badges."
                 : "This device doesn't have a camera, so it can't be used as a kiosk."

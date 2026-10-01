@@ -376,7 +376,7 @@ private fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit)
 }
 
 /** Saved cards go in Pictures/<this>. */
-private const val SAVE_FOLDER = "Better Attend"
+private const val SAVE_FOLDER = "BetterAttend"
 
 /** "Campfire Sydney 2026-10-03 1130.png", in the event's timezone, without characters file systems reject. */
 internal fun shareFileName(event: Event, now: Instant): String {

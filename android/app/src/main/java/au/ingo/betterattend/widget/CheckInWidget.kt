@@ -65,8 +65,8 @@ fun CheckInContent(snap: WidgetSnapshot, now: Instant) {
         val org = snap.organizer
         when {
             !snap.signedIn -> SignedOutMessage(compact)
-            org == null -> WidgetMessage(R.drawable.ic_widget_event, "No event selected", "Open Attend to choose one", compact)
-            !org.hasCounts -> WidgetMessage(R.drawable.ic_widget_groups, org.eventName, "Open Attend to sync check-ins", compact)
+            org == null -> WidgetMessage(R.drawable.ic_widget_event, "No event selected", "Open BetterAttend to choose one", compact)
+            !org.hasCounts -> WidgetMessage(R.drawable.ic_widget_groups, org.eventName, "Open BetterAttend to sync check-ins", compact)
             org.expected == 0 -> WidgetMessage(R.drawable.ic_widget_groups, org.eventName, "No participants yet", compact)
             else -> CheckInCounts(org, now, compact, large, size.height.value)
         }

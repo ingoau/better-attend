@@ -1,6 +1,7 @@
-# Attend for Android and iOS — a better Hack Club Attend app
+# BetterAttend — a better Hack Club Attend app for Android and iOS
 
-Native rewrites of Hack Club's [Attend](https://attend.hackclub.com) mobile app
+BetterAttend is an unofficial app, not made by Hack Club: native rewrites of Hack Club's
+[Attend](https://attend.hackclub.com) mobile app
 ([Play Store](https://play.google.com/store/apps/details?id=com.hackclub.attend)):
 
 - **[`android/`](android)** — Kotlin, Jetpack Compose and **Material 3 Expressive**.
@@ -10,7 +11,7 @@ Native rewrites of Hack Club's [Attend](https://attend.hackclub.com) mobile app
 
 Both talk to the same backend ([hackclub/attend](https://github.com/hackclub/attend)) and sign in
 with the same Hack Club OAuth client as the official app, so any existing Attend account works.
-They install **alongside** the official app (`au.ingo.betterattend`).
+They show up as **BetterAttend** and install **alongside** the official app (`au.ingo.betterattend`).
 
 ## What's in it
 
@@ -80,7 +81,7 @@ scan sheet (tap "Scan NFC Badge"), as iOS doesn't allow always-on background tag
 ## Android: Install
 
 Download an APK from the [latest release](https://github.com/ingoau/better-attend/releases/latest) —
-`Attend-<version>-arm64-v8a.apk` fits almost every phone, `Attend-<version>-universal.apk` runs
+`BetterAttend-<version>-arm64-v8a.apk` fits almost every phone, `BetterAttend-<version>-universal.apk` runs
 everywhere — then open it on your phone and allow installing from that source. Android 8.0+.
 Builds of unreleased changes are under **Actions → Android → attend-apk**.
 

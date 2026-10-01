@@ -8,7 +8,7 @@ import WidgetKit
 /// runs and in background refresh.)
 struct RefreshWidgetsIntent: AppIntent {
     static let title: LocalizedStringResource = "Refresh Widgets"
-    static let description = IntentDescription("Reloads Attend's widgets from the latest synced data.")
+    static let description = IntentDescription("Reloads BetterAttend's widgets from the latest synced data.")
     static let isDiscoverable = false
 
     init() {}
@@ -23,7 +23,7 @@ struct RefreshWidgetsIntent: AppIntent {
 /// Lock Screen control can run it; the system opens the app and follows the deep link.
 struct OpenScannerIntent: AppIntent {
     static let title: LocalizedStringResource = "Scan Tickets"
-    static let description = IntentDescription("Opens the Attend scanner with the camera ready.")
+    static let description = IntentDescription("Opens the BetterAttend scanner with the camera ready.")
     static let openAppWhenRun = true
     // The discoverable "Scan tickets" shortcut is `ScanTicketsIntent` in the app.
     static let isDiscoverable = false

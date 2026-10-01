@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import au.ingo.betterattend.ui.components.MaterialShapesClover
 import au.ingo.betterattend.ui.components.MaterialShapesCookie
 import au.ingo.betterattend.ui.components.MaterialShapesSoftBurst
@@ -61,8 +63,14 @@ fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
                 Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Badge, null, tint = Color.White, modifier = Modifier.size(40.dp)) }
             }
             Spacer(Modifier.height(24.dp))
-            Text("HACK CLUB", style = MaterialTheme.typography.labelLarge, color = cs.primary)
-            Text("Attend", style = MaterialTheme.typography.displayLarge, color = cs.onSurface)
+            Text("FOR HACK CLUB ATTEND", style = MaterialTheme.typography.labelLarge, color = cs.primary)
+            Text(
+                "BetterAttend",
+                style = MaterialTheme.typography.displayLarge,
+                color = cs.onSurface,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 32.sp, maxFontSize = MaterialTheme.typography.displayLarge.fontSize),
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 "Check people in, keep track of who's here, and carry your event pass — all in one place.",

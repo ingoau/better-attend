@@ -198,7 +198,7 @@ struct SettingsView: View {
         Section {
             SettingsLabel(
                 "Widgets & Controls",
-                subtitle: "Touch and hold your Home Screen or Lock Screen, tap Edit, then Add Widget and choose Attend. Controls for scanning live in Control Center.",
+                subtitle: "Touch and hold your Home Screen or Lock Screen, tap Edit, then Add Widget and choose BetterAttend. Controls for scanning live in Control Center.",
                 systemImage: "square.grid.2x2.fill", color: HackClub.cyan
             )
             .padding(.vertical, 2)
@@ -221,7 +221,7 @@ struct SettingsView: View {
             LabeledContent {
                 Text(Self.version)
             } label: {
-                SettingsLabel("Better Attend", systemImage: "info.circle.fill", color: HackClub.blue)
+                SettingsLabel("BetterAttend", systemImage: "info.circle.fill", color: HackClub.blue)
             }
             SettingsLinkRow(title: "Hack Club Attend", subtitle: "attend.hackclub.com", systemImage: "globe",
                     color: HackClub.red, url: SettingsLinks.attend)

@@ -6,7 +6,7 @@ import AppIntents
 
 struct ScanTicketsIntent: AppIntent {
     static let title: LocalizedStringResource = "Scan Tickets"
-    static let description = IntentDescription("Opens the Attend scanner with the camera ready.")
+    static let description = IntentDescription("Opens the BetterAttend scanner with the camera ready.")
     static let openAppWhenRun = true
 
     @MainActor
@@ -18,7 +18,7 @@ struct ScanTicketsIntent: AppIntent {
 
 struct FindPersonIntent: AppIntent {
     static let title: LocalizedStringResource = "Find a Person"
-    static let description = IntentDescription("Opens People in Attend to search your event's participants.")
+    static let description = IntentDescription("Opens People in BetterAttend to search your event's participants.")
     static let openAppWhenRun = true
 
     @MainActor

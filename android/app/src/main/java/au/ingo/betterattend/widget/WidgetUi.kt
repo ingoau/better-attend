@@ -139,7 +139,7 @@ fun WidgetMessage(@DrawableRes icon: Int, title: String, body: String? = null, c
 
 @Composable
 fun SignedOutMessage(compact: Boolean) =
-    WidgetMessage(R.drawable.ic_widget_login, "Sign in to Attend", "Tap to open the app", compact)
+    WidgetMessage(R.drawable.ic_widget_login, "Sign in to BetterAttend", "Tap to open the app", compact)
 
 /** Rounded corners where supported (Android 12+); square elsewhere. */
 fun GlanceModifier.cornerRadiusCompat(radius: Dp): GlanceModifier =

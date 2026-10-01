@@ -197,7 +197,7 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             item {
                 Segment(0, 2) {
                     ListItem(
-                        headlineContent = { Text("Better Attend") },
+                        headlineContent = { Text("BetterAttend") },
                         supportingContent = { Text("Version ${state.versionName}") },
                         leadingContent = { Icon(Icons.Outlined.Info, null) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),

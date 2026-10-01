@@ -148,7 +148,7 @@ final class AuthStore {
     }
 
     private static var deviceName: String {
-        "\(UIDevice.current.model) (Better Attend)"
+        "\(UIDevice.current.model) (BetterAttend)"
     }
 
     private static func randomURLSafe(_ bytes: Int) -> String {

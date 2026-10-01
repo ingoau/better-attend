@@ -279,7 +279,7 @@ fun CameraPermissionPanel(
                     Icon(if (blocked) Icons.Outlined.NoPhotography else Icons.Outlined.PhotoCamera, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 Spacer(Modifier.height(16.dp))
-                Text(if (blocked) "Camera is turned off for Attend" else "Let Attend use the camera",
+                Text(if (blocked) "Camera is turned off for BetterAttend" else "Let BetterAttend use the camera",
                     style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 Text(

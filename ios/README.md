@@ -1,4 +1,4 @@
-# Attend for iOS
+# BetterAttend for iOS
 
 A native SwiftUI port of the Android app in [`../android`](../android). It talks to the same
 backend (`https://attend.hackclub.com/api/v1`) and signs in with the same Hack Club OAuth client

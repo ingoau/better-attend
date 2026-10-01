@@ -69,7 +69,7 @@ struct ScanControl: ControlWidget {
             }
         }
         .displayName("Scan Tickets")
-        .description("Opens the Attend scanner with the camera ready.")
+        .description("Opens the BetterAttend scanner with the camera ready.")
     }
 }
 

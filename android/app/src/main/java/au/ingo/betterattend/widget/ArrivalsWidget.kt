@@ -64,9 +64,9 @@ fun ArrivalsContent(snap: WidgetSnapshot, now: Instant) {
         val travel = org?.travel
         when {
             !snap.signedIn -> SignedOutMessage(compact)
-            org == null -> WidgetMessage(R.drawable.ic_widget_event, "No event selected", "Open Attend to choose one", compact)
+            org == null -> WidgetMessage(R.drawable.ic_widget_event, "No event selected", "Open BetterAttend to choose one", compact)
             !org.travelEnabled -> WidgetMessage(R.drawable.ic_widget_flight_land, "No travel for ${org.eventName}", "Arrivals appear for events with travel", compact)
-            travel == null -> WidgetMessage(R.drawable.ic_widget_flight_land, "Arrivals", "Open Attend to load travel", compact)
+            travel == null -> WidgetMessage(R.drawable.ic_widget_flight_land, "Arrivals", "Open BetterAttend to load travel", compact)
             else -> ArrivalCounts(org.eventName, org.timezone, travel, now, compact)
         }
     }

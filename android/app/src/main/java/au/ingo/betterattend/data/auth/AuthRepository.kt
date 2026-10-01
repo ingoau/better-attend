@@ -183,7 +183,7 @@ class AuthRepository(
         _state.value = AuthState.SignedOut()
     }
 
-    private fun deviceName(): String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL} (Better Attend)"
+    private fun deviceName(): String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL} (BetterAttend)"
 
     private fun randomUrlSafe(bytes: Int): String {
         val b = ByteArray(bytes).also { SecureRandom().nextBytes(it) }

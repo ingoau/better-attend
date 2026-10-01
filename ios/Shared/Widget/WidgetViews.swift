@@ -39,14 +39,14 @@ struct CheckInWidgetView: View {
             WidgetMessage.signedOut(family)
         } else if let org = snapshot.organizer {
             if !org.hasCounts {
-                WidgetMessage(icon: "person.2.fill", title: org.eventName, message: "Open Attend to sync check-ins", family: family)
+                WidgetMessage(icon: "person.2.fill", title: org.eventName, message: "Open BetterAttend to sync check-ins", family: family)
             } else if org.expected == 0 {
                 WidgetMessage(icon: "person.2.fill", title: org.eventName, message: "No participants yet", family: family)
             } else {
                 counts(org)
             }
         } else {
-            WidgetMessage(icon: "calendar", title: "No event selected", message: "Open Attend to choose one", family: family)
+            WidgetMessage(icon: "calendar", title: "No event selected", message: "Open BetterAttend to choose one", family: family)
         }
     }
 
@@ -314,10 +314,10 @@ struct ArrivalsWidgetView: View {
                     ArrivalsMedium(eventName: org.eventName, travel: travel, timezone: org.timezone, now: now)
                 }
             } else {
-                WidgetMessage(icon: "airplane.arrival", title: "Arrivals", message: "Open Attend to load travel", family: family)
+                WidgetMessage(icon: "airplane.arrival", title: "Arrivals", message: "Open BetterAttend to load travel", family: family)
             }
         } else {
-            WidgetMessage(icon: "calendar", title: "No event selected", message: "Open Attend to choose one", family: family)
+            WidgetMessage(icon: "calendar", title: "No event selected", message: "Open BetterAttend to choose one", family: family)
         }
     }
 }
@@ -773,7 +773,7 @@ struct WidgetMessage: View {
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     static func signedOut(_ family: WidgetFamily) -> WidgetMessage {
-        WidgetMessage(icon: "person.crop.circle", title: "Sign in to Attend", message: "Tap to open the app", family: family)
+        WidgetMessage(icon: "person.crop.circle", title: "Sign in to BetterAttend", message: "Tap to open the app", family: family)
     }
 
     var body: some View {

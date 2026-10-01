@@ -69,7 +69,7 @@ jobs:
           mkdir -p dist
           for f in app/build/outputs/apk/release/app-*-release.apk; do
             abi=${f##*/app-}
-            cp "$f" "dist/Attend-${{ needs.version.outputs.name }}-${abi%-release.apk}.apk"
+            cp "$f" "dist/BetterAttend-${{ needs.version.outputs.name }}-${abi%-release.apk}.apk"
           done
           ls dist
       - uses: actions/upload-artifact@v4
@@ -102,7 +102,7 @@ jobs:
         run: |
           mkdir -p dist/Payload
           cp -R build/Attend.xcarchive/Products/Applications/Attend.app dist/Payload/
-          cd dist && zip -qry "Attend-${{ needs.version.outputs.name }}-unsigned.ipa" Payload
+          cd dist && zip -qry "BetterAttend-${{ needs.version.outputs.name }}-unsigned.ipa" Payload
       - uses: actions/upload-artifact@v4
         with:
           name: ios
@@ -120,10 +120,10 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          name: Attend ${{ needs.version.outputs.name }}
+          name: BetterAttend ${{ needs.version.outputs.name }}
           files: dist/*
           generate_release_notes: true
           body: |
-            **Android:** most phones want `Attend-${{ needs.version.outputs.name }}-arm64-v8a.apk`; `-universal.apk` runs on everything.
+            **Android:** most phones want `BetterAttend-${{ needs.version.outputs.name }}-arm64-v8a.apk`; `-universal.apk` runs on everything.
 
-            **iOS:** `Attend-${{ needs.version.outputs.name }}-unsigned.ipa` installs with [AltStore](https://altstore.io) or [SideStore](https://sidestore.io), which sign it with your own Apple ID. With a free Apple ID the app needs refreshing every 7 days (the tool does this for you), and widgets and NFC may not work.
+            **iOS:** `BetterAttend-${{ needs.version.outputs.name }}-unsigned.ipa` installs with [AltStore](https://altstore.io) or [SideStore](https://sidestore.io), which sign it with your own Apple ID. With a free Apple ID the app needs refreshing every 7 days (the tool does this for you), and widgets and NFC may not work.

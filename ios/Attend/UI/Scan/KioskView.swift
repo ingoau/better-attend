@@ -352,10 +352,10 @@ private struct GuidedAccessTip: View {
                 .foregroundStyle(enabled ? Tone.success.color : Tone.info.color)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 4) {
-                Text(enabled ? "Guided Access is on" : "Lock this device to Attend")
+                Text(enabled ? "Guided Access is on" : "Lock this device to BetterAttend")
                     .font(.subheadline.weight(.semibold))
                 Text(enabled
-                    ? "This device stays in Attend until Guided Access is ended."
+                    ? "This device stays in BetterAttend until Guided Access is ended."
                     : "After starting, triple-click the side button (or Home button) to turn on Guided Access, so attendees can't leave the app. Set it up in Settings › Accessibility › Guided Access.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

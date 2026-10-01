@@ -17,5 +17,5 @@
     <string name="shortcut_people_long">Find a participant</string>
     <string name="shortcut_tickets_short">My tickets</string>
     <string name="shortcut_tickets_long">Show my ticket</string>
-    <string name="shortcut_disabled">Sign in to Attend first</string>
+    <string name="shortcut_disabled">Sign in to BetterAttend first</string>
 </resources>
