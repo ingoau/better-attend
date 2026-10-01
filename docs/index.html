@@ -165,6 +165,7 @@
     .status > :first-child { padding-top: calc(5 * var(--dp)); } /* digits sit high in their line box */
     .status .sys { display: flex; align-items: center; gap: calc(5 * var(--dp)); }
     .status .sys .icon { font-size: calc(16 * var(--dp)); }
+    .status .sys .icon:first-child { margin-right: calc(3 * var(--dp)); }
     .screen::after {
       content: ""; position: absolute; left: 50%; bottom: calc(100cqw / 411 * 7); translate: -50% 0;
       width: calc(100cqw / 411 * 108); height: calc(100cqw / 411 * 4); border-radius: 99px;
