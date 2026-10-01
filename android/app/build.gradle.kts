@@ -22,8 +22,9 @@ android {
         applicationId = "au.ingo.betterattend"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0"
+        // The release workflow passes these in from the git tag; local builds use the defaults.
+        versionCode = providers.gradleProperty("versionCode").orNull?.toInt() ?: 3
+        versionName = providers.gradleProperty("versionName").orNull ?: "1.2.0"
         buildConfigField("String", "API_BASE_URL", "\"https://attend.hackclub.com\"")
         buildConfigField("String", "OAUTH_CLIENT_ID", "\"aaa422633e9a7df85892eb2ba84f02d9\"")
         buildConfigField("String", "OAUTH_REDIRECT_URI", "\"attend://oauth/callback\"")
