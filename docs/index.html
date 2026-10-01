@@ -155,15 +155,16 @@
     .status {
       --dp: calc(100cqw / 411);
       position: relative; display: flex; align-items: center; justify-content: space-between;
-      height: calc(40 * var(--dp)); padding-inline: calc(24 * var(--dp));
+      height: calc(52 * var(--dp)); padding: calc(4 * var(--dp)) calc(36 * var(--dp)) 0;
       color: var(--status-ink); font: 500 calc(14 * var(--dp)) / 1 Roboto, system-ui, sans-serif;
     }
     .status .cam {
-      position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+      position: absolute; left: 50%; top: calc(50% + 2 * var(--dp)); translate: -50% -50%;
       width: calc(18 * var(--dp)); height: calc(18 * var(--dp)); border-radius: 50%; background: #000;
     }
-    .status .sys { display: flex; align-items: center; gap: calc(2 * var(--dp)); }
-    .status .sys .icon { font-size: calc(17 * var(--dp)); }
+    .status > :first-child { padding-top: calc(5 * var(--dp)); } /* digits sit high in their line box */
+    .status .sys { display: flex; align-items: center; gap: calc(5 * var(--dp)); }
+    .status .sys .icon { font-size: calc(16 * var(--dp)); }
     .screen::after {
       content: ""; position: absolute; left: 50%; bottom: calc(100cqw / 411 * 7); translate: -50% 0;
       width: calc(100cqw / 411 * 108); height: calc(100cqw / 411 * 4); border-radius: 99px;
