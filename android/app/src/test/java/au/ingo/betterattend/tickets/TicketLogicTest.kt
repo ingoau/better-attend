@@ -11,7 +11,7 @@ import java.time.Duration
 import java.time.Instant
 
 class TicketLogicTest {
-    // Campfire Sydney: 2026-10-02T22:00Z (Sat 3 Oct 8:00 AM Sydney) → 2026-10-04T06:00Z
+    // Campfire Canberra: 2026-10-02T22:00Z (Sat 3 Oct 8:00 AM Canberra) → 2026-10-04T06:00Z
     private val event = SampleData.ticketEvent
 
     @Test fun clockFormats() {
@@ -28,11 +28,11 @@ class TicketLogicTest {
     }
 
     @Test fun relativeLabelUsesEventTimezoneDays() {
-        // 30 Sep 11:30 Sydney → 3 Oct is 3 calendar days away.
+        // 30 Sep 11:30 Canberra → 3 Oct is 3 calendar days away.
         assertEquals("in 3 days", TicketLogic.relativeLabel(event, Instant.parse("2026-09-30T01:30:00Z")))
-        // 2 Oct 10:00 Sydney → tomorrow.
+        // 2 Oct 10:00 Canberra → tomorrow.
         assertTrue(TicketLogic.relativeLabel(event, Instant.parse("2026-10-02T00:00:00Z")).startsWith("Tomorrow · "))
-        // 3 Oct 00:30 Sydney (still 2 Oct in UTC) → today, doors 8:00.
+        // 3 Oct 00:30 Canberra (still 2 Oct in UTC) → today, doors 8:00.
         assertTrue(TicketLogic.relativeLabel(event, Instant.parse("2026-10-02T14:30:00Z")).startsWith("Today · doors "))
         assertEquals("Starts in 30 min", TicketLogic.relativeLabel(event, Instant.parse("2026-10-02T21:30:00Z")))
         assertEquals("Happening now", TicketLogic.relativeLabel(event, Instant.parse("2026-10-03T01:00:00Z")))
@@ -83,9 +83,9 @@ class TicketLogicTest {
     }
 
     @Test fun directions() {
-        assertEquals("geo:-33.8688,151.2093?q=-33.8688,151.2093(Campfire%20Sydney)", TicketLogic.geoUri(event))
-        val noCoords = TicketEvent(id = "x", name = "X", locationAddress = "1 Example St", locationCity = "Sydney")
-        assertEquals("geo:0,0?q=1%20Example%20St%2C%20Sydney", TicketLogic.geoUri(noCoords))
+        assertEquals("geo:-35.2785,149.13?q=-35.2785,149.13(Campfire%20Canberra)", TicketLogic.geoUri(event))
+        val noCoords = TicketEvent(id = "x", name = "X", locationAddress = "1 Example St", locationCity = "Canberra")
+        assertEquals("geo:0,0?q=1%20Example%20St%2C%20Canberra", TicketLogic.geoUri(noCoords))
         assertNull(TicketLogic.geoUri(TicketEvent(id = "y", name = "Y")))
         assertEquals("Venue to be announced" to null, TicketLogic.venueLines(TicketEvent(id = "y", name = "Y")))
         assertTrue(TicketLogic.webDirectionsUrl(noCoords)!!.startsWith("https://www.google.com/maps/dir/?api=1&destination="))

@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
 class KioskScreenshots : ScreenshotTest() {
-    private val base = KioskUiState(eventName = "Campfire Sydney", contextName = "Check-in desk", contextIcon = Icons.AutoMirrored.Outlined.Login, nfcReady = true)
+    private val base = KioskUiState(eventName = "Campfire Canberra", contextName = "Check-in desk", contextIcon = Icons.AutoMirrored.Outlined.Login, nfcReady = true)
     private val maya = SampleData.participants[2]
 
     @Composable
@@ -51,7 +51,7 @@ class KioskScreenshots : ScreenshotTest() {
     @Test fun permission() = snap("kiosk_permission") { Kiosk(base.copy(camera = CameraAccess.NeedsRequest)) }
 
     @Test fun setup() = snap("kiosk_setup") {
-        KioskSetupContent("Campfire Sydney", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = true, entered = 2, error = null, onDigit = {}, onBackspace = {}, onCancel = {})
+        KioskSetupContent("Campfire Canberra", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = true, entered = 2, error = null, onDigit = {}, onBackspace = {}, onCancel = {})
     }
 
     @Test fun exitLocked() = snap("kiosk_exit_locked") {

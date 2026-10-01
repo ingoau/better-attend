@@ -378,7 +378,7 @@ private fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit)
 /** Saved cards go in Pictures/<this>. */
 private const val SAVE_FOLDER = "BetterAttend"
 
-/** "Campfire Sydney 2026-10-03 1130.png", in the event's timezone, without characters file systems reject. */
+/** "Campfire Canberra 2026-10-03 1130.png", in the event's timezone, without characters file systems reject. */
 internal fun shareFileName(event: Event, now: Instant): String {
     val at = now.atZone(Time.zone(event.timezone))
     val stamp = "%04d-%02d-%02d %02d%02d".format(at.year, at.monthValue, at.dayOfMonth, at.hour, at.minute)

@@ -73,8 +73,8 @@ class ShareStatsTest {
     }
 
     @Test fun savedFileNameIsSafeAndLocal() {
-        // 01:30 UTC is 11:30 in Sydney.
-        assertEquals("Campfire Sydney 2026-10-03 1130.png", shareFileName(event, now))
+        // 01:30 UTC is 11:30 in Canberra.
+        assertEquals("Campfire Canberra 2026-10-03 1130.png", shareFileName(event, now))
         assertEquals("A B C 2026-10-03 1130.png", shareFileName(event.copy(name = "A/B: C?"), now))
     }
 }

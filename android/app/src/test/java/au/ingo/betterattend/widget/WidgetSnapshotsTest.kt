@@ -34,7 +34,7 @@ class WidgetSnapshotsTest {
     @Test fun organizerCountsMatchEventStats() {
         val org = build().organizer!!
         val stats = EventStats.from(SampleData.participants, now)
-        assertEquals("Campfire Sydney", org.eventName)
+        assertEquals("Campfire Canberra", org.eventName)
         assertTrue(org.hasCounts)
         assertEquals(stats.checkedIn, org.checkedIn)
         assertEquals(maxOf(stats.confirmed, stats.checkedIn), org.expected)

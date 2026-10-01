@@ -49,10 +49,10 @@ class TravelLogicTest {
     }
 
     @Test fun searchMatchesAllTermsAcrossFields() {
-        assertEquals(listOf("tr0"), TravelLogic.filter(entries, "qf401", TravelFilter.All, null).map { it.id })
-        assertEquals(listOf("tr2", "tr8"), TravelLogic.filter(entries, "akl", TravelFilter.All, null).map { it.id }.sorted())
-        assertEquals(listOf("tr2"), TravelLogic.filter(entries, "  AKL   nz103 ", TravelFilter.All, null).map { it.id })
-        assertTrue(TravelLogic.filter(entries, "akl zzz", TravelFilter.All, null).isEmpty())
+        assertEquals(listOf("tr0"), TravelLogic.filter(entries, "qf810", TravelFilter.All, null).map { it.id })
+        assertEquals(listOf("tr2", "tr8"), TravelLogic.filter(entries, "sin", TravelFilter.All, null).map { it.id }.sorted())
+        assertEquals(listOf("tr2"), TravelLogic.filter(entries, "  SIN   sq288 ", TravelFilter.All, null).map { it.id })
+        assertTrue(TravelLogic.filter(entries, "sin zzz", TravelFilter.All, null).isEmpty())
     }
 
     @Test fun countsFollowSearchAndMode() {

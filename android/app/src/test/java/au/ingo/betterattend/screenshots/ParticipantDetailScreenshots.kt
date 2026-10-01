@@ -47,16 +47,16 @@ object DetailFixtures {
         ),
         checkedInAt = "2026-10-03T00:41:00Z",
         personal = SampleData.participantDetail.personal?.copy(
-            address = Address(line1 = "12 Home St", city = "Melbourne", state = "VIC", postalCode = "3000", country = "AU"),
+            address = Address(line1 = "12 Home St", city = "Wagga Wagga", state = "NSW", postalCode = "2650", country = "AU"),
         ),
         travelInbound = Travel(
-            direction = "inbound", mode = "plane", carrier = "Qantas", flightNumber = "QF402", departureCity = "Melbourne", arrivalCity = "Sydney",
+            direction = "inbound", mode = "plane", carrier = "Qantas", flightNumber = "QF1472", departureCity = "Sydney", arrivalCity = "Canberra",
             isUnaccompaniedMinor = true, passportNationality = "AU",
-            legs = listOf(TravelLeg(flightCode = "QF402", departureAirport = "MEL", arrivalAirport = "SYD", departureTime = "2026-10-02T21:00:00Z",
+            legs = listOf(TravelLeg(flightCode = "QF1472", departureAirport = "SYD", arrivalAirport = "CBR", departureTime = "2026-10-02T21:00:00Z",
                 arrivalTime = "2026-10-02T22:25:00Z", liveStatus = "Landed", liveArrivalTime = "2026-10-02T22:18:00Z", travelPickedUpAt = "2026-10-02T23:05:00Z")),
         ),
-        travelOutbound = Travel(direction = "outbound", mode = "train", trainDepartureStation = "Central", trainArrivalStation = "Southern Cross",
-            departureTime = "2026-10-05T04:00:00Z", arrivalTime = "2026-10-05T15:00:00Z", notes = "Parent meeting at Southern Cross"),
+        travelOutbound = Travel(direction = "outbound", mode = "train", trainDepartureStation = "Kingston", trainArrivalStation = "Central",
+            departureTime = "2026-10-05T04:00:00Z", arrivalTime = "2026-10-05T15:00:00Z", notes = "Parent meeting at Central"),
         dietaryDetail = DietaryDetail(intolerances = "Lactose"),
         accessibility = Accessibility(noiseSensitivity = true, needsCaptioning = true, hasAdhd = true, sensoryNeeds = "Ear defenders in bag; quiet space helps."),
         safeguardingDetail = SafeguardingDetail(authorizedPickupAdults = "Jordan Chen, Alex Chen", highSupportNotes = null, otherInstructions = "Check in with Maya each evening."),
@@ -117,7 +117,7 @@ class ParticipantDetailScreenshots : ScreenshotTest() {
 
     @Test fun undoDialog() = snap("detail_undo_dialog") {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            UndoCheckInCard("Maya", DetailFixtures.sensitive.scansByContext, "Australia/Sydney", "c1", {}, {}, {})
+            UndoCheckInCard("Maya", DetailFixtures.sensitive.scansByContext, "Australia/Canberra", "c1", {}, {}, {})
         }
     }
 

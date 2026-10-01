@@ -97,7 +97,7 @@ class DashboardLogicTest {
     }
 
     @Test fun labels() {
-        assertEquals("Sat 3 – Sun 4 Oct · Sydney", DashboardLogic.subtitle(SampleData.event))
+        assertEquals("Sat 3 – Sun 4 Oct · Canberra", DashboardLogic.subtitle(SampleData.event))
         assertEquals("Read only", DashboardLogic.roleLabel("read_only"))
         assertEquals("Some thing", DashboardLogic.roleLabel("some_thing"))
         assertEquals("Updated just now", DashboardLogic.updated(now.minusSeconds(10), now))
