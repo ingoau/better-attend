@@ -4,155 +4,502 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BetterAttend</title>
-  <meta name="description" content="A faster, offline-first Hack Club Attend app for Android: scan tickets, check people in, track arrivals and run your event from your phone.">
+  <meta name="description" content="A faster, offline-first Hack Club Attend app for Android and iOS. Scan tickets, check people in, meet arrivals and run your event from your phone.">
   <meta name="theme-color" content="#EC3750">
   <meta property="og:title" content="BetterAttend">
-  <meta property="og:description" content="A better Hack Club Attend app for Android.">
-  <meta property="og:image" content="assets/icon.png">
+  <meta property="og:description" content="The Attend app, rebuilt for the door. Offline-first check-in for Hack Club events.">
+  <meta property="og:image" content="https://ingoau.github.io/better-attend/assets/icon.png">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=IBM+Plex+Mono:wght@500&family=Instrument+Sans:wght@400..600&display=swap">
   <style>
+    /* Layout: an admission ticket. Hero copy beside the app in a phone, feature rows that
+       alternate sides, and a tear-off ticket for the download. */
     :root {
-      --red: #EC3750;
-      --bg: #fdf8f8;
-      --fg: #1f1a1b;
-      --muted: #6b6264;
-      --card: #ffffff;
-      --line: #eadfe0;
-      --shot-border: #e7dcdd;
-      color-scheme: light dark;
+      --red: #EC3750;          /* Hack Club red, the app icon */
+      --red-ink: #C61F3A;      /* red for text on paper */
+      --paper: #FBF5F4;
+      --surface: #FFFFFF;
+      --ink: #231517;
+      --muted: #6F5D60;
+      --line: #EADADC;
+      --green: #1F9E6E;        /* checked in */
+      --bezel: #1B1314;
+      --bezel-edge: #3B2D30;
+      --screen: #FFF8F7;       /* the app's own surface, so the status bar blends in */
+      --screen-ink: #231517;
+      --shadow: 0 30px 60px -20px rgba(80, 20, 30, .28), 0 10px 20px -10px rgba(80, 20, 30, .18);
+
+      --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+      --step--1: .875rem;
+      --step-0: 1.0625rem;
+      --step-1: 1.25rem;
+      --step-2: clamp(1.6rem, 1.2rem + 1.6vw, 2.25rem);
+      --step-3: clamp(2.5rem, 1.6rem + 4vw, 4.5rem);
+
+      --gutter: clamp(16px, 4vw, 40px);
+      --max: 1160px;
+      color-scheme: light;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #151213;
-        --fg: #f5eeef;
-        --muted: #a99fa1;
-        --card: #201b1c;
-        --line: #342c2e;
-        --shot-border: #3a3133;
+        --red-ink: #FF7A8C;
+        --paper: #120C0D;
+        --surface: #1D1516;
+        --ink: #F6ECED;
+        --muted: #B19FA2;
+        --line: #33272A;
+        --green: #3DD598;
+        --bezel: #050304;
+        --bezel-edge: #3E3033;
+        --screen: #130C0D;
+        --screen-ink: #F6ECED;
+        --shadow: 0 30px 60px -20px rgba(0, 0, 0, .7), 0 10px 20px -10px rgba(0, 0, 0, .5);
+        color-scheme: dark;
       }
     }
+
     * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
+    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 80px; }
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--fg);
-      font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      font: var(--step-0)/1.6 var(--body);
+      -webkit-font-smoothing: antialiased;
     }
+    img { max-width: 100%; height: auto; display: block; }
     a { color: inherit; }
-    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+    a:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; border-radius: 8px; }
+    .wrap { max-width: var(--max); margin-inline: auto; padding-inline: var(--gutter); }
+    h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -.02em; }
+    p { margin: 0; }
+    .eyebrow { font: 500 var(--step--1)/1 var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--red-ink); }
 
-    header { text-align: center; padding: 72px 0 40px; }
-    header img.icon { width: 104px; height: 104px; border-radius: 24px; box-shadow: 0 10px 30px rgba(236, 55, 80, .3); }
-    h1 { font-size: clamp(2.4rem, 7vw, 3.6rem); line-height: 1.05; letter-spacing: -.03em; margin: 22px 0 12px; }
-    .tagline { font-size: clamp(1.05rem, 2.6vw, 1.3rem); color: var(--muted); max-width: 34em; margin: 0 auto; }
+    /* Nav */
+    .nav {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in srgb, var(--paper) 82%, transparent);
+      backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
+    .lockup { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 700 1.15rem/1 var(--display); letter-spacing: -.01em; }
+    .lockup img { width: 32px; height: 32px; border-radius: 8px; }
+    .nav nav { display: flex; align-items: center; gap: 24px; font-weight: 500; font-size: .95rem; }
+    .nav nav a:not(.btn) { text-decoration: none; color: var(--muted); }
+    .nav nav a:not(.btn):hover { color: var(--ink); }
 
-    .cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: center; margin-top: 32px; }
+    /* Buttons */
     .btn {
-      display: inline-flex; align-items: center; gap: 10px;
-      height: 56px; padding: 0 26px; border-radius: 999px;
-      background: var(--red); color: #fff; text-decoration: none; font-weight: 650; font-size: 1.05rem;
-      transition: transform .15s ease, box-shadow .15s ease;
-      box-shadow: 0 6px 18px rgba(236, 55, 80, .35);
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      min-height: 52px; padding: 0 24px; border-radius: 999px;
+      background: var(--red); color: #fff; text-decoration: none;
+      font: 600 1.02rem/1 var(--body); white-space: nowrap;
+      transition: transform .15s ease, background .15s ease;
+      box-shadow: 0 8px 20px -8px rgba(236, 55, 80, .7);
     }
-    .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(236, 55, 80, .4); }
-    .btn svg { width: 22px; height: 22px; }
-    .obtainium img { height: 74px; width: auto; display: block; margin: -9px -6px; }
-    .fine { color: var(--muted); font-size: .9rem; margin-top: 16px; }
+    .btn:hover { transform: translateY(-1px); background: #F04560; }
+    .btn:focus-visible { border-radius: 999px; }
+    .btn svg { width: 20px; height: 20px; flex: none; }
+    .btn.small { min-height: 38px; padding: 0 16px; font-size: .9rem; box-shadow: none; }
+    .btn .sub { font: 500 .78rem/1 var(--mono); opacity: .8; letter-spacing: .02em; }
+    .btn .sub:empty { display: none; }
+    .obtainium { display: inline-block; border-radius: 10px; }
+    .obtainium img { height: 68px; width: auto; margin: -8px -5px; }
 
-    .shots {
-      display: grid; grid-auto-flow: column; grid-auto-columns: minmax(180px, 1fr);
-      gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory;
-      padding: 28px 20px 36px; margin: 0 -20px;
-      scrollbar-width: thin;
+    /* Hero */
+    .hero { padding-block: clamp(40px, 7vw, 96px) clamp(56px, 8vw, 112px); overflow: hidden; }
+    .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: clamp(32px, 5vw, 72px); align-items: center; }
+    .hero-copy { display: grid; gap: 24px; min-width: 0; }
+    .hero h1 { font-size: var(--step-3); line-height: .98; font-weight: 800; letter-spacing: -.035em; }
+    .hero h1 em { font-style: normal; color: var(--red-ink); }
+    .lede { font-size: var(--step-1); color: var(--muted); max-width: 32em; line-height: 1.5; }
+    .cta { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; }
+    .facts { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 0; margin: 0; list-style: none; font-size: var(--step--1); color: var(--muted); }
+    .facts li { display: flex; align-items: center; gap: 8px; }
+    .facts li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+    .hero-art { position: relative; display: grid; justify-items: center; padding-right: 12%; }
+    .hero-art .phone.front { width: min(300px, 80%); position: relative; z-index: 2; animation: rise .8s cubic-bezier(.2, .8, .2, 1) both; }
+    .hero-art .phone.back {
+      position: absolute; width: min(270px, 72%); top: 8%; left: 46%; z-index: 1;
+      transform: rotate(7deg); animation: rise-back .9s .08s cubic-bezier(.2, .8, .2, 1) both;
     }
-    .shots figure { margin: 0; scroll-snap-align: center; }
-    .shots img {
-      width: 100%; height: auto; display: block; border-radius: 22px;
-      border: 1px solid var(--shot-border); background: var(--card);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, .08);
+    .stub {
+      position: absolute; z-index: 3; left: 0; bottom: 14%;
+      display: flex; align-items: center; gap: 12px; padding: 12px 22px 12px 18px;
+      background: var(--surface); color: var(--ink); border-radius: 12px; box-shadow: var(--shadow);
+      font: 500 .74rem/1.3 var(--mono); letter-spacing: .06em;
+      -webkit-mask: radial-gradient(circle 7px at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                    radial-gradient(circle 7px at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+              mask: radial-gradient(circle 7px at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat,
+                    radial-gradient(circle 7px at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat;
+      animation: rise .9s .25s cubic-bezier(.2, .8, .2, 1) both;
     }
-    .shots figcaption { text-align: center; color: var(--muted); font-size: .9rem; margin-top: 10px; }
+    .stub .tick { width: 30px; height: 30px; border-radius: 50%; background: var(--green); display: grid; place-items: center; flex: none; }
+    .stub .tick svg { width: 18px; height: 18px; color: #fff; }
+    .stub b { display: block; font: 600 .95rem/1.25 var(--body); letter-spacing: 0; }
+    .stub span:not(.tick) { color: var(--muted); }
 
-    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding: 12px 0 56px; }
-    .feature { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
-    .feature h3 { margin: 0 0 6px; font-size: 1.05rem; }
-    .feature p { margin: 0; color: var(--muted); font-size: .95rem; }
+    @keyframes rise { from { transform: translateY(28px); } to { transform: none; } }
+    @keyframes rise-back { from { transform: translateY(40px) rotate(3deg); } to { transform: rotate(7deg); } }
 
-    footer { border-top: 1px solid var(--line); padding: 28px 0 40px; text-align: center; color: var(--muted); font-size: .9rem; }
-    footer p { margin: 6px 0; }
+    /* Phone frame */
+    .phone {
+      border-radius: 44px; padding: 9px; background: var(--bezel);
+      box-shadow: inset 0 0 0 1.5px var(--bezel-edge), var(--shadow);
+    }
+    .screen { position: relative; border-radius: 36px; overflow: hidden; background: var(--screen); }
+    .status {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 22px 3px; color: var(--screen-ink);
+      font: 600 12px/1 var(--body); font-variant-numeric: tabular-nums;
+    }
+    .status .cam { width: 10px; height: 10px; border-radius: 50%; background: var(--bezel); }
+    .status .icons { display: flex; gap: 5px; align-items: center; }
+    .status svg { height: 11px; width: auto; fill: currentColor; }
+    .screen img { width: 100%; }
+    .screen::after {
+      content: ""; position: absolute; left: 50%; bottom: 7px; width: 34%; height: 4px; transform: translateX(-50%);
+      border-radius: 4px; background: var(--screen-ink); opacity: .5;
+    }
 
-    @media (max-width: 640px) {
-      header { padding: 48px 0 28px; }
-      .shots { grid-auto-columns: 72%; }
-      .btn { height: 52px; }
-      .obtainium img { height: 70px; margin: -9px -6px; }
+    /* Feature rows */
+    .features { display: grid; gap: clamp(72px, 10vw, 140px); padding-block: clamp(32px, 6vw, 64px) clamp(80px, 10vw, 140px); }
+    .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 96px); align-items: center; }
+    .feature:nth-child(even) .feature-copy { order: 2; }
+    .feature-copy { display: grid; gap: 18px; max-width: 30em; min-width: 0; }
+    .feature h2 { font-size: var(--step-2); line-height: 1.08; font-weight: 700; }
+    .feature-copy > p { color: var(--muted); }
+    .ticks { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 12px; }
+    .ticks li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; }
+    .ticks svg { width: 22px; height: 22px; color: var(--red-ink); margin-top: 2px; }
+    .feature-art { display: grid; justify-items: center; }
+    .feature-art .phone { width: min(290px, 100%); }
+
+    /* The rest */
+    .rest { padding-block: 0 clamp(80px, 10vw, 140px); }
+    .rest header { display: grid; gap: 14px; margin-bottom: 40px; max-width: 36em; }
+    .rest h2 { font-size: var(--step-2); line-height: 1.08; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; }
+    .tile { padding: 24px 4px; border-top: 2px solid var(--line); display: grid; gap: 8px; align-content: start; }
+    .tile svg { width: 26px; height: 26px; color: var(--red-ink); margin-bottom: 6px; }
+    .tile h3 { font-size: var(--step-1); font-weight: 700; letter-spacing: -.01em; }
+    .tile p { color: var(--muted); font-size: .98rem; }
+    .tile.share {
+      grid-column: span 2; grid-row: span 2; border: 0; border-radius: 28px; background: var(--surface);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 32px; align-items: center; padding: clamp(24px, 3vw, 40px);
+      box-shadow: 0 0 0 1px var(--line);
+    }
+    .tile.share .share-copy { display: grid; gap: 8px; }
+    .tile.share img { border-radius: 6% / 6.5%; box-shadow: var(--shadow); transform: rotate(-2deg); }
+
+    /* Download ticket */
+    .download { padding-block: 0 clamp(64px, 8vw, 112px); }
+    .ticket {
+      --stub: 260px;
+      display: grid; grid-template-columns: minmax(0, 1fr) var(--stub);
+      background: var(--red); color: #fff; border-radius: 28px;
+      -webkit-mask: radial-gradient(circle 18px at calc(100% - var(--stub)) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+                    radial-gradient(circle 18px at calc(100% - var(--stub)) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+              mask: radial-gradient(circle 18px at calc(100% - var(--stub)) 0, #0000 98%, #000) top / 100% 51% no-repeat,
+                    radial-gradient(circle 18px at calc(100% - var(--stub)) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+    }
+    .ticket-main { padding: clamp(28px, 5vw, 56px); display: grid; gap: 20px; align-content: center; min-width: 0; }
+    .ticket-main h2 { font-size: var(--step-3); line-height: .95; font-weight: 800; letter-spacing: -.035em; }
+    .ticket-main p { max-width: 34em; color: rgba(255, 255, 255, .9); }
+    .ticket-main code { font: 500 .88em var(--mono); background: rgba(0, 0, 0, .16); padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+    .ticket .btn { background: #fff; color: #B3162F; box-shadow: 0 10px 24px -10px rgba(60, 0, 10, .6); }
+    .ticket .btn:hover { background: #FFF1F3; }
+    .ticket a:focus-visible { outline-color: #fff; }
+    .ticket-stub {
+      border-left: 2px dashed rgba(255, 255, 255, .5); padding: 36px 28px; display: grid; gap: 20px; align-content: center;
+      font: 500 .82rem/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+    }
+    .ticket-stub dl { margin: 0; display: grid; gap: 14px; }
+    .ticket-stub dt { opacity: .75; font-size: .72rem; }
+    .ticket-stub dd { margin: 2px 0 0; font-size: 1rem; letter-spacing: .04em; font-variant-numeric: tabular-nums; text-transform: none; }
+    .ticket-stub .admit { font: 800 1.6rem/1 var(--display); letter-spacing: -.01em; text-transform: none; }
+    .ticket-stub a { text-underline-offset: 3px; }
+
+    footer { border-top: 1px solid var(--line); padding-block: 32px 48px; color: var(--muted); font-size: var(--step--1); }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 32px; justify-content: space-between; align-items: center; }
+    footer nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+    footer a { text-decoration: none; }
+    footer a:hover { color: var(--ink); text-decoration: underline; }
+
+    /* Narrow screens */
+    @media (max-width: 900px) {
+      .hero .wrap, .feature { grid-template-columns: minmax(0, 1fr); }
+      .hero-copy { text-align: center; justify-items: center; }
+      .cta, .facts { justify-content: center; }
+      .hero-art { margin-top: 8px; padding-right: 0; }
+      .hero-art .phone.front { width: min(270px, 66%); }
+      .hero-art .phone.back { width: min(240px, 58%); left: 48%; }
+      .stub { left: 0; bottom: 10%; }
+      .feature:nth-child(even) .feature-copy { order: 0; }
+      .feature-copy { max-width: none; }
+      .feature-art .phone { width: min(260px, 76%); }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .tile.share { grid-column: 1 / -1; grid-row: auto; }
+      .ticket { grid-template-columns: minmax(0, 1fr); -webkit-mask: none; mask: none; }
+      .ticket-stub { border-left: 0; border-top: 2px dashed rgba(255, 255, 255, .5); padding: 24px clamp(28px, 5vw, 56px) 32px; }
+      .ticket-stub dl { grid-template-columns: repeat(3, auto); justify-content: start; gap: 14px 32px; }
+    }
+    @media (max-width: 600px) {
+      .nav nav a:not(.btn) { display: none; }
+      .hero-art .phone.front { width: 72%; }
+      .hero-art .phone.back { width: 62%; left: 40%; }
+      .grid { grid-template-columns: minmax(0, 1fr); }
+      .tile.share { grid-template-columns: minmax(0, 1fr); padding: 24px; }
+      .stub { padding: 10px 16px 10px 12px; gap: 10px; font-size: .66rem; }
+      .stub b { font-size: .84rem; }
+      .stub .tick { width: 26px; height: 26px; }
+      .lede { font-size: 1.08rem; }
+      .features { gap: 64px; }
+      .feature { gap: 28px; }
+      .feature-art .phone { width: 64%; }
+      .rest header { margin-bottom: 24px; }
+      .tile { padding-block: 20px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <img class="icon" src="assets/icon.svg" alt="" width="104" height="104">
-      <h1>BetterAttend</h1>
-      <p class="tagline">A faster, offline-first Hack Club Attend app for Android. Scan tickets, check people in, meet arrivals and run your whole event from your phone.</p>
-      <div class="cta">
-        <a class="btn" href="https://github.com/ingoau/better-attend/releases/latest">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-          Download APK
-        </a>
-        <a class="obtainium" href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend">
-          <img src="assets/badge_obtainium.png" alt="Get it on Obtainium" width="191" height="74">
-        </a>
-      </div>
-      <p class="fine">Android 8.0+ &middot; free and open source &middot; signs in with your existing Attend account</p>
-    </header>
+  <header class="nav">
+    <div class="wrap">
+      <a class="lockup" href="#top"><img src="assets/icon.svg" alt="" width="32" height="32">BetterAttend</a>
+      <nav aria-label="Main">
+        <a href="#features">Features</a>
+        <a href="https://github.com/ingoau/better-attend">GitHub</a>
+        <a class="btn small" href="#download">Download</a>
+      </nav>
+    </div>
+  </header>
 
-    <section class="shots" aria-label="Screenshots">
-      <figure>
-        <picture><source srcset="screenshots/home-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/home-light.png" alt="Home dashboard showing 84 of 120 people checked in at Campfire Canberra" loading="lazy" width="540" height="1171"></picture>
-        <figcaption>Live check-in dashboard</figcaption>
-      </figure>
-      <figure>
-        <picture><source srcset="screenshots/scan-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/scan-light.png" alt="Scanner with a successful check-in" loading="lazy" width="540" height="1171"></picture>
-        <figcaption>Scan QR codes and NFC badges</figcaption>
-      </figure>
-      <figure>
-        <picture><source srcset="screenshots/people-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/people-light.png" alt="People list with filter chips" loading="lazy" width="540" height="1171"></picture>
-        <figcaption>Find anyone instantly</figcaption>
-      </figure>
-      <figure>
-        <picture><source srcset="screenshots/travel-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/travel-light.png" alt="Travel list with flights into Canberra" loading="lazy" width="540" height="1171"></picture>
-        <figcaption>Meet every arrival</figcaption>
-      </figure>
-      <figure>
-        <picture><source srcset="screenshots/ticket-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/ticket-light.png" alt="Participant ticket with QR code" loading="lazy" width="540" height="1171"></picture>
-        <figcaption>Tickets that work offline</figcaption>
-      </figure>
+  <main id="top">
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-copy">
+          <p class="eyebrow">For Hack Club event organisers</p>
+          <h1>The Attend app, <em>rebuilt for the&nbsp;door.</em></h1>
+          <p class="lede">BetterAttend is a faster, offline-first version of Hack Club Attend. Scan tickets, check people in, meet arrivals and keep an eye on everyone, with or without signal.</p>
+          <div class="cta">
+            <a class="btn" href="https://github.com/ingoau/better-attend/releases/latest">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+              Download APK <span class="sub" data-version></span>
+            </a>
+            <a class="obtainium" href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend">
+              <img src="assets/badge_obtainium.png" alt="Get it on Obtainium" width="176" height="68">
+            </a>
+          </div>
+          <ul class="facts">
+            <li>Uses your existing Attend account</li>
+            <li>Android 8.0+ and iOS 18+</li>
+            <li>Free and open source</li>
+          </ul>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <div class="phone back">
+            <div class="screen">
+              <div class="status"><span>11:30</span><span class="cam"></span><span class="icons"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x="0.6" y="0.6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <picture><source srcset="screenshots/participant-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/participant-light.png" alt="" width="540" height="1171"></picture>
+            </div>
+          </div>
+          <div class="phone front">
+            <div class="screen">
+              <div class="status"><span>11:30</span><span class="cam"></span><span class="icons"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x="0.6" y="0.6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+              <picture><source srcset="screenshots/home-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/home-light.png" alt="" width="540" height="1171"></picture>
+            </div>
+          </div>
+          <div class="stub">
+            <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            <div><b>Maya Chen checked in</b><span>A1B2C3D4 · CHECK-IN DESK</span></div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="features">
-      <div class="feature">
-        <h3>Works without signal</h3>
-        <p>Scans made offline are queued and synced automatically. Rosters and tickets are cached on the phone.</p>
-      </div>
-      <div class="feature">
-        <h3>Built for the door</h3>
-        <p>Continuous QR scanning, NFC badges, big colour-coded results, safety alerts, undo and a kiosk mode for self check-in.</p>
-      </div>
-      <div class="feature">
-        <h3>Everything in one place</h3>
-        <p>People, travel and pickups, announcements, home-screen widgets and shareable stat cards.</p>
+    <section class="features wrap" id="features" aria-label="Features">
+      <article class="feature">
+        <div class="feature-copy">
+          <p class="eyebrow">Scan</p>
+          <h2>Built for the front door.</h2>
+          <p>Point the camera and keep going. BetterAttend scans continuously, reads NFC badges, and shows a big colour-coded result with any safety alerts before you wave someone through.</p>
+          <ul class="ticks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Scans made without signal queue up and sync on their own</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Undo, sounds and haptics, and a log of recent scans</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Find person for manual check-ins when a QR code won't load</span></li>
+          </ul>
+        </div>
+        <div class="feature-art">
+          <div class="phone"><div class="screen">
+            <div class="status"><span>11:30</span><span class="cam"></span><span class="icons"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x="0.6" y="0.6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+            <picture><source srcset="screenshots/scan-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/scan-light.png" alt="The scanner showing Maya Chen scanned in at the check-in desk, with an anaphylaxis alert" loading="lazy" width="540" height="1171"></picture>
+          </div></div>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div class="feature-copy">
+          <p class="eyebrow">People</p>
+          <h2>Know who's in the room.</h2>
+          <p>Search everyone by name, email, pronouns or short code, and filter by who's here, who isn't, and who needs attention.</p>
+          <ul class="ticks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Safety alerts first: allergies, medication, unaccompanied minors</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Call, text, WhatsApp or email in one tap</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Write NFC badges and leave notes with a sensitivity level</span></li>
+          </ul>
+        </div>
+        <div class="feature-art">
+          <div class="phone"><div class="screen">
+            <div class="status"><span>11:30</span><span class="cam"></span><span class="icons"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x="0.6" y="0.6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+            <picture><source srcset="screenshots/people-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/people-light.png" alt="The People list for Campfire Canberra, with 7 of 10 here" loading="lazy" width="540" height="1171"></picture>
+          </div></div>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div class="feature-copy">
+          <p class="eyebrow">Travel</p>
+          <h2>Meet every arrival.</h2>
+          <p>Every flight, train and bus, grouped by day in the event's timezone, with live flight status and who still needs collecting.</p>
+          <ul class="ticks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Mark people picked up straight from the airport</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Unaccompanied minors flagged on every trip</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>An Arrivals widget shows who to collect next</span></li>
+          </ul>
+        </div>
+        <div class="feature-art">
+          <div class="phone"><div class="screen">
+            <div class="status"><span>11:30</span><span class="cam"></span><span class="icons"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x="0.6" y="0.6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+            <picture><source srcset="screenshots/travel-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/travel-light.png" alt="Travel list of flights and trains arriving in Canberra" loading="lazy" width="540" height="1171"></picture>
+          </div></div>
+        </div>
+      </article>
+
+      <article class="feature">
+        <div class="feature-copy">
+          <p class="eyebrow">Tickets</p>
+          <h2>A ticket that works without signal.</h2>
+          <p>Participants get their pass offline, with a high-contrast QR code that turns the screen brightness up when it's time to scan.</p>
+          <ul class="ticks">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Add it to Google Wallet</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Countdown, directions and messages from organisers</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><span>Your travel and safety contacts in one place</span></li>
+          </ul>
+        </div>
+        <div class="feature-art">
+          <div class="phone"><div class="screen">
+            <div class="status"><span>11:30</span><span class="cam"></span><span class="icons"><svg viewBox="0 0 16 11"><path d="M0 11h3V8H0zm4.5 0h3V5.5h-3zM9 11h3V3H9zm4.5 0h2.5V0h-2.5z"/></svg><svg viewBox="0 0 22 11"><rect x="0.6" y="0.6" width="18" height="9.8" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="11" height="6.2" rx="1"/><rect x="20" y="3.5" width="2" height="4" rx="1"/></svg></span></div>
+            <picture><source srcset="screenshots/ticket-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/ticket-light.png" alt="An attendee pass for Campfire Canberra with a QR code and a countdown" loading="lazy" width="540" height="1171"></picture>
+          </div></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="rest" aria-labelledby="rest-title">
+      <div class="wrap">
+        <header>
+          <p class="eyebrow">Also included</p>
+          <h2 id="rest-title">The rest of the event, covered.</h2>
+        </header>
+        <div class="grid">
+          <div class="tile share">
+            <div class="share-copy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+              <h3>Share the numbers</h3>
+              <p>Press and hold any number on Home to turn it into an image card. Pick the colour, style and layout, then post it.</p>
+            </div>
+            <picture><source srcset="screenshots/share-card-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/share-card-light.png" alt="A share card for Campfire Canberra: 84 checked in, 36 not here yet, 12 in the last hour" loading="lazy" width="720" height="671"></picture>
+          </div>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+            <h3>Kiosk mode</h3>
+            <p>Turn a spare phone or tablet into a self check-in station, pinned and locked with a PIN.</p>
+          </div>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10v4h3l6 5V5L6 10z"/><path d="M16 9a3.5 3.5 0 0 1 0 6"/><path d="M19 6a7.5 7.5 0 0 1 0 12"/></svg>
+            <h3>Announcements</h3>
+            <p>Message everyone at the event on Slack and watch it deliver.</p>
+          </div>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/></svg>
+            <h3>Home-screen widgets</h3>
+            <p>Check-in progress, arrivals, quick scan and your next ticket, in your wallpaper's colours.</p>
+          </div>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
+            <h3>Always current</h3>
+            <p>Counts refresh in the background, and everything you've loaded still reads offline.</p>
+          </div>
+          <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+            <h3>No tracking</h3>
+            <p>No analytics or session recording. Cached data is encrypted on your phone.</p>
+          </div>
+        </div>
       </div>
     </section>
-  </div>
+
+    <section class="download" id="download" aria-labelledby="download-title">
+      <div class="wrap">
+        <div class="ticket">
+          <div class="ticket-main">
+            <h2 id="download-title">Get BetterAttend</h2>
+            <p>Sign in with the Hack Club account you already use for Attend. It installs alongside the official app. Most phones want the <code>arm64-v8a</code> APK, and <code>universal</code> runs on everything.</p>
+            <div class="cta">
+              <a class="btn" href="https://github.com/ingoau/better-attend/releases/latest">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+                Download APK
+              </a>
+              <a class="obtainium" href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend">
+                <img src="assets/badge_obtainium.png" alt="Get it on Obtainium" width="176" height="68">
+              </a>
+            </div>
+          </div>
+          <div class="ticket-stub">
+            <span class="admit">Admit one</span>
+            <dl>
+              <div><dt>Version</dt><dd data-version-full>Latest</dd></div>
+              <div><dt>Android</dt><dd>8.0+</dd></div>
+              <div><dt>iOS 18+</dt><dd><a href="https://github.com/ingoau/better-attend/blob/main/ios/README.md">Sideload</a></dd></div>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <footer>
     <div class="wrap">
-      <p>Also on iOS: the <a href="https://github.com/ingoau/better-attend/releases/latest">latest release</a> includes an unsigned <code>.ipa</code> for AltStore or SideStore.</p>
-      <p>BetterAttend is an unofficial app, not made by Hack Club. <a href="https://github.com/ingoau/better-attend">Source on GitHub</a>.</p>
+      <p>BetterAttend is an unofficial app, not made by Hack Club.</p>
+      <nav aria-label="Footer">
+        <a href="https://github.com/ingoau/better-attend">Source code</a>
+        <a href="https://github.com/ingoau/better-attend/releases">Releases</a>
+        <a href="https://github.com/ingoau/better-attend/issues">Report a problem</a>
+      </nav>
     </div>
   </footer>
+
+  <script>
+    // Show the latest version number. The page reads fine if GitHub doesn't answer.
+    fetch('https://api.github.com/repos/ingoau/better-attend/releases/latest')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(({ tag_name }) => {
+        if (!tag_name) return;
+        document.querySelectorAll('[data-version], [data-version-full]').forEach(el => { el.textContent = tag_name; });
+      })
+      .catch(() => {});
+  </script>
 </body>
 </html>

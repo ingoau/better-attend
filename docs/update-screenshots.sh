@@ -26,4 +26,10 @@ for pair in "${shots[@]}"; do
     convert "$src/${test}_${theme}.png" -resize 540x -strip -define png:compression-level=9 "screenshots/$name-$theme.png"
   done
 done
+
+# The share card on its own, without the screen around it.
+for theme in light dark; do
+  convert "$src/share_card_checkins_${theme}.png" -fuzz 4% -trim +repage -resize 720x -strip \
+    -define png:compression-level=9 "screenshots/share-card-$theme.png"
+done
 ls -l screenshots
