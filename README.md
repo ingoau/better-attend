@@ -18,6 +18,10 @@ They install **alongside** the official app (`au.ingo.betterattend`).
 - **Home dashboard** — live "84 / 120 checked in" with an expressive progress ring, not-here-yet and
   last-hour counts, per scan-point progress, arrivals to collect, people needing attention, recent
   check-ins and one-tap actions (Scan · Find · Announce · Kiosk).
+- **Share stats** — press and hold any number on Home to share it as an image card: event name, the
+  number (add up to six more), `inw.sh/better-attend` at the bottom. Pick colour, style (Tonal · Bold ·
+  Playful · Outline), layout (Row · Grid · List), light/dark, and whether to show icons, dates and
+  totals; then share it or save it to Pictures.
 - **Scan** — continuous QR scanning (CameraX + on-device ML Kit, works offline), **NFC badge reading**
   (the old app had no Android NFC), scan-point selector, big colour-coded results with safety alerts,
   undo, sounds + haptics, recent-scans log, and "Find person" for manual check-ins.

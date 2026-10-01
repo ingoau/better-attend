@@ -9,6 +9,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +75,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -83,11 +89,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -109,6 +117,9 @@ import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.Tab
+import au.ingo.betterattend.ui.share.ShareCardOptions
+import au.ingo.betterattend.ui.share.ShareStats
+import au.ingo.betterattend.ui.share.ShareStatsSheet
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.ui.travel.modeIcon
 import au.ingo.betterattend.util.Time
@@ -248,6 +259,28 @@ private fun DashboardBody(
     val phase = Time.phase(event.startsAt, event.endsAt, now)
     val arrivals = remember(state.travel, now) { DashboardLogic.arrivals(state.travel, now) }
     val updated = DashboardLogic.updated(state.lastUpdated ?: Time.parse(state.roster?.lastSyncAt), now)
+    val progress = remember(state.contexts, stats, now) { stats?.let { DashboardLogic.contextProgress(state.contexts, it, now) }.orEmpty() }
+
+    // Long-press any number to share it as an image card; the card's look is kept between shares.
+    val haptics = rememberHaptics()
+    var shareFrom by rememberSaveable(event.id) { mutableStateOf<String?>(null) }
+    var shareOptions by remember { mutableStateOf(ShareCardOptions()) }
+    val onShare: (String) -> Unit = { id -> haptics.longPress(); shareFrom = id }
+    shareFrom?.let { startId ->
+        val feed = if (state.canViewParticipants) null else state.scans?.let { DashboardLogic.scanFeed(it, event.timezone, now) }
+        val available = ShareStats.available(event, stats, progress, arrivals, feed, now)
+        if (available.isNotEmpty()) {
+            ShareStatsSheet(
+                event = event,
+                available = available,
+                startId = startId,
+                options = shareOptions,
+                onOptionsChange = { shareOptions = it },
+                onDismiss = { shareFrom = null },
+                now = now,
+            )
+        }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -268,27 +301,26 @@ private fun DashboardBody(
             if (stats == null) {
                 card(key = "hero_loading") { HeroLoading(failed = state.error != null && !state.refreshing, onRetry = onRefresh) }
             } else {
-                card(key = "hero") { Hero(event, stats, phase, now) }
+                card(key = "hero") { Hero(event, stats, phase, now, onShare = { onShare(ShareStats.heroId(event, now)) }) }
             }
             card(key = "actions") { QuickActions(showFind = true, onSwitchTab, onAnnounce, onKiosk) }
             if (stats != null) {
                 card(key = "tiles") {
-                    StatTiles(stats, DashboardLogic.needsAttention(roster!!.participants), onOpenPeople = { onSwitchTab(Tab.People) })
+                    StatTiles(stats, DashboardLogic.needsAttention(roster!!.participants), onOpenPeople = { onSwitchTab(Tab.People) }, onShare = onShare)
                 }
-                val progress = DashboardLogic.contextProgress(state.contexts, stats, now)
                 // Before doors open every bar is empty, so skip them.
-                if (progress.isNotEmpty() && (phase != Time.Phase.Upcoming || progress.any { it.count > 0 })) card(key = "contexts") { ContextsCard(progress) }
+                if (progress.isNotEmpty() && (phase != Time.Phase.Upcoming || progress.any { it.count > 0 })) card(key = "contexts") { ContextsCard(progress, onShare) }
             }
-            if (arrivals != null) card(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone) { onSwitchTab(Tab.Travel) } }
+            if (arrivals != null) card(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone, onShare) { onSwitchTab(Tab.Travel) } }
             if (roster != null && phase != Time.Phase.Upcoming) {
                 val recent = DashboardLogic.recentCheckIns(roster.participants)
                 card(key = "recent") { RecentCheckIns(recent, now, onOpenParticipant, onSeeAll = { onSwitchTab(Tab.People) }) }
             }
         } else {
             card(key = "explain") { LimitedAccessCard(event) }
-            card(key = "scans_hero") { ScansHero(state.scans, event.timezone, now) }
+            card(key = "scans_hero") { ScansHero(state.scans, event.timezone, now, onShare = { onShare(ShareStats.SCANS_TODAY) }) }
             card(key = "actions") { QuickActions(showFind = false, onSwitchTab, onAnnounce, onKiosk) }
-            if (arrivals != null) card(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone) { onSwitchTab(Tab.Travel) } }
+            if (arrivals != null) card(key = "arrivals") { ArrivalsCard(arrivals, event.timezone ?: state.travel?.eventTimezone, onShare) { onSwitchTab(Tab.Travel) } }
             val scans = state.scans
             if (!scans.isNullOrEmpty()) {
                 card(key = "recent_scans") { RecentScans(DashboardLogic.scanFeed(scans, event.timezone, now).recent, state.travel, now) }
@@ -326,19 +358,19 @@ private fun StatusLine(refreshing: Boolean, updated: String?, pending: Int) {
 // ---------------------------------------------------------------- hero
 
 @Composable
-private fun HeroCard(content: @Composable () -> Unit) {
+private fun HeroCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         shape = MaterialTheme.shapes.extraLarge,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Box(Modifier.padding(20.dp)) { content() }
     }
 }
 
 @Composable
-private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instant) {
+private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instant, onShare: () -> Unit) {
     val upcoming = phase == Time.Phase.Upcoming
     val value: Int
     val total: Int
@@ -365,9 +397,10 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
     // The ring sweeps to the new value instead of jumping when a sync brings in more check-ins.
     val ring by animateFloatAsState(fraction, MaterialTheme.motionScheme.slowSpatialSpec(), label = "ring")
 
-    HeroCard {
+    HeroCard(Modifier.onLongPress(onShare)) {
         Column(Modifier.clearAndSetSemantics {
             contentDescription = "$eyebrow. $value of $total $caption, $percent percent. " + chips.joinToString(". ") { it.second }
+            onLongClick(SHARE_LABEL) { onShare(); true }
         }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -495,29 +528,31 @@ private fun QuickActions(showFind: Boolean, onSwitchTab: (Tab) -> Unit, onAnnoun
 // ---------------------------------------------------------------- stat tiles
 
 @Composable
-private fun StatTiles(stats: EventStats, attention: Int, onOpenPeople: () -> Unit) {
+private fun StatTiles(stats: EventStats, attention: Int, onOpenPeople: () -> Unit, onShare: (String) -> Unit) {
     val haptics = rememberHaptics()
     val onOpenPeople = { haptics.click(); onOpenPeople() }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile("Registered", stats.registered, Icons.Outlined.Groups, "Not withdrawn", Modifier.weight(1f), onOpenPeople)
-            StatTile("Confirmed", stats.confirmed, Icons.Outlined.Verified, "Registration complete", Modifier.weight(1f), onOpenPeople)
+            StatTile("Registered", stats.registered, Icons.Outlined.Groups, "Not withdrawn", Modifier.weight(1f), onOpenPeople) { onShare(ShareStats.REGISTERED) }
+            StatTile("Confirmed", stats.confirmed, Icons.Outlined.Verified, "Registration complete", Modifier.weight(1f), onOpenPeople) { onShare(ShareStats.CONFIRMED) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile("Not complete", DashboardLogic.notComplete(stats), Icons.Outlined.HourglassTop, "Still onboarding", Modifier.weight(1f), onOpenPeople)
-            StatTile("Withdrawn", stats.withdrawn, Icons.Outlined.PersonOff, "Incl. rejected", Modifier.weight(1f), onOpenPeople)
+            StatTile("Not complete", DashboardLogic.notComplete(stats), Icons.Outlined.HourglassTop, "Still onboarding", Modifier.weight(1f), onOpenPeople) { onShare(ShareStats.NOT_COMPLETE) }
+            StatTile("Withdrawn", stats.withdrawn, Icons.Outlined.PersonOff, "Incl. rejected", Modifier.weight(1f), onOpenPeople) { onShare(ShareStats.WITHDRAWN) }
         }
         if (attention > 0) AttentionTile(stats, attention, onOpenPeople)
     }
 }
 
 @Composable
-private fun StatTile(label: String, value: Int, icon: ImageVector, hint: String, modifier: Modifier, onClick: () -> Unit) {
+private fun StatTile(label: String, value: Int, icon: ImageVector, hint: String, modifier: Modifier, onClick: () -> Unit, onShare: () -> Unit) {
     Surface(
-        onClick = onClick,
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.semantics { contentDescription = "$label: $value. $hint" },
+        modifier = modifier
+            .clip(MaterialTheme.shapes.large)
+            .combinedClickable(onLongClickLabel = SHARE_LABEL, onLongClick = onShare, onClick = onClick)
+            .semantics { contentDescription = "$label: $value. $hint" },
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -563,19 +598,20 @@ private fun AttentionTile(stats: EventStats, attention: Int, onClick: () -> Unit
 // ---------------------------------------------------------------- scan contexts
 
 @Composable
-private fun ContextsCard(rows: List<ContextProgress>) {
+private fun ContextsCard(rows: List<ContextProgress>, onShare: (String) -> Unit) {
     DashCard(title = "Scan points") {
         rows.forEachIndexed { i, row ->
             if (i > 0) Spacer(Modifier.height(14.dp))
-            ContextRow(row)
+            ContextRow(row) { onShare(ShareStats.context(row.context.id)) }
         }
     }
 }
 
 @Composable
-private fun ContextRow(row: ContextProgress) {
-    Column(Modifier.clearAndSetSemantics {
+private fun ContextRow(row: ContextProgress, onShare: () -> Unit) {
+    Column(Modifier.onLongPress(onShare).clearAndSetSemantics {
         contentDescription = "${row.context.name}${if (row.active) ", happening now" else ""}: ${row.count} of ${row.total}"
+        onLongClick(SHARE_LABEL) { onShare(); true }
     }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(contextIcon(row.context), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -598,7 +634,7 @@ private fun ContextRow(row: ContextProgress) {
     }
 }
 
-private fun contextIcon(c: ScanContext): ImageVector {
+internal fun contextIcon(c: ScanContext): ImageVector {
     val n = c.name.lowercase()
     return when {
         c.checksIn -> Icons.Outlined.HowToReg
@@ -611,13 +647,15 @@ private fun contextIcon(c: ScanContext): ImageVector {
 // ---------------------------------------------------------------- arrivals
 
 @Composable
-private fun ArrivalsCard(a: ArrivalsSummary, tz: String?, onOpen: () -> Unit) {
+private fun ArrivalsCard(a: ArrivalsSummary, tz: String?, onShare: (String) -> Unit, onOpen: () -> Unit) {
     val s = MaterialTheme.status
+    val haptics = rememberHaptics()
+    val open = { haptics.click(); onOpen() }
     DashCard(title = "Arrivals", onClick = onOpen, action = "Travel") {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniStat("To collect", a.awaitingPickup, s.warningContainer, s.onWarningContainer, Modifier.weight(1f))
-            MiniStat("Picked up", a.collected, s.successContainer, s.onSuccessContainer, Modifier.weight(1f))
-            MiniStat("Checked in", a.checkedIn, s.infoContainer, s.onInfoContainer, Modifier.weight(1f))
+            MiniStat("To collect", a.awaitingPickup, s.warningContainer, s.onWarningContainer, Modifier.weight(1f), open) { onShare(ShareStats.TO_COLLECT) }
+            MiniStat("Picked up", a.collected, s.successContainer, s.onSuccessContainer, Modifier.weight(1f), open) { onShare(ShareStats.PICKED_UP) }
+            MiniStat("Checked in", a.checkedIn, s.infoContainer, s.onInfoContainer, Modifier.weight(1f), open) { onShare(ShareStats.ARRIVED) }
         }
         if (a.next.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
@@ -645,8 +683,13 @@ private fun ArrivalsCard(a: ArrivalsSummary, tz: String?, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun MiniStat(label: String, value: Int, container: Color, content: Color, modifier: Modifier) {
-    Surface(color = container, contentColor = content, shape = MaterialTheme.shapes.medium, modifier = modifier) {
+private fun MiniStat(label: String, value: Int, container: Color, content: Color, modifier: Modifier, onClick: () -> Unit, onShare: () -> Unit) {
+    Surface(
+        color = container,
+        contentColor = content,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.clip(MaterialTheme.shapes.medium).combinedClickable(onLongClickLabel = SHARE_LABEL, onLongClick = onShare, onClick = onClick),
+    ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             AnimatedNumber(value, style = MaterialTheme.typography.headlineSmall)
             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -732,16 +775,17 @@ private fun LimitedAccessCard(event: Event) {
 }
 
 @Composable
-private fun ScansHero(scans: List<Scan>?, tz: String?, now: Instant) {
+private fun ScansHero(scans: List<Scan>?, tz: String?, now: Instant, onShare: () -> Unit) {
     if (scans == null) {
         HeroLoading(failed = false, onRetry = {})
         return
     }
     val feed = remember(scans, tz, now) { DashboardLogic.scanFeed(scans, tz, now) }
-    HeroCard {
+    HeroCard(Modifier.onLongPress(onShare)) {
         Row(
             Modifier.fillMaxWidth().clearAndSetSemantics {
                 contentDescription = "${feed.today}${if (feed.capped) " or more" else ""} scans today, ${feed.uniquePeopleToday} people"
+                onLongClick(SHARE_LABEL) { onShare(); true }
             },
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -796,6 +840,19 @@ private fun RecentScans(scans: List<Scan>, travel: TravelCalendar?, now: Instant
 }
 
 // ---------------------------------------------------------------- shared card
+
+/** Accessibility label for the long-press that opens the share sheet. */
+private const val SHARE_LABEL = "Share as image"
+
+/**
+ * Long-press gesture for numbers that don't otherwise respond to touch. Gesture only: callers add the matching
+ * `onLongClick` semantics action next to their content description so TalkBack offers it on the same node.
+ */
+@Composable
+private fun Modifier.onLongPress(action: () -> Unit): Modifier {
+    val current by rememberUpdatedState(action)
+    return pointerInput(Unit) { detectTapGestures(onLongPress = { current() }) }
+}
 
 @Composable
 private fun DashCard(
