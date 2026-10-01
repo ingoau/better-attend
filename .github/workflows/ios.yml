@@ -8,6 +8,10 @@ on:
     paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: macos-26
@@ -37,3 +41,4 @@ jobs:
         with:
           name: test-results
           path: ios/build/Tests.xcresult
+          retention-days: 14

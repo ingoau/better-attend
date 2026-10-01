@@ -65,6 +65,10 @@ xcodebuild -project Attend.xcodeproj -scheme Attend \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test   # unit + UI tests
 ```
 
+Each [release](https://github.com/ingoau/better-attend/releases/latest) includes an unsigned
+`.ipa` you can sideload with [AltStore](https://altstore.io) or [SideStore](https://sidestore.io).
+With a free Apple ID it needs refreshing every 7 days, and widgets and NFC may not work.
+
 Launch with `-AttendDemo YES` to try every screen against a built-in fake event (no account
 needed). Running on a device needs your Apple developer team set in Signing & Capabilities (App
 Groups for widgets, NFC Tag Reading for badges). iOS equivalents of the Android extras: Apple Wallet
@@ -74,9 +78,10 @@ scan sheet (tap "Scan NFC Badge"), as iOS doesn't allow always-on background tag
 
 ## Android: Install
 
-Grab an APK from the latest CI run (**Actions → Build APK → attend-apk**) or build it yourself —
-`app-arm64-v8a-release.apk` fits almost every phone, `app-universal-release.apk` runs everywhere —
-then open it on your phone and allow installing from that source. Android 8.0+.
+Download an APK from the [latest release](https://github.com/ingoau/better-attend/releases/latest) —
+`Attend-<version>-arm64-v8a.apk` fits almost every phone, `Attend-<version>-universal.apk` runs
+everywhere — then open it on your phone and allow installing from that source. Android 8.0+.
+Builds of unreleased changes are under **Actions → Android → attend-apk**.
 
 ## Android: Build
 
@@ -103,7 +108,18 @@ ATTEND_KEYSTORE_FILE, ATTEND_KEYSTORE_PASSWORD, ATTEND_KEY_ALIAS, ATTEND_KEY_PAS
 
 or a gitignored `keystore.properties` in `android/` (`storeFile`, `storePassword`, `keyAlias`,
 `keyPassword`). In CI, set the `ATTEND_KEYSTORE_BASE64` secret (plus the three others) to publish
-updates signed with a stable key.
+updates signed with a stable key. The release workflow requires them.
+
+## Releasing
+
+Push a version tag and GitHub builds both apps and publishes them as a release:
+
+```sh
+git tag v1.3.0 && git push origin v1.3.0
+```
+
+The tag sets the version name, and the version code is derived from it (`v1.3.0` → `10300`), so
+there's nothing to bump by hand.
 
 ## How sign-in works
 

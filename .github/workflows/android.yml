@@ -1,10 +1,16 @@
-name: Build APK
+name: Android
 
 on:
   push:
     branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
   pull_request:
+    paths: ["android/**", ".github/workflows/android.yml"]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -42,8 +48,10 @@ jobs:
         with:
           name: attend-apk
           path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: screenshots
           path: android/app/build/outputs/roborazzi/*.png
+          retention-days: 14
