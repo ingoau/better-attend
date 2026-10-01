@@ -14,7 +14,7 @@ import java.time.Instant
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
 class TicketsScreenshots : ScreenshotTest() {
-    /** Three days before Campfire Sydney opens. */
+    /** Three days before Campfire Canberra opens. */
     private val before = Instant.parse("2026-09-30T01:30:00Z")
     private val during = Instant.parse("2026-10-03T01:30:00Z")
 
@@ -23,8 +23,8 @@ class TicketsScreenshots : ScreenshotTest() {
 
     private val list = listOf(SampleData.tickets[0], pending) + SampleData.ticket.copy(
         id = "t3", checkedIn = true,
-        event = SampleData.ticketEvent.copy(id = "e3", name = "Counterspell Brisbane", startsAt = "2026-06-01T22:00:00Z", endsAt = "2026-06-02T08:00:00Z",
-            timezone = "Australia/Brisbane", locationCity = "Brisbane"),
+        event = SampleData.ticketEvent.copy(id = "e3", name = "Counterspell Tuggeranong", startsAt = "2026-06-01T22:00:00Z", endsAt = "2026-06-02T08:00:00Z",
+            timezone = "Australia/Canberra", locationCity = "Tuggeranong"),
     )
 
     @Test fun ticketsList() = snap("tickets_list") {

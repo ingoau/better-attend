@@ -11,7 +11,7 @@ object WidgetSamples {
     val now: Instant = Instant.parse("2026-10-03T01:30:00Z")
 
     val organizer = OrganizerWidgetData(
-        eventId = "sample", eventName = "Campfire Sydney", timezone = "Australia/Sydney",
+        eventId = "sample", eventName = "Campfire Canberra", timezone = "Australia/Canberra",
         hasCounts = true, checkedIn = 84, expected = 120, notArrived = 36, lastHour = 12,
         contexts = listOf(
             ContextCount("c1", "Check-in desk", 84, checksIn = true),
@@ -23,13 +23,13 @@ object WidgetSamples {
         travelEnabled = true,
         travel = TravelWidgetData(
             awaitingPickup = 7, collected = 12, checkedIn = 18, total = 41,
-            nextArrivalName = "Sam", nextArrivalAt = "2026-10-03T11:40:00+10:00", nextArrivalRoute = "MEL → SYD", nextArrivalReference = "QF401",
+            nextArrivalName = "Sam", nextArrivalAt = "2026-10-03T11:40:00+10:00", nextArrivalRoute = "SYD → CBR", nextArrivalReference = "QF1471",
         ),
     )
 
     val ticket = TicketWidgetData(
-        id = "sample", eventName = "Campfire Sydney", startsAt = "2026-10-05T22:00:00Z", endsAt = "2026-10-07T06:00:00Z",
-        timezone = "Australia/Sydney", city = "Sydney", confirmed = true, shortCode = "A1B2C3D4", statusLabel = "Ready",
+        id = "sample", eventName = "Campfire Canberra", startsAt = "2026-10-05T22:00:00Z", endsAt = "2026-10-07T06:00:00Z",
+        timezone = "Australia/Canberra", city = "Canberra", confirmed = true, shortCode = "A1B2C3D4", statusLabel = "Ready",
     )
 
     val snapshot = WidgetSnapshot(signedIn = true, organizer = organizer, ticket = ticket, isParticipant = true, builtAt = now.toString())

@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit
 
 /**
  * Larger, event-sized fake data for the organizer Home / Travel / Announcements screens
- * (previews and screenshot tests only). "Now" is Saturday 3 Oct 2026, 11:30 in Sydney.
+ * (previews and screenshot tests only). "Now" is Saturday 3 Oct 2026, 11:30 in Canberra.
  */
 object OrganizerSamples {
     val now: Instant = Instant.parse("2026-10-03T01:30:00Z")
@@ -72,19 +72,19 @@ object OrganizerSamples {
     private val green = Group("g2", "Mentors", "#22c55e")
 
     val travel = TravelCalendar(
-        eventTimezone = "Australia/Sydney",
+        eventTimezone = "Australia/Canberra",
         dates = listOf("2026-10-03", "2026-10-04", "2026-10-05"),
         entries = listOf(
-            travelEntry(0, "inbound", "plane", -95, "2026-10-03", "MEL → SYD", "QF401", "collected", groups = listOf(blue)),
-            travelEntry(1, "inbound", "plane", -60, "2026-10-03", "BNE → SYD", "VA914", "checked_in"),
-            travelEntry(2, "inbound", "plane", 20, "2026-10-03", "AKL → SYD", "NZ103", "awaiting_pickup", um = true, groups = listOf(blue, green)),
-            travelEntry(3, "inbound", "train", 45, "2026-10-03", "Central → Venue", "NSW TrainLink", "awaiting_pickup"),
-            travelEntry(4, "inbound", "plane", 75, "2026-10-03", "PER → SYD", "QF566 · QF412", "awaiting_pickup"),
+            travelEntry(0, "inbound", "plane", -95, "2026-10-03", "MEL → CBR", "QF810", "collected", groups = listOf(blue)),
+            travelEntry(1, "inbound", "plane", -60, "2026-10-03", "BNE → CBR", "VA1236", "checked_in"),
+            travelEntry(2, "inbound", "plane", 20, "2026-10-03", "SIN → CBR", "SQ288", "awaiting_pickup", um = true, groups = listOf(blue, green)),
+            travelEntry(3, "inbound", "train", 45, "2026-10-03", "Central → Kingston", "NSW TrainLink", "awaiting_pickup"),
+            travelEntry(4, "inbound", "plane", 75, "2026-10-03", "PER → CBR", "QF566 · QF1471", "awaiting_pickup"),
             travelEntry(5, "inbound", "car", 120, "2026-10-03", "Parent drop-off", null, "pickup_not_needed"),
-            travelEntry(6, "inbound", "bus", 150, "2026-10-03", "Canberra → Sydney", "Murrays", "awaiting_pickup"),
-            travelEntry(7, "outbound", "plane", 60 * 24 + 360, "2026-10-04", "SYD → MEL", "JQ508", null),
-            travelEntry(8, "outbound", "plane", 60 * 48 - 60, "2026-10-05", "SYD → AKL", "NZ104", null, um = true),
-            travelEntry(9, "outbound", "train", 60 * 48 + 30, "2026-10-05", "Venue → Central", null, null),
+            travelEntry(6, "inbound", "bus", 150, "2026-10-03", "Sydney → Canberra", "Murrays", "awaiting_pickup"),
+            travelEntry(7, "outbound", "plane", 60 * 24 + 360, "2026-10-04", "CBR → MEL", "QF815", null),
+            travelEntry(8, "outbound", "plane", 60 * 48 - 60, "2026-10-05", "CBR → SIN", "SQ291", null, um = true),
+            travelEntry(9, "outbound", "train", 60 * 48 + 30, "2026-10-05", "Kingston → Central", null, null),
             travelEntry(10, "inbound", "plane", null, null, "Details pending", null, "awaiting_pickup"),
         ),
         counts = TravelCounts(total = 11, inbound = 8, outbound = 3, scheduled = 10, unscheduled = 1, awaitingPickup = 5, collected = 1, checkedIn = 1, pickupNotNeeded = 1),
@@ -122,9 +122,9 @@ object OrganizerSamples {
     }
 
     val blasts = listOf(
-        SlackBlast(id = "b3", message = "Buses to the hotel leave from the main entrance at <b>9pm sharp</b>.<br>Bring everything with you!", status = "in_progress", recipientCount = 116, sentCount = 71, failedCount = 0, createdAt = iso(-1), sentBy = "Heidi"),
-        SlackBlast(id = "b1", message = "Lunch is ready in the atrium! 🌮 Vegetarian and allergen-free options are on the left table.", status = "completed", recipientCount = 120, sentCount = 118, failedCount = 2, createdAt = iso(-40), sentBy = "Orpheus Dino"),
-        SlackBlast(id = "b0", message = "Welcome to Campfire Sydney! Check-in opens at 9am in the foyer. Please have your ticket QR ready.", status = "completed", recipientCount = 120, sentCount = 120, failedCount = 0, createdAt = iso(-60 * 20), sentBy = "Orpheus Dino"),
+        SlackBlast(id = "b3", message = "Buses to the hotel in Braddon leave from the main entrance at <b>9pm sharp</b>.<br>Bring a jacket, it's 4° out tonight!", status = "in_progress", recipientCount = 116, sentCount = 71, failedCount = 0, createdAt = iso(-1), sentBy = "Heidi"),
+        SlackBlast(id = "b1", message = "Lunch is ready on the lawn by Lake Burley Griffin! 🌮 Vegetarian and allergen-free options are on the left table.", status = "completed", recipientCount = 120, sentCount = 118, failedCount = 2, createdAt = iso(-40), sentBy = "Orpheus Dino"),
+        SlackBlast(id = "b0", message = "Welcome to Campfire Canberra! Check-in opens at 9am in the foyer. Please have your ticket QR ready.", status = "completed", recipientCount = 120, sentCount = 120, failedCount = 0, createdAt = iso(-60 * 20), sentBy = "Orpheus Dino"),
         SlackBlast(id = "bf", message = "Test message", status = "failed", recipientCount = 0, sentCount = 0, failedCount = 0, createdAt = iso(-60 * 26), sentBy = "Heidi"),
     )
 }

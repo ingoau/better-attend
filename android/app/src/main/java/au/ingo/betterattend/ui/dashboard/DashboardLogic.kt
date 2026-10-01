@@ -39,7 +39,7 @@ object DashboardLogic {
     /** The API returns at most this many scans without `since`. */
     const val SCAN_FEED_CAP = 100
 
-    /** "Sat 3 – Sun 4 Oct · Sydney" */
+    /** "Sat 3 – Sun 4 Oct · Canberra" */
     fun subtitle(event: Event): String? =
         listOfNotNull(Time.range(event.startsAt, event.endsAt, event.timezone), event.locationCity?.takeIf { it.isNotBlank() })
             .joinToString(" · ").ifEmpty { null }

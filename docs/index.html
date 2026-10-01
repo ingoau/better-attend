@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BetterAttend</title>
+  <meta name="description" content="A faster, offline-first Hack Club Attend app for Android: scan tickets, check people in, track arrivals and run your event from your phone.">
+  <meta name="theme-color" content="#EC3750">
+  <meta property="og:title" content="BetterAttend">
+  <meta property="og:description" content="A better Hack Club Attend app for Android.">
+  <meta property="og:image" content="assets/icon.png">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <style>
+    :root {
+      --red: #EC3750;
+      --bg: #fdf8f8;
+      --fg: #1f1a1b;
+      --muted: #6b6264;
+      --card: #ffffff;
+      --line: #eadfe0;
+      --shot-border: #e7dcdd;
+      color-scheme: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151213;
+        --fg: #f5eeef;
+        --muted: #a99fa1;
+        --card: #201b1c;
+        --line: #342c2e;
+        --shot-border: #3a3133;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    a { color: inherit; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+    header { text-align: center; padding: 72px 0 40px; }
+    header img.icon { width: 104px; height: 104px; border-radius: 24px; box-shadow: 0 10px 30px rgba(236, 55, 80, .3); }
+    h1 { font-size: clamp(2.4rem, 7vw, 3.6rem); line-height: 1.05; letter-spacing: -.03em; margin: 22px 0 12px; }
+    .tagline { font-size: clamp(1.05rem, 2.6vw, 1.3rem); color: var(--muted); max-width: 34em; margin: 0 auto; }
+
+    .cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: center; margin-top: 32px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      height: 56px; padding: 0 26px; border-radius: 999px;
+      background: var(--red); color: #fff; text-decoration: none; font-weight: 650; font-size: 1.05rem;
+      transition: transform .15s ease, box-shadow .15s ease;
+      box-shadow: 0 6px 18px rgba(236, 55, 80, .35);
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(236, 55, 80, .4); }
+    .btn svg { width: 22px; height: 22px; }
+    .obtainium img { height: 74px; width: auto; display: block; margin: -9px -6px; }
+    .fine { color: var(--muted); font-size: .9rem; margin-top: 16px; }
+
+    .shots {
+      display: grid; grid-auto-flow: column; grid-auto-columns: minmax(180px, 1fr);
+      gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory;
+      padding: 28px 20px 36px; margin: 0 -20px;
+      scrollbar-width: thin;
+    }
+    .shots figure { margin: 0; scroll-snap-align: center; }
+    .shots img {
+      width: 100%; height: auto; display: block; border-radius: 22px;
+      border: 1px solid var(--shot-border); background: var(--card);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .08);
+    }
+    .shots figcaption { text-align: center; color: var(--muted); font-size: .9rem; margin-top: 10px; }
+
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding: 12px 0 56px; }
+    .feature { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
+    .feature h3 { margin: 0 0 6px; font-size: 1.05rem; }
+    .feature p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+    footer { border-top: 1px solid var(--line); padding: 28px 0 40px; text-align: center; color: var(--muted); font-size: .9rem; }
+    footer p { margin: 6px 0; }
+
+    @media (max-width: 640px) {
+      header { padding: 48px 0 28px; }
+      .shots { grid-auto-columns: 72%; }
+      .btn { height: 52px; }
+      .obtainium img { height: 70px; margin: -9px -6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img class="icon" src="assets/icon.svg" alt="" width="104" height="104">
+      <h1>BetterAttend</h1>
+      <p class="tagline">A faster, offline-first Hack Club Attend app for Android. Scan tickets, check people in, meet arrivals and run your whole event from your phone.</p>
+      <div class="cta">
+        <a class="btn" href="https://github.com/ingoau/better-attend/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+          Download APK
+        </a>
+        <a class="obtainium" href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend">
+          <img src="assets/badge_obtainium.png" alt="Get it on Obtainium" width="191" height="74">
+        </a>
+      </div>
+      <p class="fine">Android 8.0+ &middot; free and open source &middot; signs in with your existing Attend account</p>
+    </header>
+
+    <section class="shots" aria-label="Screenshots">
+      <figure>
+        <picture><source srcset="screenshots/home-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/home-light.png" alt="Home dashboard showing 84 of 120 people checked in at Campfire Canberra" loading="lazy" width="540" height="1171"></picture>
+        <figcaption>Live check-in dashboard</figcaption>
+      </figure>
+      <figure>
+        <picture><source srcset="screenshots/scan-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/scan-light.png" alt="Scanner with a successful check-in" loading="lazy" width="540" height="1171"></picture>
+        <figcaption>Scan QR codes and NFC badges</figcaption>
+      </figure>
+      <figure>
+        <picture><source srcset="screenshots/people-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/people-light.png" alt="People list with filter chips" loading="lazy" width="540" height="1171"></picture>
+        <figcaption>Find anyone instantly</figcaption>
+      </figure>
+      <figure>
+        <picture><source srcset="screenshots/travel-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/travel-light.png" alt="Travel list with flights into Canberra" loading="lazy" width="540" height="1171"></picture>
+        <figcaption>Meet every arrival</figcaption>
+      </figure>
+      <figure>
+        <picture><source srcset="screenshots/ticket-dark.png" media="(prefers-color-scheme: dark)"><img src="screenshots/ticket-light.png" alt="Participant ticket with QR code" loading="lazy" width="540" height="1171"></picture>
+        <figcaption>Tickets that work offline</figcaption>
+      </figure>
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <h3>Works without signal</h3>
+        <p>Scans made offline are queued and synced automatically. Rosters and tickets are cached on the phone.</p>
+      </div>
+      <div class="feature">
+        <h3>Built for the door</h3>
+        <p>Continuous QR scanning, NFC badges, big colour-coded results, safety alerts, undo and a kiosk mode for self check-in.</p>
+      </div>
+      <div class="feature">
+        <h3>Everything in one place</h3>
+        <p>People, travel and pickups, announcements, home-screen widgets and shareable stat cards.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <p>Also on iOS: the <a href="https://github.com/ingoau/better-attend/releases/latest">latest release</a> includes an unsigned <code>.ipa</code> for AltStore or SideStore.</p>
+      <p>BetterAttend is an unofficial app, not made by Hack Club. <a href="https://github.com/ingoau/better-attend">Source on GitHub</a>.</p>
+    </div>
+  </footer>
+</body>
+</html>

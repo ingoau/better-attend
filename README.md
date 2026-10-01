@@ -1,4 +1,38 @@
-# BetterAttend — a better Hack Club Attend app for Android and iOS
+<div align="center">
+
+<img src="docs/assets/icon.svg" width="112" height="112" alt="BetterAttend icon">
+
+# BetterAttend
+
+**A better Hack Club Attend app for Android and iOS.**<br>
+Faster, offline-first, and built for the door.
+
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend"><img src="docs/assets/badge_obtainium.png" alt="Get it on Obtainium" height="64"></a>
+
+[![Latest release](https://img.shields.io/github/v/release/ingoau/better-attend?style=flat-square&label=release&color=EC3750)](https://github.com/ingoau/better-attend/releases/latest)
+![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
+![iOS 18+](https://img.shields.io/badge/iOS-18%2B-000000?style=flat-square&logo=apple&logoColor=white)
+
+[**Download the APK**](https://github.com/ingoau/better-attend/releases/latest) · [Website](https://ingoau.github.io/better-attend/) · [iOS notes](ios/README.md)
+
+<br>
+
+<table>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/home-dark.png"><img src="docs/screenshots/home-light.png" width="200" alt="Home dashboard"></picture><br><sub><b>Live dashboard</b></sub></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/scan-dark.png"><img src="docs/screenshots/scan-light.png" width="200" alt="Scanner"></picture><br><sub><b>Scan QR + NFC</b></sub></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/people-dark.png"><img src="docs/screenshots/people-light.png" width="200" alt="People"></picture><br><sub><b>People</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/participant-dark.png"><img src="docs/screenshots/participant-light.png" width="200" alt="Participant detail"></picture><br><sub><b>Participant detail</b></sub></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/travel-dark.png"><img src="docs/screenshots/travel-light.png" width="200" alt="Travel"></picture><br><sub><b>Travel and pickups</b></sub></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/ticket-dark.png"><img src="docs/screenshots/ticket-light.png" width="200" alt="Ticket"></picture><br><sub><b>Offline tickets</b></sub></td>
+  </tr>
+</table>
+
+</div>
+
+## About
 
 BetterAttend is an unofficial app, not made by Hack Club: native rewrites of Hack Club's
 [Attend](https://attend.hackclub.com) mobile app
@@ -80,7 +114,11 @@ scan sheet (tap "Scan NFC Badge"), as iOS doesn't allow always-on background tag
 
 ## Android: Install
 
-Download an APK from the [latest release](https://github.com/ingoau/better-attend/releases/latest) —
+The easiest way is [Obtainium](https://obtainium.imranr.dev), which installs BetterAttend straight
+from GitHub releases and keeps it updated:
+[**add BetterAttend to Obtainium**](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend).
+
+Or download an APK from the [latest release](https://github.com/ingoau/better-attend/releases/latest) —
 `BetterAttend-<version>-arm64-v8a.apk` fits almost every phone, `BetterAttend-<version>-universal.apk` runs
 everywhere — then open it on your phone and allow installing from that source. Android 8.0+.
 Builds of unreleased changes are under **Actions → Android → attend-apk**.
@@ -96,8 +134,10 @@ cd android
 ```
 
 Screenshot tests render every screen in light and dark mode on the JVM into
-`android/app/build/outputs/roborazzi/`. `AppSmokeTest` boots the real app against a mock Attend API and
-walks every tab, including a real check-in.
+`android/app/build/outputs/roborazzi/`, using the sample event in `ui/preview/` (Campfire Canberra).
+The README and website screenshots in [`docs/screenshots/`](docs/screenshots) come from these; refresh
+them with `docs/update-screenshots.sh` after running the tests. `AppSmokeTest` boots the real app
+against a mock Attend API and walks every tab, including a real check-in.
 
 ### Signing
 
@@ -122,6 +162,11 @@ git tag v1.3.0 && git push origin v1.3.0
 
 The tag sets the version name, and the version code is derived from it (`v1.3.0` → `10300`), so
 there's nothing to bump by hand.
+
+## Website
+
+[`docs/`](docs) is a one-page website (plain HTML, no build step) with screenshots and download links.
+Publish it with GitHub Pages: **Settings → Pages → Deploy from a branch → `main` / `docs`**.
 
 ## How sign-in works
 

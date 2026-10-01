@@ -34,7 +34,7 @@ class TravelScreenshots : ScreenshotTest() {
 
     @Test fun searchNoMatches() = snap("travel_no_matches") { Content(loaded, query = "zzz") }
 
-    @Test fun empty() = snap("travel_empty") { Content(loaded.copy(calendar = TravelCalendar(eventTimezone = "Australia/Sydney"))) }
+    @Test fun empty() = snap("travel_empty") { Content(loaded.copy(calendar = TravelCalendar(eventTimezone = "Australia/Canberra"))) }
 
     @Test fun offline() = snap("travel_offline") {
         Content(loaded.copy(error = "You're offline. Check your connection."), filter = TravelFilter.Departures)

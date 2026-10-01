@@ -134,7 +134,7 @@ class AppSmokeTest {
         app.container.auth.signInWith(SessionResponse("test-token", now.plus(14, ChronoUnit.DAYS).toString(), SampleData.user))
         ActivityScenario.launch(MainActivity::class.java).also { scenario = it }.use {
             // Home dashboard with live counts from the mock roster.
-            waitForText("Campfire Sydney")
+            waitForText("Campfire Canberra")
             waitForText("checked in")
 
             tab("People").performClick()
@@ -162,7 +162,7 @@ class AppSmokeTest {
             synchronized(requests) { check(requests.any { it == "POST /events/${liveEvent.id}/scans" }) { "scan never posted: $requests" } }
 
             tab("Tickets").performClick()
-            waitForText("Campfire Sydney")
+            waitForText("Campfire Canberra")
 
             tab("Home").performClick()
             waitForText("checked in")
