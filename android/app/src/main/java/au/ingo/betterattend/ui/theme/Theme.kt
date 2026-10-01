@@ -110,10 +110,17 @@ private fun DynamicScheme.toColorScheme(): ColorScheme {
 
 /** Brand scheme generated from Hack Club red with the 2025 (Expressive) colour spec. */
 fun brandColorScheme(dark: Boolean): ColorScheme {
-    val scheme = SchemeVibrant(Hct.fromInt(HackClub.Red.toArgb()), dark, 0.0, ColorSpec.SpecVersion.SPEC_2025, DynamicScheme.Platform.PHONE)
+    val cs = seededColorScheme(HackClub.Red, dark)
+    // Keep the exact brand red as the light-mode primary so the app reads as Hack Club.
+    return if (dark) cs else cs.copy(primary = HackClub.Red, onPrimary = Color.White)
+}
+
+/** A vibrant Expressive scheme from any [seed] colour, with calmer Tonal Spot neutrals. */
+fun seededColorScheme(seed: Color, dark: Boolean): ColorScheme {
+    val scheme = SchemeVibrant(Hct.fromInt(seed.toArgb()), dark, 0.0, ColorSpec.SpecVersion.SPEC_2025, DynamicScheme.Platform.PHONE)
     // Calmer neutrals: surfaces come from a Tonal Spot scheme so dark mode isn't maroon.
-    val neutral = SchemeTonalSpot(Hct.fromInt(HackClub.Red.toArgb()), dark, 0.0, ColorSpec.SpecVersion.SPEC_2025, DynamicScheme.Platform.PHONE).toColorScheme()
-    val cs = scheme.toColorScheme().copy(
+    val neutral = SchemeTonalSpot(Hct.fromInt(seed.toArgb()), dark, 0.0, ColorSpec.SpecVersion.SPEC_2025, DynamicScheme.Platform.PHONE).toColorScheme()
+    return scheme.toColorScheme().copy(
         background = neutral.background, onBackground = neutral.onBackground,
         surface = neutral.surface, onSurface = neutral.onSurface,
         surfaceVariant = neutral.surfaceVariant, onSurfaceVariant = neutral.onSurfaceVariant,
@@ -123,8 +130,6 @@ fun brandColorScheme(dark: Boolean): ColorScheme {
         surfaceContainerLowest = neutral.surfaceContainerLowest, outline = neutral.outline, outlineVariant = neutral.outlineVariant,
         inverseSurface = neutral.inverseSurface, inverseOnSurface = neutral.inverseOnSurface,
     )
-    // Keep the exact brand red as the light-mode primary so the app reads as Hack Club.
-    return if (dark) cs else cs.copy(primary = HackClub.Red, onPrimary = Color.White)
 }
 
 private val AppShapes = Shapes(
