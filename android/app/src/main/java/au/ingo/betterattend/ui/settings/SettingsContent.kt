@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Phone
@@ -97,6 +98,7 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
     val snackbar = remember { SnackbarHostState() }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
+    var confirmIssueToken by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -206,6 +208,19 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             }
             item { LinkRow(1, 2, Icons.Outlined.Code, "Source code", "github.com/ingoau/better-attend-mobile") { actions.onOpenUrl(SettingsLinks.SOURCE) } }
 
+            item { GroupTitle("Developer") }
+            item {
+                Segment(0, 1, onClick = { confirmIssueToken = true }, enabled = !state.issuingToken) {
+                    ListItem(
+                        headlineContent = { Text("Copy a new mobile token") },
+                        supportingContent = { Text("Sign in again to get a separate 14-day token for scripts and tools. This phone keeps its own.") },
+                        leadingContent = { Icon(Icons.Outlined.Key, null) },
+                        trailingContent = { if (state.issuingToken) LoadingIndicator(Modifier.size(32.dp)) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+            }
+
             item {
                 Spacer(Modifier.height(24.dp))
                 OutlinedButton(
@@ -230,6 +245,22 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             text = { Text("Saved participants, travel and tickets are removed from this phone and downloaded again when needed. The first sync of a big event can take a moment.") },
             confirmButton = { Button(onClick = { confirmClear = false; actions.onClearCache() }) { Text("Clear") } },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (confirmIssueToken) {
+        AlertDialog(
+            onDismissRequest = { confirmIssueToken = false },
+            icon = { Icon(Icons.Outlined.Key, null) },
+            title = { Text("Copy a new mobile token?") },
+            text = {
+                Text(
+                    "You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to " +
+                        "your clipboard. Anyone with it can act as you for 14 days, so keep it private.",
+                )
+            },
+            confirmButton = { Button(onClick = { confirmIssueToken = false; actions.onIssueToken() }) { Text("Sign in") } },
+            dismissButton = { TextButton(onClick = { confirmIssueToken = false }) { Text("Cancel") } },
         )
     }
 

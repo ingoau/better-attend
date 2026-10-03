@@ -10,6 +10,19 @@ enum AuthState: Equatable {
     var user: User? { if case .signedIn(let u) = self { u } else { nil } }
 }
 
+/// One run of the sign-in that mints an extra mobile token. It has its own PKCE pair, so it can't
+/// disturb (or be mistaken for) the app's own sign-in.
+struct TokenIssueRequest {
+    let url: URL
+    fileprivate let verifier: String
+    fileprivate let state: String
+}
+
+struct TokenIssueError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 /// Hack Club Auth sign-in using the same OAuth client and redirect as the official app:
 /// Authorization Code + PKCE in an `ASWebAuthenticationSession`, then the code is exchanged by the
 /// Attend backend (which holds the client secret) for a 14-day mobile token.
@@ -49,6 +62,42 @@ final class AuthStore {
         let stateParam = Self.randomURLSafe(16)
         pkceVerifier = verifier
         oauthState = stateParam
+        return Self.buildAuthorizeURL(verifier: verifier, state: stateParam)
+    }
+
+    /// Starts a fresh Hack Club sign-in whose code becomes a brand-new mobile token.
+    func makeTokenIssueRequest() -> TokenIssueRequest {
+        let verifier = Self.randomURLSafe(64)
+        let stateParam = Self.randomURLSafe(16)
+        return TokenIssueRequest(url: Self.buildAuthorizeURL(verifier: verifier, state: stateParam), verifier: verifier, state: stateParam)
+    }
+
+    /// Exchanges the redirect for a new session without storing it: the stored token is never sent
+    /// or reused, and this app stays signed in with its own. Throws `CancellationError` if the user
+    /// declined on auth.hackclub.com.
+    func issueToken(from callback: URL, request: TokenIssueRequest) async throws -> SessionResponse {
+        let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func param(_ name: String) -> String? { items.first { $0.name == name }?.value }
+
+        if let err = param("error") {
+            if err == "access_denied" { throw CancellationError() }
+            throw TokenIssueError(message: param("error_description") ?? "Sign-in failed (\(err))")
+        }
+        guard let code = param("code") else { throw TokenIssueError(message: "Sign-in didn't return a code. Please try again.") }
+        if let returned = param("state"), returned != request.state {
+            throw TokenIssueError(message: "Sign-in response didn't match this request. Please try again.")
+        }
+        do {
+            return try await api().createSession(code: code, redirectURI: Self.redirectURI, codeVerifier: request.verifier, deviceName: Self.issuedDeviceName)
+        } catch let e as APIError where e.isUnauthorized {
+            throw TokenIssueError(message: "We couldn't find an Attend account for that Hack Club login.")
+        } catch {
+            if error.isCancellation { throw CancellationError() }
+            throw TokenIssueError(message: error.friendlyMessage)
+        }
+    }
+
+    private static func buildAuthorizeURL(verifier: String, state stateParam: String) -> URL {
         let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
         var c = URLComponents(url: Self.authorizeURL, resolvingAgainstBaseURL: false)!
         c.queryItems = [
@@ -149,6 +198,10 @@ final class AuthStore {
 
     private static var deviceName: String {
         "\(UIDevice.current.model) (BetterAttend)"
+    }
+
+    private static var issuedDeviceName: String {
+        "\(UIDevice.current.model) (BetterAttend, copied token)"
     }
 
     private static func randomURLSafe(_ bytes: Int) -> String {
