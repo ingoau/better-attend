@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
     private fun startSignIn() = launchAuth(container.auth.buildAuthorizeUri())
 
     /** Runs the whole Hack Club sign-in again to mint a separate token for the clipboard. */
-    private fun startTokenIssue() = launchAuth(container.auth.buildIssueTokenUri())
+    private fun startTokenIssue(deviceName: String) = launchAuth(container.auth.buildIssueTokenUri(deviceName))
 
     private fun launchAuth(uri: Uri) {
         try {

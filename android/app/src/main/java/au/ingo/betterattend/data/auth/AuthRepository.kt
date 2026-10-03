@@ -74,6 +74,15 @@ class SecureTokenStore(context: Context) : TokenStore {
     var issueOauthState: String?
         get() = prefs.getString("issue_oauth_state", null)
         set(value) = prefs.edit { if (value == null) remove("issue_oauth_state") else putString("issue_oauth_state", value) }
+
+    /** The device name the user picked for the token being issued. */
+    var issueDeviceName: String?
+        get() = prefs.getString("issue_device_name", null)
+        set(value) = prefs.edit { if (value == null) remove("issue_device_name") else putString("issue_device_name", value) }
+
+    fun clearIssue() = prefs.edit {
+        remove("issue_pkce_verifier"); remove("issue_oauth_state"); remove("issue_device_name")
+    }
 }
 
 /**
@@ -105,13 +114,15 @@ class AuthRepository(
 
     /**
      * Starts a fresh Hack Club sign-in whose code is exchanged for a brand-new mobile token. The
-     * stored session token is never sent or reused; the result lands in [tokenIssue].
+     * stored session token is never sent or reused; the result lands in [tokenIssue]. The new
+     * session is labelled [deviceName] in Attend, or [defaultIssuedDeviceName] if that's blank.
      */
-    fun buildIssueTokenUri(): Uri {
+    fun buildIssueTokenUri(deviceName: String): Uri {
         val verifier = randomUrlSafe(64)
         val stateParam = randomUrlSafe(16)
         store.issuePkceVerifier = verifier
         store.issueOauthState = stateParam
+        store.issueDeviceName = deviceName.trim().take(MAX_DEVICE_NAME).ifEmpty { defaultIssuedDeviceName }
         _tokenIssue.value = TokenIssueState.Idle
         return authorizeUri(verifier, stateParam)
     }
@@ -189,12 +200,12 @@ class AuthRepository(
     /** Exchanges the code for a new token without storing it. Returns null on success or an error message. */
     private suspend fun completeTokenIssue(uri: Uri): String? {
         // One-shot: a duplicate delivery of the same redirect finds no verifier and is ignored.
-        val verifier = synchronized(store) {
-            store.issuePkceVerifier.also {
-                store.issuePkceVerifier = null
-                store.issueOauthState = null
-            }
-        } ?: return null
+        val (verifier, deviceName) = synchronized(store) {
+            val taken = store.issuePkceVerifier to store.issueDeviceName
+            store.clearIssue()
+            taken
+        }
+        if (verifier == null) return null
         uri.getQueryParameter("error")?.let { err ->
             if (err == "access_denied") { _tokenIssue.value = TokenIssueState.Idle; return null }
             return failIssue(uri.getQueryParameter("error_description") ?: "Sign-in failed ($err)")
@@ -203,7 +214,7 @@ class AuthRepository(
         _tokenIssue.value = TokenIssueState.Exchanging
         return try {
             // Unauthenticated exchange: a new session, independent of the one this app is using.
-            val session = apiProvider().createSession(code, BuildConfig.OAUTH_REDIRECT_URI, verifier, issuedDeviceName())
+            val session = apiProvider().createSession(code, BuildConfig.OAUTH_REDIRECT_URI, verifier, deviceName ?: defaultIssuedDeviceName)
             _tokenIssue.value = TokenIssueState.Issued(session.token, session.user)
             null
         } catch (e: CancellationException) {
@@ -236,8 +247,7 @@ class AuthRepository(
     fun cancelled(message: String? = null) {
         val s = _state.value
         if (s is AuthState.SignedIn && store.issueOauthState != null) {
-            store.issuePkceVerifier = null
-            store.issueOauthState = null
+            store.clearIssue()
             if (message != null) _tokenIssue.value = TokenIssueState.Failed(message)
             return
         }
@@ -275,15 +285,16 @@ class AuthRepository(
         runCatching { apiProvider().deleteSession() }
         store.update(null, null)
         store.user = null
-        store.issuePkceVerifier = null
-        store.issueOauthState = null
+        store.clearIssue()
         _tokenIssue.value = TokenIssueState.Idle
         _state.value = AuthState.SignedOut()
     }
 
     private fun deviceName(): String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL} (BetterAttend)"
 
-    private fun issuedDeviceName(): String = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL} (BetterAttend, copied token)"
+    /** Suggested name for a copied token's session, shown in Attend's list of signed-in devices. */
+    val defaultIssuedDeviceName: String
+        get() = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL} (BetterAttend, copied token)"
 
     private fun randomUrlSafe(bytes: Int): String {
         val b = ByteArray(bytes).also { SecureRandom().nextBytes(it) }
@@ -292,5 +303,6 @@ class AuthRepository(
 
     companion object {
         const val AUTHORIZE_URL = "https://auth.hackclub.com/oauth/authorize"
+        const val MAX_DEVICE_NAME = 100
     }
 }

@@ -17,6 +17,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowLooper
 
 /**
  * Base for Roborazzi screenshot tests. Renders on the JVM (no emulator) into
@@ -42,7 +43,10 @@ abstract class ScreenshotTest {
         prepare()
         for (m in listOf(ThemeMode.Light, ThemeMode.Dark)) {
             mode = m
-            compose.waitForIdle()
+            // A dialog text field never lets Compose report idle; with a paused clock, step it and run
+            // the looper instead of waiting.
+            if (compose.mainClock.autoAdvance) compose.waitForIdle()
+            else { compose.mainClock.advanceTimeBy(2_000); ShadowLooper.idleMainLooper() }
             val path = "build/outputs/roborazzi/${name}_${m.name.lowercase()}.png"
             if (screen) captureScreenRoboImage(path) else compose.onRoot().captureRoboImage(path)
         }

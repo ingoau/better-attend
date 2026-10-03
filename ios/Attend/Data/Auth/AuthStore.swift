@@ -16,6 +16,7 @@ struct TokenIssueRequest {
     let url: URL
     fileprivate let verifier: String
     fileprivate let state: String
+    fileprivate let deviceName: String
 }
 
 struct TokenIssueError: LocalizedError {
@@ -65,11 +66,17 @@ final class AuthStore {
         return Self.buildAuthorizeURL(verifier: verifier, state: stateParam)
     }
 
-    /// Starts a fresh Hack Club sign-in whose code becomes a brand-new mobile token.
-    func makeTokenIssueRequest() -> TokenIssueRequest {
+    /// Starts a fresh Hack Club sign-in whose code becomes a brand-new mobile token. The new session
+    /// is labelled `deviceName` in Attend, or `defaultIssuedDeviceName` if that's blank.
+    func makeTokenIssueRequest(deviceName: String) -> TokenIssueRequest {
         let verifier = Self.randomURLSafe(64)
         let stateParam = Self.randomURLSafe(16)
-        return TokenIssueRequest(url: Self.buildAuthorizeURL(verifier: verifier, state: stateParam), verifier: verifier, state: stateParam)
+        let name = String(deviceName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxDeviceNameLength))
+        return TokenIssueRequest(
+            url: Self.buildAuthorizeURL(verifier: verifier, state: stateParam),
+            verifier: verifier, state: stateParam,
+            deviceName: name.isEmpty ? Self.defaultIssuedDeviceName : name
+        )
     }
 
     /// Exchanges the redirect for a new session without storing it: the stored token is never sent
@@ -88,7 +95,7 @@ final class AuthStore {
             throw TokenIssueError(message: "Sign-in response didn't match this request. Please try again.")
         }
         do {
-            return try await api().createSession(code: code, redirectURI: Self.redirectURI, codeVerifier: request.verifier, deviceName: Self.issuedDeviceName)
+            return try await api().createSession(code: code, redirectURI: Self.redirectURI, codeVerifier: request.verifier, deviceName: request.deviceName)
         } catch let e as APIError where e.isUnauthorized {
             throw TokenIssueError(message: "We couldn't find an Attend account for that Hack Club login.")
         } catch {
@@ -200,7 +207,10 @@ final class AuthStore {
         "\(UIDevice.current.model) (BetterAttend)"
     }
 
-    private static var issuedDeviceName: String {
+    static let maxDeviceNameLength = 100
+
+    /// Suggested name for a copied token's session, shown in Attend's list of signed-in devices.
+    static var defaultIssuedDeviceName: String {
         "\(UIDevice.current.model) (BetterAttend, copied token)"
     }
 

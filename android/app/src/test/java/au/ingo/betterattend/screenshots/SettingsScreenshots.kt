@@ -15,6 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
@@ -25,6 +26,7 @@ class SettingsScreenshots : ScreenshotTest() {
         settings = AppSettings(themeMode = ThemeMode.System, dynamicColor = false, sounds = true, haptics = true, keepScreenOn = false),
         pendingScans = 3,
         versionName = "1.0.0",
+        defaultTokenName = "Google Pixel 9 (BetterAttend, copied token)",
     )
 
     @Test fun settings() = snap("settings") { SettingsContent(state, SettingsActions()) }
@@ -48,7 +50,10 @@ class SettingsScreenshots : ScreenshotTest() {
 
     @Test fun settingsIssueTokenDialog() = snap("settings_issue_token_dialog", screen = true, prepare = {
         scrollToBottom()
+        // The dialog's text field never lets Compose go idle, so step a paused clock instead.
+        compose.mainClock.autoAdvance = false
         compose.onNodeWithText("Copy a new mobile token").performClick()
+        repeat(2) { compose.mainClock.advanceTimeBy(1_000); ShadowLooper.idleMainLooper() }
     }) {
         SettingsContent(state, SettingsActions())
     }

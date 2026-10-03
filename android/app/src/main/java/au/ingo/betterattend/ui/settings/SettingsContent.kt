@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -49,6 +50,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -75,8 +77,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import au.ingo.betterattend.data.auth.AuthRepository
 import au.ingo.betterattend.data.store.ThemeMode
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
@@ -99,6 +104,7 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
     var confirmIssueToken by rememberSaveable { mutableStateOf(false) }
+    var tokenName by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -210,7 +216,7 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
 
             item { GroupTitle("Developer") }
             item {
-                Segment(0, 1, onClick = { confirmIssueToken = true }, enabled = !state.issuingToken) {
+                Segment(0, 1, onClick = { tokenName = state.defaultTokenName; confirmIssueToken = true }, enabled = !state.issuingToken) {
                     ListItem(
                         headlineContent = { Text("Copy a new mobile token") },
                         supportingContent = { Text("Sign in again to get a separate 14-day token for scripts and tools. This phone keeps its own.") },
@@ -254,12 +260,26 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             icon = { Icon(Icons.Outlined.Key, null) },
             title = { Text("Copy a new mobile token?") },
             text = {
-                Text(
-                    "You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to " +
-                        "your clipboard. Anyone with it can act as you for 14 days, so keep it private.",
-                )
+                Column {
+                    Text(
+                        "You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to " +
+                            "your clipboard. Anyone with it can act as you for 14 days, so keep it private.",
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = tokenName,
+                        onValueChange = { tokenName = it.take(AuthRepository.MAX_DEVICE_NAME) },
+                        label = { Text("Device name") },
+                        supportingText = { Text("Shown in Attend's list of signed-in devices") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             },
-            confirmButton = { Button(onClick = { confirmIssueToken = false; actions.onIssueToken() }) { Text("Sign in") } },
+            confirmButton = {
+                Button(onClick = { confirmIssueToken = false; actions.onIssueToken(tokenName.ifBlank { state.defaultTokenName }) }) { Text("Sign in") }
+            },
             dismissButton = { TextButton(onClick = { confirmIssueToken = false }) { Text("Cancel") } },
         )
     }

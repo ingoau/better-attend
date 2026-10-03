@@ -40,6 +40,8 @@ data class SettingsUiState(
     val clearing: Boolean = false,
     /** A freshly issued mobile token is being fetched after the browser sign-in. */
     val issuingToken: Boolean = false,
+    /** Prefilled name for the new token's session; the user can change it. */
+    val defaultTokenName: String = "",
     val dynamicColorSupported: Boolean = true,
     val versionName: String = "",
 )
@@ -55,13 +57,13 @@ data class SettingsActions(
     val onSyncNow: () -> Unit = {},
     val onClearCache: () -> Unit = {},
     val onSignOut: () -> Unit = {},
-    val onIssueToken: () -> Unit = {},
+    val onIssueToken: (deviceName: String) -> Unit = {},
     val onOpenUrl: (String) -> Unit = {},
     val onMessageShown: () -> Unit = {},
 )
 
 @Composable
-fun SettingsScreen(nav: AppNavigator, onIssueToken: () -> Unit = {}) {
+fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit = {}) {
     val c = LocalAppContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -102,6 +104,7 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: () -> Unit = {}) {
         syncing = syncing,
         clearing = clearing,
         issuingToken = tokenIssue == TokenIssueState.Exchanging,
+        defaultTokenName = c.auth.defaultIssuedDeviceName,
         message = message,
         dynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
         versionName = BuildConfig.VERSION_NAME,
@@ -150,7 +153,7 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: () -> Unit = {}) {
                 haptics.confirm()
             }
         },
-        onIssueToken = { haptics.click(); onIssueToken() },
+        onIssueToken = { haptics.click(); onIssueToken(it) },
         onOpenUrl = { haptics.click(); runCatching { uri.openUri(it) }.onFailure { haptics.reject() } },
         onMessageShown = { message = null },
     )

@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var confirmClear = false
     @State private var confirmSignOut = false
     @State private var confirmIssueToken = false
+    @State private var tokenName = ""
     @State private var issuingToken = false
     @State private var tokenMessage: String?
 
@@ -244,6 +245,7 @@ struct SettingsView: View {
         Section {
             Button {
                 Haptics.tap()
+                tokenName = AuthStore.defaultIssuedDeviceName
                 confirmIssueToken = true
             } label: {
                 HStack(spacing: 12) {
@@ -258,10 +260,16 @@ struct SettingsView: View {
             }
             .tint(.primary)
             .disabled(issuingToken)
-            .confirmationDialog("Copy a new mobile token?", isPresented: $confirmIssueToken, titleVisibility: .visible) {
-                Button("Sign In") { Task { await issueToken() } }
+            .alert("Copy a new mobile token?", isPresented: $confirmIssueToken) {
+                TextField("Device name", text: $tokenName)
+                    .textInputAutocapitalization(.sentences)
+                    .onChange(of: tokenName) { _, new in
+                        if new.count > AuthStore.maxDeviceNameLength { tokenName = String(new.prefix(AuthStore.maxDeviceNameLength)) }
+                    }
+                Button("Cancel", role: .cancel) {}
+                Button("Sign In") { Task { await issueToken(deviceName: tokenName) } }
             } message: {
-                Text("You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to your clipboard. Anyone with it can act as you for 14 days, so keep it private.")
+                Text("You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to your clipboard. Anyone with it can act as you for 14 days, so keep it private.\n\nThe device name is shown in Attend's list of signed-in devices.")
             }
         } header: {
             Text("Developer")
@@ -276,8 +284,8 @@ struct SettingsView: View {
     // MARK: Actions
 
     /// Runs the whole Hack Club sign-in again for a fresh token; the app's own session is untouched.
-    private func issueToken() async {
-        let request = app.auth.makeTokenIssueRequest()
+    private func issueToken(deviceName: String) async {
+        let request = app.auth.makeTokenIssueRequest(deviceName: deviceName)
         issuingToken = true
         defer { issuingToken = false }
         let message: String
