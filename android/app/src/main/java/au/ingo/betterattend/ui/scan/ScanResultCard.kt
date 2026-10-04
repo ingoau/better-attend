@@ -36,7 +36,10 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -81,13 +84,22 @@ fun ResultKind.badgeShape(): Shape = when (this) {
     ResultKind.AlreadyScanned -> MaterialShapes.Cookie9Sided.toShape()
     ResultKind.SavedOffline -> MaterialShapes.Cookie6Sided.toShape()
     ResultKind.Rejected -> MaterialShapes.Cookie4Sided.toShape()
-    ResultKind.Checking, ResultKind.Undone -> CircleShape
+    ResultKind.Checking, ResultKind.Confirming, ResultKind.Undone -> CircleShape
 }
 
-/** The big colour-coded icon badge for an outcome (spinner while checking). */
+/** The big colour-coded icon badge for an outcome (spinner while checking, muted tick + spinner while confirming). */
 @Composable
 fun OutcomeBadge(kind: ResultKind, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 56.dp) {
     val c = kind.colors()
+    if (kind == ResultKind.Confirming) {
+        Box(modifier.size(size), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(size * 0.82f).clip(CircleShape).background(c.strong), contentAlignment = Alignment.Center) {
+                Icon(kind.icon(), null, Modifier.size(size * 0.46f), tint = c.onStrong.copy(alpha = 0.7f))
+            }
+            CircularProgressIndicator(Modifier.size(size), color = c.onStrong, strokeWidth = 3.dp, trackColor = c.strong.copy(alpha = 0.5f))
+        }
+        return
+    }
     Box(modifier.size(size).clip(kind.badgeShape()).background(c.strong), contentAlignment = Alignment.Center) {
         if (kind == ResultKind.Checking) LoadingIndicator(Modifier.size(size * 0.8f), color = c.onStrong)
         else Icon(kind.icon(), null, Modifier.size(size * 0.5f), tint = c.onStrong)
@@ -180,8 +192,8 @@ fun ScanResultCard(
                     contentAlignment = Alignment.CenterStart,
                     label = "outcome",
                     modifier = Modifier.weight(1f).clearAndSetSemantics {
-                        liveRegion = if (card.kind == ResultKind.Checking) LiveRegionMode.Polite else LiveRegionMode.Assertive
-                        contentDescription = listOfNotNull(card.title, p?.name, card.contextName, card.message).joinToString(". ")
+                        liveRegion = if (card.kind == ResultKind.Checking || card.kind == ResultKind.Confirming) LiveRegionMode.Polite else LiveRegionMode.Assertive
+                        contentDescription = listOfNotNull(card.title, p?.name, card.contextName, card.message, card.rosterNote).joinToString(". ")
                     },
                 ) { shown ->
                     val c = shown.kind.colors()
@@ -217,6 +229,8 @@ fun ScanResultCard(
                     modifier = Modifier.padding(start = 12.dp, top = 10.dp))
             }
 
+            card.rosterNote?.let { RosterNote(it, card.rosterStale, Modifier.padding(start = 8.dp, end = 8.dp, top = 10.dp)) }
+
             val showActions = card.canUndo || card.retryable || (onDetails != null && p != null) || card.busy
             if (showActions) {
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp, start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -239,6 +253,33 @@ fun ScanResultCard(
                     }
                 }
             } else Spacer(Modifier.height(4.dp))
+        }
+    }
+}
+
+/**
+ * How old the roster behind an offline result is. Quiet while it's fresh; a warning once it's over an
+ * hour old (or missing), because the person may have withdrawn or changed since.
+ */
+@Composable
+fun RosterNote(text: String, stale: Boolean, modifier: Modifier = Modifier) {
+    val s = MaterialTheme.status
+    if (stale) {
+        Surface(color = s.warningContainer, contentColor = s.onWarningContainer, shape = RoundedCornerShape(16.dp), modifier = modifier.fillMaxWidth()) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.WarningAmber, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(text, style = MaterialTheme.typography.titleSmall)
+                    Text("It may be out of date. Check their ticket and ID carefully.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    } else {
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -47,15 +47,27 @@ class SecureTokenStore(context: Context) : TokenStore {
         cached = token
         prefs.edit {
             if (token == null) { remove("token"); remove("expires_at") }
-            else { putString("token", SecureBox.encryptString(token)); putString("expires_at", expiresAt) }
+            else {
+                // Without a key the token lives in memory only (signed out on restart), never in plaintext.
+                val sealed = SecureBox.encryptString(token)
+                if (sealed == null) { remove("token"); remove("expires_at") }
+                else { putString("token", sealed); putString("expires_at", expiresAt) }
+            }
         }
     }
 
+    @Volatile private var cachedUser: User? = prefs.getString("user", null)?.let { SecureBox.decryptString(it) }
+        ?.let { runCatching { AttendJson.decodeFromString(User.serializer(), it) }.getOrNull() }
+
+    /** Like the token, kept in memory too, so a missing key only costs the session on restart. */
     var user: User?
-        get() = prefs.getString("user", null)?.let { SecureBox.decryptString(it) }
-            ?.let { runCatching { AttendJson.decodeFromString(User.serializer(), it) }.getOrNull() }
-        set(value) = prefs.edit {
-            if (value == null) remove("user") else putString("user", SecureBox.encryptString(AttendJson.encodeToString(User.serializer(), value)))
+        get() = cachedUser
+        set(value) {
+            cachedUser = value
+            prefs.edit {
+                val sealed = value?.let { SecureBox.encryptString(AttendJson.encodeToString(User.serializer(), it)) }
+                if (sealed == null) remove("user") else putString("user", sealed)
+            }
         }
 
     var pkceVerifier: String?

@@ -121,6 +121,9 @@ import au.ingo.betterattend.ui.share.ShareCardOptions
 import au.ingo.betterattend.ui.share.ShareStats
 import au.ingo.betterattend.ui.share.ShareStatsSheet
 import au.ingo.betterattend.ui.theme.status
+import au.ingo.betterattend.data.repo.ScanRejection
+import au.ingo.betterattend.ui.scan.OfflineRejectionsCard
+import au.ingo.betterattend.ui.scan.StorageUnavailableBanner
 import au.ingo.betterattend.ui.travel.modeIcon
 import au.ingo.betterattend.util.Time
 import java.time.Instant
@@ -136,6 +139,8 @@ fun DashboardContent(
     onAnnounce: () -> Unit,
     onKiosk: () -> Unit,
     now: Instant = Instant.now(),
+    onOpenRejection: (ScanRejection) -> Unit = {},
+    onDismissRejections: () -> Unit = {},
 ) {
     val event = state.event
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -188,7 +193,7 @@ fun DashboardContent(
                     actionLabel = "Choose event", onAction = onPickEvent,
                 )
                 else -> HapticPullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-                    DashboardBody(state, event, now, onRefresh, onSwitchTab, onOpenParticipant, onAnnounce, onKiosk)
+                    DashboardBody(state, event, now, onRefresh, onSwitchTab, onOpenParticipant, onAnnounce, onKiosk, onOpenRejection, onDismissRejections)
                 }
             }
             }
@@ -251,6 +256,8 @@ private fun DashboardBody(
     onOpenParticipant: (String) -> Unit,
     onAnnounce: () -> Unit,
     onKiosk: () -> Unit,
+    onOpenRejection: (ScanRejection) -> Unit,
+    onDismissRejections: () -> Unit,
 ) {
     // A roster without `syncedAt` is partial (e.g. a few people learned from scans before the first full sync):
     // counting it would say "3 of 3 checked in", so treat it as not loaded yet.
@@ -288,6 +295,17 @@ private fun DashboardBody(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         card(key = "status") { StatusLine(state.refreshing, updated, state.pendingScans) }
+        if (state.storageUnavailable) card(key = "storage") { StorageUnavailableBanner() }
+        if (state.rejections.isNotEmpty()) {
+            card(key = "rejections") {
+                OfflineRejectionsCard(
+                    rejections = state.rejections,
+                    timezone = event.timezone,
+                    onOpen = if (state.canViewParticipants) onOpenRejection else null,
+                    onDismissAll = onDismissRejections,
+                )
+            }
+        }
         if (state.error != null) {
             card(key = "offline") {
                 OfflineBanner(

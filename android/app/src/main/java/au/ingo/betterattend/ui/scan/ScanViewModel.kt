@@ -9,11 +9,16 @@ import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.repo.EventRepository
 import au.ingo.betterattend.data.repo.ScanInput
+import au.ingo.betterattend.data.repo.ScanRejection
 import au.ingo.betterattend.data.repo.ScanRepository
+import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.scan.FeedbackKind
 import au.ingo.betterattend.scan.NfcParseResult
+import au.ingo.betterattend.scan.Precheck
 import au.ingo.betterattend.scan.RosterSearch
+import au.ingo.betterattend.scan.ScanAdmission
 import au.ingo.betterattend.scan.SameCodeGate
+import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,7 +38,8 @@ import java.util.UUID
 
 /**
  * Drives the scanner (and kiosk): event + scan context selection, the same-code gate, submitting
- * scans with an instant "Checking…" card, undo, the offline queue and the find-person search.
+ * scans with an instant "Confirming…" card from the cached roster, the red interrupt when the server
+ * then turns one down, undo, the offline queue and the find-person search.
  *
  * @param fixedEventId kiosk mode: always this event instead of the app-wide selected one.
  * @param lockedContextId kiosk mode: always this context.
@@ -73,6 +79,10 @@ class ScanViewModel(
 
     private val _card = MutableStateFlow<ScanCard?>(null)
     val card: StateFlow<ScanCard?> = _card.asStateFlow()
+
+    private val _alerts = MutableStateFlow<List<ScanRejection>>(emptyList())
+    /** Scans the server turned down after the card said "Confirming…", newest first, until dismissed. */
+    val alerts: StateFlow<List<ScanRejection>> = _alerts.asStateFlow()
 
     private val _inFlight = MutableStateFlow(0)
     val inFlight: StateFlow<Int> = _inFlight.asStateFlow()
@@ -190,21 +200,35 @@ class ScanViewModel(
         }
         val ctx = contexts.value?.firstOrNull { it.id == selectedContextId.value }
         val key = newKey()
-        val cached = container.participants.roster(e.id)?.find(input.badgeToken ?: input.participantId.orEmpty())
-        show(ScanCard(key, ResultKind.Checking, "Checking…", participant = cached, contextName = ctx?.name, contextId = ctx?.id, gateKey = gateKey, input = input))
+        val checksIn = ctx?.checksIn ?: true
+        val roster = container.participants.roster(e.id)
+        // Shown straight away from the cache. A muted tick only when the roster knows them and sees no problem.
+        val cachedCheck = ScanAdmission.precheck(input, roster, ctx?.id, checksIn)
+        val cached = (cachedCheck as? Precheck.Pass)?.participant ?: (cachedCheck as? Precheck.Block)?.participant
+        val confirming = cachedCheck is Precheck.Pass && cached != null
+        show(ScanCard(key, if (confirming) ResultKind.Confirming else ResultKind.Checking, if (confirming) "Confirming…" else "Checking…",
+            participant = cached, contextName = ctx?.name, contextId = ctx?.id, gateKey = gateKey, input = input))
         _inFlight.update { it + 1 }
         viewModelScope.launch {
             try {
-                val outcome = container.scans.submit(e.id, input, ctx?.id, ctx?.name)
-                val result = outcome.toCard(key, ctx, e.timezone, gateKey, input)
+                val scannedAt = Time.nowIso()
+                val outcome = container.scans.submit(e.id, input, ctx?.id, ctx?.name, checksIn)
+                var result = outcome.toCard(key, ctx, e.timezone, gateKey, input)
+                if (result.kind == ResultKind.SavedOffline && !SecureBox.available.value) {
+                    result = result.copy(message = "Offline, will confirm later. Not saved to this phone: keep the app open until it syncs.")
+                }
                 result.kind.feedback()?.let { _feedback.tryEmit(it) }
                 _card.update { current -> if (current?.key == key) result else current }
+                // Don't just swap the card: a turned-down scan also raises a banner that stays until dismissed.
+                outcome.serverRejection(e.id, ctx?.name, scannedAt)?.let { alert -> _alerts.update { (listOf(alert) + it).take(MAX_ALERTS) } }
                 if (result.kind == ResultKind.Rejected && result.message?.contains("context", ignoreCase = true) == true) refreshContexts(e.id)
             } finally {
                 _inFlight.update { it - 1 }
             }
         }
     }
+
+    fun dismissAlert(clientScanId: String) = _alerts.update { list -> list.filterNot { it.clientScanId == clientScanId } }
 
     private fun show(card: ScanCard) { _card.value = card }
 
@@ -305,6 +329,10 @@ class ScanViewModel(
     }
 
     private fun newKey() = UUID.randomUUID().toString()
+
+    companion object {
+        private const val MAX_ALERTS = 20
+    }
 
     class Factory(
         private val container: AppContainer,

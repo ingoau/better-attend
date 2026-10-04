@@ -58,6 +58,7 @@ import au.ingo.betterattend.data.repo.PendingScan
 import au.ingo.betterattend.data.repo.ScanInput
 import au.ingo.betterattend.data.repo.ScanLogEntry
 import au.ingo.betterattend.data.repo.ScanOutcome
+import au.ingo.betterattend.scan.RejectReason
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.theme.status
@@ -268,6 +269,7 @@ fun ScanOutcome.kind(): ResultKind = when (this) {
     is ScanOutcome.AlreadyScanned -> ResultKind.AlreadyScanned
     is ScanOutcome.Queued -> ResultKind.SavedOffline
     is ScanOutcome.Failed -> ResultKind.Rejected
+    is ScanOutcome.Rejected -> if (reason == RejectReason.AlreadyCheckedIn) ResultKind.AlreadyScanned else ResultKind.Rejected
 }
 
 private fun ScanOutcome.label(): String = when (this) {
@@ -275,6 +277,7 @@ private fun ScanOutcome.label(): String = when (this) {
     is ScanOutcome.AlreadyScanned -> "Already scanned"
     is ScanOutcome.Queued -> "Saved offline"
     is ScanOutcome.Failed -> if (notFound) "Not registered" else message
+    is ScanOutcome.Rejected -> reason.title + if (offline) " (offline check)" else ""
 }
 
 @Composable

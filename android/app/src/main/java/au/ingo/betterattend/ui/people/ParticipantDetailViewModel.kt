@@ -155,7 +155,7 @@ class ParticipantDetailViewModel(
         viewModelScope.launch {
             _state.update { it.copy(busy = DetailBusy.CheckingIn) }
             val ctx = context ?: _state.value.defaultCheckInContext
-            val outcome = c.scans.submit(eventId, ScanInput(participantId = participantEventId, source = "manual"), ctx?.id, ctx?.name)
+            val outcome = c.scans.submit(eventId, ScanInput(participantId = participantEventId, source = "manual"), ctx?.id, ctx?.name, ctx?.checksIn ?: true)
             _state.update { it.copy(busy = null) }
             // Already scanned there = nothing changed, so it gets the "didn't happen" cue.
             cue(outcome is ScanOutcome.Scanned || outcome is ScanOutcome.Queued)
@@ -167,6 +167,7 @@ class ParticipantDetailViewModel(
                         "Already scanned${ctx?.let { " at ${it.name}" } ?: ""}${Time.time(outcome.result.firstScannedAt, tz)?.let { " at $it" } ?: ""}"
                     is ScanOutcome.Queued -> "You're offline. Check-in saved and will sync automatically."
                     is ScanOutcome.Failed -> outcome.message
+                    is ScanOutcome.Rejected -> "Not checked in: ${outcome.reason.short}" + if (outcome.offline) " (checked offline)" else ""
                 }
             )
         }
