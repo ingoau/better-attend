@@ -295,7 +295,7 @@ private struct KioskSetupView: View {
                             .contentTransition(.opacity)
                             .animation(.smooth, value: setup.prompt)
                             .accessibilityAddTraits(.updatesFrequently)
-                        PinField(pin: $pin, label: setup.prompt, shakes: errors) { entered in
+                        PinField(pin: $pin, label: setup.prompt, shakes: errors, submitTitle: setup.confirming ? "Start Kiosk" : "Next") { entered in
                             if let hash = setup.submit(entered) {
                                 Haptics.confirm()
                                 onStart(hash)
@@ -401,7 +401,7 @@ private struct KioskExitSheet: View {
                             .multilineTextAlignment(.center)
                             .contentTransition(.numericText())
                     }
-                    PinField(pin: $pin, label: prompt, isEnabled: !locked, shakes: shakes) { entered in
+                    PinField(pin: $pin, label: prompt, isEnabled: !locked, shakes: shakes, submitTitle: "Unlock") { entered in
                         let result = updated(entered, now: context.date)
                         last = result
                         switch result {
@@ -436,43 +436,70 @@ private struct KioskExitSheet: View {
 
 // MARK: - PIN field
 
-/// Four dots over a hidden number-pad field, like the system passcode prompts. Calls `onComplete`
-/// with each full entry and clears itself.
+/// A dot per digit over a hidden number-pad field, like the system passcode prompts. PINs can be
+/// any length, so the entry is submitted with a button; calls `onComplete` with it and clears itself.
 struct PinField: View {
     @Binding var pin: String
     var label: String
     var isEnabled = true
     var shakes = 0
+    var submitTitle = "Done"
     let onComplete: (String) -> Void
 
     @FocusState private var focused: Bool
 
     var body: some View {
-        ZStack {
-            TextField("", text: $pin)
-                .keyboardType(.numberPad)
-                .focused($focused)
-                .disabled(!isEnabled)
-                .frame(width: 1, height: 1)
-                .opacity(0.02)
-                .accessibilityLabel(label)
-                .accessibilityValue("\(pin.count) of \(KioskLogic.pinLength) digits entered")
-            HStack(spacing: 20) {
-                ForEach(0..<KioskLogic.pinLength, id: \.self) { i in
-                    let filled = i < pin.count
-                    Circle()
-                        .fill(filled ? Color.primary : Color.clear)
-                        .overlay(Circle().stroke(Color.primary.opacity(isEnabled ? 0.6 : 0.25), lineWidth: 1.5))
-                        .frame(width: 16, height: 16)
-                        .scaleEffect(filled ? 1.1 : 1)
-                        .animation(.bouncy(duration: 0.25), value: filled)
+        VStack(spacing: 18) {
+            ZStack {
+                TextField("", text: $pin)
+                    .keyboardType(.numberPad)
+                    .focused($focused)
+                    .disabled(!isEnabled)
+                    .onSubmit(submit)
+                    .toolbar {
+                        // The number pad has no return key, and on small iPhones it can cover the button below.
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button(submitTitle, action: submit)
+                                .bold()
+                                .disabled(!isEnabled || pin.isEmpty)
+                        }
+                    }
+                    .frame(width: 1, height: 1)
+                    .opacity(0.02)
+                    .accessibilityLabel(label)
+                    .accessibilityValue("\(pin.count) \(pin.count == 1 ? "digit" : "digits") entered")
+                Group {
+                    if pin.count > KioskLogic.maxPinDots {
+                        Text("\(pin.count) digits")
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                            .contentTransition(.numericText())
+                    } else {
+                        FlowLayout(spacing: 20, lineSpacing: 14) {
+                            ForEach(0..<pin.count, id: \.self) { _ in
+                                Circle()
+                                    .fill(Color.primary.opacity(isEnabled ? 1 : 0.4))
+                                    .frame(width: 16, height: 16)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
+                        }
+                    }
                 }
+                .animation(.bouncy(duration: 0.25), value: pin.count)
+                .frame(maxWidth: 280, minHeight: 16)
+                .frame(minWidth: 160)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 24)
+                .contentShape(.rect)
+                .onTapGesture { focused = true }
+                .accessibilityHidden(true)
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 24)
-            .contentShape(.rect)
-            .onTapGesture { focused = true }
-            .accessibilityHidden(true)
+            Button(action: submit) {
+                Text(submitTitle).frame(minWidth: 140)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(!isEnabled || pin.isEmpty)
         }
         .keyframeAnimator(initialValue: CGFloat(0), trigger: shakes) { content, x in
             content.offset(x: x)
@@ -493,14 +520,16 @@ struct PinField: View {
         .onChange(of: isEnabled) { _, on in if on { focused = true } }
         .onChange(of: pin) { _, value in
             let clean = KioskLogic.sanitizePin(value)
-            if clean != value { pin = clean; return }
-            guard clean.count == KioskLogic.pinLength else { return }
-            // Let the last dot fill before clearing.
-            Task {
-                try? await Task.sleep(for: .milliseconds(120))
-                pin = ""
-                onComplete(clean)
-            }
+            if clean != value { pin = clean }
         }
+    }
+
+    private func submit() {
+        guard isEnabled, !pin.isEmpty else { return }
+        let entered = pin
+        pin = ""
+        onComplete(entered)
+        // Return unfocuses the field after this runs; take focus back on the next turn.
+        Task { focused = true }
     }
 }
