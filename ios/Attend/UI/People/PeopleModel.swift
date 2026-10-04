@@ -139,12 +139,13 @@ enum CheckInActions {
             eventId: eventId,
             input: ScanInput(participantId: participantEventId, source: "manual"),
             scanContextId: context?.id,
-            scanContextName: context?.name
+            scanContextName: context?.name,
+            checksIn: context?.checksIn ?? true
         )
         switch outcome {
         case .scanned, .queued: Haptics.confirm()
         // Already scanned there = nothing changed, so it gets the "didn't happen" cue.
-        case .alreadyScanned, .failed: Haptics.reject()
+        case .alreadyScanned, .failed, .rejected: Haptics.reject()
         }
         return outcome
     }
@@ -159,8 +160,10 @@ enum CheckInActions {
             return .info("Already scanned\(at)\(when)", systemImage: "checkmark.circle")
         case .queued:
             return .info("You're offline. The check-in will sync automatically.", systemImage: "icloud.and.arrow.up")
-        case .failed(_, let message, _, _):
+        case .failed(_, let message, _, _, _):
             return .error(message)
+        case .rejected(_, let reason, _, _, let offline, _, _):
+            return .error("Not checked in: \(reason.short)" + (offline ? " (checked offline)" : ""))
         }
     }
 

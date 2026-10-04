@@ -99,6 +99,13 @@ private struct ScanScreen: View {
 
     private func scanner(_ event: Event) -> some View {
         VStack(spacing: 10) {
+            if !app.secureStorage { StorageUnavailableBanner() }
+            ScanAlertBanners(
+                alerts: model.alerts,
+                timezone: event.timezone,
+                onOpen: model.canOpenDetails ? { a in openAlert(a) } : nil,
+                onDismiss: { a in Haptics.tap(); model.dismissAlert(a.clientScanId) }
+            )
             ContextPicker(
                 contexts: model.contexts,
                 selectedId: model.selectedContextId,
@@ -119,6 +126,7 @@ private struct ScanScreen: View {
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
         .animation(.smooth, value: model.pendingCount > 0)
+        .animation(.smooth, value: model.alerts)
     }
 
     private var pendingBanner: some View {
@@ -162,7 +170,7 @@ private struct ScanScreen: View {
     }
 
     private var accent: Color {
-        guard let card = model.card, card.kind != .checking, card.kind != .undone else { return .white }
+        guard let card = model.card, card.kind.isFinal, card.kind != .undone else { return .white }
         return card.kind.tone.color
     }
 
@@ -338,6 +346,12 @@ private struct ScanScreen: View {
         Haptics.tap()
         model.setQuery("")
         sheet = .find
+    }
+
+    private func openAlert(_ a: ScanRejection) {
+        guard let peid = a.participantEventId else { return }
+        Haptics.tap()
+        router.openParticipant(eventId: a.eventId, participantEventId: peid)
     }
 
     private func openDetails(_ p: Participant) {

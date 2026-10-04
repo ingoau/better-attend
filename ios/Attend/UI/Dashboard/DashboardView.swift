@@ -147,6 +147,16 @@ private struct DashboardBody: View {
                     }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                if !app.secureStorage { StorageUnavailableBanner() }
+                if !app.scans.rejections.isEmpty {
+                    OfflineRejectionsCard(
+                        rejections: app.scans.rejections,
+                        timezone: event.timezone,
+                        onOpen: event.canViewParticipants ? { r in openRejection(r) } : nil,
+                        onDismissAll: { Task { await app.scans.dismissRejections() } }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 if event.canViewParticipants {
                     organizerCards(roster: roster, stats: stats, progress: progress, arrivals: arrivals)
                 } else {
@@ -159,6 +169,7 @@ private struct DashboardBody: View {
             .frame(maxWidth: wide ? 1080 : 680)
             .frame(maxWidth: .infinity)
             .animation(.smooth, value: model.error)
+            .animation(.smooth, value: app.scans.rejections)
             .animation(.smooth, value: stats == nil)
         }
         .background(Color(.systemGroupedBackground))
@@ -173,6 +184,12 @@ private struct DashboardBody: View {
     }
 
     private func onShare(_ id: String) { share = ShareRequest(startId: id) }
+
+    private func openRejection(_ r: ScanRejection) {
+        guard let peid = r.participantEventId else { return }
+        Haptics.tap()
+        router.openParticipant(eventId: r.eventId, participantEventId: peid)
+    }
 
     // MARK: Header
 

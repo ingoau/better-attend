@@ -1,27 +1,73 @@
 import SwiftUI
 
-/// The round, colour-coded outcome badge (a spinner while checking).
+/// The round, colour-coded outcome badge (a spinner while checking; a muted tick inside a spinning
+/// ring while confirming, so it never reads as a success before the server agrees).
 struct OutcomeBadge: View {
     let kind: ResultKind
     var size: CGFloat = 52
 
+    @State private var spin = false
+
     var body: some View {
         ZStack {
-            Circle().fill(kind.tone.color)
-            if kind == .checking {
-                ProgressView()
-                    .tint(kind.tone.onColor)
-                    .controlSize(size > 80 ? .large : .regular)
-            } else {
+            if kind == .confirming {
+                Circle().fill(Color.secondary.opacity(0.18)).padding(size * 0.09)
+                Circle().stroke(Color.secondary.opacity(0.18), lineWidth: 3)
+                Circle()
+                    .trim(from: 0, to: 0.28)
+                    .stroke(Color.secondary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(spin ? 360 : 0))
+                    .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: spin)
+                    .onAppear { spin = true }
                 Image(systemName: kind.systemImage)
-                    .font(.system(size: size * 0.44, weight: .bold))
-                    .foregroundStyle(kind.tone.onColor)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
+                    .font(.system(size: size * 0.38, weight: .bold))
+                    .foregroundStyle(.secondary)
+            } else {
+                Circle().fill(kind.tone.color)
+                if kind == .checking {
+                    ProgressView()
+                        .tint(kind.tone.onColor)
+                        .controlSize(size > 80 ? .large : .regular)
+                } else {
+                    Image(systemName: kind.systemImage)
+                        .font(.system(size: size * 0.44, weight: .bold))
+                        .foregroundStyle(kind.tone.onColor)
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                }
             }
         }
         .frame(width: size, height: size)
         .animation(.bouncy(duration: 0.35), value: kind)
         .accessibilityHidden(true)
+    }
+}
+
+/// How old the roster behind an offline result is. Quiet while it's fresh; a warning once it's over an
+/// hour old (or missing), because the person may have withdrawn or changed since.
+struct RosterNoteView: View {
+    let text: String
+    let stale: Bool
+
+    var body: some View {
+        if stale {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(text).font(.subheadline.weight(.semibold))
+                    Text("It may be out of date. Check their ticket and ID carefully.").font(.caption)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .foregroundStyle(Tone.warning.onContainer)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Tone.warning.container, in: .rect(cornerRadius: 16, style: .continuous))
+            .accessibilityElement(children: .combine)
+        } else {
+            Label(text, systemImage: "clock")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -88,6 +134,11 @@ struct ScanResultCardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
+                    .padding(.top, 10)
+            }
+            if let note = card.rosterNote {
+                RosterNoteView(text: note, stale: card.rosterStale)
+                    .padding(.horizontal, 8)
                     .padding(.top, 10)
             }
             actions
