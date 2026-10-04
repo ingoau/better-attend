@@ -175,6 +175,10 @@ its registered redirect `attend://oauth/callback`, opened in an **Auth Tab** (fa
 Tab; on iOS an `ASWebAuthenticationSession`). The code is exchanged by the Attend backend (`POST /api/v1/session`), which returns a 14-day
 mobile token that the app rotates automatically. Your account must already exist in Attend.
 
+**Settings → Developer → Copy a new mobile token** runs that whole sign-in again with a fresh PKCE
+pair and copies the newly issued token to the clipboard, for scripts and other tools. It never
+reuses or sends the app's own token, and the app stays signed in with its own session.
+
 ## Known limitations
 
 - **Push notifications** aren't supported: the Attend backend only accepts Expo push tokens.

@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleIntent(intent)
-        setContent { AttendRoot(container, onSignIn = ::startSignIn) }
+        setContent { AttendRoot(container, onSignIn = ::startSignIn, onIssueToken = ::startTokenIssue) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -71,8 +71,12 @@ class MainActivity : ComponentActivity() {
         container.scope.launch { container.auth.handleCallback(uri) }
     }
 
-    private fun startSignIn() {
-        val uri = container.auth.buildAuthorizeUri()
+    private fun startSignIn() = launchAuth(container.auth.buildAuthorizeUri())
+
+    /** Runs the whole Hack Club sign-in again to mint a separate token for the clipboard. */
+    private fun startTokenIssue(deviceName: String) = launchAuth(container.auth.buildIssueTokenUri(deviceName))
+
+    private fun launchAuth(uri: Uri) {
         try {
             AuthTabIntent.Builder().build().launch(authLauncher, uri, "attend")
         } catch (_: ActivityNotFoundException) {

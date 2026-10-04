@@ -67,7 +67,7 @@ object ExternalNavRequests {
 }
 
 @Composable
-fun AttendRoot(container: AppContainer, onSignIn: () -> Unit) {
+fun AttendRoot(container: AppContainer, onSignIn: () -> Unit, onIssueToken: (deviceName: String) -> Unit = {}) {
     val settings by container.settings.settings.collectAsStateWithLifecycle(initialValue = null)
     val auth by container.auth.state.collectAsStateWithLifecycle()
     val s = settings ?: return
@@ -83,7 +83,7 @@ fun AttendRoot(container: AppContainer, onSignIn: () -> Unit) {
                     when (state) {
                         AuthState.Loading -> LoadingState(message = "Signing you in…")
                         is AuthState.SignedOut -> LoginScreen(loading = false, error = state.message, onSignIn = onSignIn)
-                        is AuthState.SignedIn -> SignedInApp(container, state.user)
+                        is AuthState.SignedIn -> SignedInApp(container, state.user, onIssueToken)
                     }
                 }
             }
@@ -92,7 +92,7 @@ fun AttendRoot(container: AppContainer, onSignIn: () -> Unit) {
 }
 
 @Composable
-private fun SignedInApp(container: AppContainer, user: User) {
+private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (deviceName: String) -> Unit) {
     val nav = rememberNavController()
     val scope = rememberCoroutineScope()
     val events by container.events.events.collectAsStateWithLifecycle()
@@ -173,7 +173,7 @@ private fun SignedInApp(container: AppContainer, user: User) {
         }
         composable<ParticipantRoute> { val r = it.toRoute<ParticipantRoute>(); CardFrame { ParticipantDetailScreen(r.eventId, r.participantEventId, navigator) } }
         composable<TicketRoute> { val id = it.toRoute<TicketRoute>().ticketId; CardFrame { TicketDetailScreen(id, navigator) } }
-        composable<SettingsRoute> { CardFrame { SettingsScreen(navigator) } }
+        composable<SettingsRoute> { CardFrame { SettingsScreen(navigator, onIssueToken) } }
         composable<BlastsRoute> { val id = it.toRoute<BlastsRoute>().eventId; CardFrame { BlastsScreen(id, navigator) } }
         composable<KioskRoute> { val r = it.toRoute<KioskRoute>(); CardFrame { KioskScreen(r.eventId, r.scanContextId, navigator) } }
     }

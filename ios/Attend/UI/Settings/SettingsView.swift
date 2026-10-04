@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 
 enum SettingsLinks {
@@ -12,12 +13,17 @@ enum SettingsLinks {
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
 
     @State private var syncing = false
     @State private var clearing = false
     @State private var dataMessage: String?
     @State private var confirmClear = false
     @State private var confirmSignOut = false
+    @State private var confirmIssueToken = false
+    @State private var tokenName = ""
+    @State private var issuingToken = false
+    @State private var tokenMessage: String?
 
     private var pending: Int { app.scans.pending.count }
 
@@ -46,6 +52,7 @@ struct SettingsView: View {
                 widgetsSection
                 helpSection
                 aboutSection
+                if !app.isDemo { developerSection }
 
                 Section {
                     Button(role: .destructive) {
@@ -234,7 +241,75 @@ struct SettingsView: View {
         }
     }
 
+    private var developerSection: some View {
+        Section {
+            Button {
+                Haptics.tap()
+                tokenName = AuthStore.defaultIssuedDeviceName
+                confirmIssueToken = true
+            } label: {
+                HStack(spacing: 12) {
+                    SettingsLabel(
+                        "Copy a New Mobile Token",
+                        subtitle: "Sign in again to get a separate 14-day token for scripts and tools. This device keeps its own.",
+                        systemImage: "key.fill", color: HackClub.dark
+                    )
+                    Spacer(minLength: 8)
+                    if issuingToken { ProgressView() }
+                }
+            }
+            .tint(.primary)
+            .disabled(issuingToken)
+            .alert("Copy a new mobile token?", isPresented: $confirmIssueToken) {
+                TextField("Device name", text: $tokenName)
+                    .textInputAutocapitalization(.sentences)
+                    .onChange(of: tokenName) { _, new in
+                        if new.count > AuthStore.maxDeviceNameLength { tokenName = String(new.prefix(AuthStore.maxDeviceNameLength)) }
+                    }
+                Button("Cancel", role: .cancel) {}
+                Button("Sign In") { Task { await issueToken(deviceName: tokenName) } }
+            } message: {
+                Text("You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to your clipboard. Anyone with it can act as you for 14 days, so keep it private.\n\nThe device name is shown in Attend's list of signed-in devices.")
+            }
+        } header: {
+            Text("Developer")
+        } footer: {
+            if let tokenMessage {
+                Text(tokenMessage)
+                    .transition(.opacity)
+            }
+        }
+    }
+
     // MARK: Actions
+
+    /// Runs the whole Hack Club sign-in again for a fresh token; the app's own session is untouched.
+    private func issueToken(deviceName: String) async {
+        let request = app.auth.makeTokenIssueRequest(deviceName: deviceName)
+        issuingToken = true
+        defer { issuingToken = false }
+        let message: String
+        do {
+            let callback = try await webAuthenticationSession.authenticate(
+                using: request.url,
+                callback: .customScheme(AuthStore.callbackScheme),
+                preferredBrowserSession: .shared,
+                additionalHeaderFields: [:]
+            )
+            let session = try await app.auth.issueToken(from: callback, request: request)
+            UIPasteboard.general.string = session.token
+            Haptics.confirm()
+            message = "New mobile token for \(session.user.email) copied. Treat it like a password."
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            return
+        } catch is CancellationError {
+            return
+        } catch {
+            Haptics.reject()
+            message = (error as? TokenIssueError)?.message ?? "Sign-in couldn't be completed. Please try again."
+        }
+        withAnimation { tokenMessage = message }
+    }
 
     private var signOutMessage: String {
         var s = "Participant data saved on this device will be wiped."

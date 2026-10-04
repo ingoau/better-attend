@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Phone
@@ -48,6 +50,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -74,8 +77,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import au.ingo.betterattend.data.auth.AuthRepository
 import au.ingo.betterattend.data.store.ThemeMode
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
@@ -97,6 +103,8 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
     val snackbar = remember { SnackbarHostState() }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
+    var confirmIssueToken by rememberSaveable { mutableStateOf(false) }
+    var tokenName by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -206,6 +214,19 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             }
             item { LinkRow(1, 2, Icons.Outlined.Code, "Source code", "github.com/ingoau/better-attend-mobile") { actions.onOpenUrl(SettingsLinks.SOURCE) } }
 
+            item { GroupTitle("Developer") }
+            item {
+                Segment(0, 1, onClick = { tokenName = state.defaultTokenName; confirmIssueToken = true }, enabled = !state.issuingToken) {
+                    ListItem(
+                        headlineContent = { Text("Copy a new mobile token") },
+                        supportingContent = { Text("Sign in again to get a separate 14-day token for scripts and tools. This phone keeps its own.") },
+                        leadingContent = { Icon(Icons.Outlined.Key, null) },
+                        trailingContent = { if (state.issuingToken) LoadingIndicator(Modifier.size(32.dp)) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+            }
+
             item {
                 Spacer(Modifier.height(24.dp))
                 OutlinedButton(
@@ -230,6 +251,36 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             text = { Text("Saved participants, travel and tickets are removed from this phone and downloaded again when needed. The first sync of a big event can take a moment.") },
             confirmButton = { Button(onClick = { confirmClear = false; actions.onClearCache() }) { Text("Clear") } },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (confirmIssueToken) {
+        AlertDialog(
+            onDismissRequest = { confirmIssueToken = false },
+            icon = { Icon(Icons.Outlined.Key, null) },
+            title = { Text("Copy a new mobile token?") },
+            text = {
+                Column {
+                    Text(
+                        "You'll sign in on auth.hackclub.com again. Attend then issues a brand-new token, which is copied to " +
+                            "your clipboard. Anyone with it can act as you for 14 days, so keep it private.",
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = tokenName,
+                        onValueChange = { tokenName = it.take(AuthRepository.MAX_DEVICE_NAME) },
+                        label = { Text("Device name") },
+                        supportingText = { Text("Shown in Attend's list of signed-in devices") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { confirmIssueToken = false; actions.onIssueToken(tokenName.ifBlank { state.defaultTokenName }) }) { Text("Sign in") }
+            },
+            dismissButton = { TextButton(onClick = { confirmIssueToken = false }) { Text("Cancel") } },
         )
     }
 
