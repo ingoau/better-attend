@@ -54,6 +54,10 @@ class KioskScreenshots : ScreenshotTest() {
         KioskSetupContent("Campfire Canberra", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = true, entered = 2, error = null, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
     }
 
+    @Test fun setupLongPin() = snap("kiosk_setup_long_pin") {
+        KioskSetupContent("Campfire Canberra", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = false, entered = 14, error = null, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
+    }
+
     @Test fun exitLocked() = snap("kiosk_exit_locked") {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             KioskExitContent(entered = 0, error = true, wrongTries = 3, lockoutSeconds = 27, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
