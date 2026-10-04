@@ -15,7 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowLooper
 
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h891dp-xxhdpi")
@@ -53,7 +52,7 @@ class SettingsScreenshots : ScreenshotTest() {
         // The dialog's text field never lets Compose go idle, so step a paused clock instead.
         compose.mainClock.autoAdvance = false
         compose.onNodeWithText("Copy a new mobile token").performClick()
-        repeat(2) { compose.mainClock.advanceTimeBy(1_000); ShadowLooper.idleMainLooper() }
+        settlePaused()
     }) {
         SettingsContent(state, SettingsActions())
     }

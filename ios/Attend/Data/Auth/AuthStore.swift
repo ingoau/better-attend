@@ -81,7 +81,7 @@ final class AuthStore {
 
     /// Exchanges the redirect for a new session without storing it: the stored token is never sent
     /// or reused, and this app stays signed in with its own. Throws `CancellationError` if the user
-    /// declined on auth.hackclub.com.
+    /// declined on auth.hackclub.com or this app's session ended in the meantime.
     func issueToken(from callback: URL, request: TokenIssueRequest) async throws -> SessionResponse {
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         func param(_ name: String) -> String? { items.first { $0.name == name }?.value }
@@ -94,8 +94,12 @@ final class AuthStore {
         if let returned = param("state"), returned != request.state {
             throw TokenIssueError(message: "Sign-in response didn't match this request. Please try again.")
         }
+        // The session ended while the browser was open: nobody is left to hand the token to.
+        guard state.user != nil else { throw CancellationError() }
         do {
-            return try await api().createSession(code: code, redirectURI: Self.redirectURI, codeVerifier: request.verifier, deviceName: request.deviceName)
+            let session = try await api().createSession(code: code, redirectURI: Self.redirectURI, codeVerifier: request.verifier, deviceName: request.deviceName)
+            guard state.user != nil else { throw CancellationError() }
+            return session
         } catch let e as APIError where e.isUnauthorized {
             throw TokenIssueError(message: "We couldn't find an Attend account for that Hack Club login.")
         } catch {

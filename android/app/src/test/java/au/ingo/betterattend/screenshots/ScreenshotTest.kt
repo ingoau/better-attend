@@ -1,5 +1,6 @@
 package au.ingo.betterattend.screenshots
 
+import android.os.Looper
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +18,8 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
 import org.robolectric.annotation.GraphicsMode
-import org.robolectric.shadows.ShadowLooper
+import org.robolectric.Shadows.shadowOf
+import java.time.Duration
 
 /**
  * Base for Roborazzi screenshot tests. Renders on the JVM (no emulator) into
@@ -27,6 +29,12 @@ import org.robolectric.shadows.ShadowLooper
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 abstract class ScreenshotTest {
     @get:Rule val compose = createComposeRule()
+
+    /** With a paused clock: steps Compose and the main looper so every window, dialogs included, redraws. */
+    fun settlePaused() = repeat(3) {
+        compose.mainClock.advanceTimeBy(500)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+    }
 
     /**
      * Captures [content] in both light and dark themes. [prepare] runs once before capturing (scrolling,
@@ -45,8 +53,7 @@ abstract class ScreenshotTest {
             mode = m
             // A dialog text field never lets Compose report idle; with a paused clock, step it and run
             // the looper instead of waiting.
-            if (compose.mainClock.autoAdvance) compose.waitForIdle()
-            else { compose.mainClock.advanceTimeBy(2_000); ShadowLooper.idleMainLooper() }
+            if (compose.mainClock.autoAdvance) compose.waitForIdle() else settlePaused()
             val path = "build/outputs/roborazzi/${name}_${m.name.lowercase()}.png"
             if (screen) captureScreenRoboImage(path) else compose.onRoot().captureRoboImage(path)
         }

@@ -155,7 +155,7 @@ class AuthRepository(
 
     /** Completes sign-in from the redirect URI. Returns null on success or an error message. */
     suspend fun handleCallback(uri: Uri): String? {
-        if (isTokenIssueCallback(uri)) return completeTokenIssue(uri)
+        takeTokenIssue(uri)?.let { (verifier, deviceName) -> return completeTokenIssue(uri, verifier, deviceName) }
         // Duplicate delivery (Auth Tab result + intent filter) — the first one wins.
         if (_state.value is AuthState.Loading || _state.value is AuthState.SignedIn) return null
         val verifier = store.pkceVerifier
@@ -190,22 +190,26 @@ class AuthRepository(
         }
     }
 
-    private fun isTokenIssueCallback(uri: Uri): Boolean {
-        val expected = store.issueOauthState ?: return false
+    /**
+     * If [uri] answers the pending token issue, claims it and returns its verifier and device name.
+     * Check and claim happen under one lock, so a duplicate delivery of the same redirect (Auth Tab
+     * result + intent filter) finds nothing pending and falls through to the ignored sign-in path.
+     */
+    private fun takeTokenIssue(uri: Uri): Pair<String, String?>? = synchronized(store) {
+        val expected = store.issueOauthState ?: return null
         val returned = uri.getQueryParameter("state")
         // An error redirect may omit state; while signed in, an app sign-in can't be what's pending.
-        return returned == expected || (returned == null && _state.value is AuthState.SignedIn)
+        if (returned != expected && !(returned == null && _state.value is AuthState.SignedIn)) return null
+        val verifier = store.issuePkceVerifier
+        val deviceName = store.issueDeviceName
+        store.clearIssue()
+        verifier?.let { it to deviceName }
     }
 
     /** Exchanges the code for a new token without storing it. Returns null on success or an error message. */
-    private suspend fun completeTokenIssue(uri: Uri): String? {
-        // One-shot: a duplicate delivery of the same redirect finds no verifier and is ignored.
-        val (verifier, deviceName) = synchronized(store) {
-            val taken = store.issuePkceVerifier to store.issueDeviceName
-            store.clearIssue()
-            taken
-        }
-        if (verifier == null) return null
+    private suspend fun completeTokenIssue(uri: Uri, verifier: String, deviceName: String?): String? {
+        // The session ended while the browser was open: nobody is left to hand the token to.
+        if (_state.value !is AuthState.SignedIn) { _tokenIssue.value = TokenIssueState.Idle; return null }
         uri.getQueryParameter("error")?.let { err ->
             if (err == "access_denied") { _tokenIssue.value = TokenIssueState.Idle; return null }
             return failIssue(uri.getQueryParameter("error_description") ?: "Sign-in failed ($err)")
@@ -215,7 +219,8 @@ class AuthRepository(
         return try {
             // Unauthenticated exchange: a new session, independent of the one this app is using.
             val session = apiProvider().createSession(code, BuildConfig.OAUTH_REDIRECT_URI, verifier, deviceName ?: defaultIssuedDeviceName)
-            _tokenIssue.value = TokenIssueState.Issued(session.token, session.user)
+            // Signed out mid-exchange: don't leave the token waiting for the next account's Settings.
+            _tokenIssue.value = if (_state.value is AuthState.SignedIn) TokenIssueState.Issued(session.token, session.user) else TokenIssueState.Idle
             null
         } catch (e: CancellationException) {
             _tokenIssue.value = TokenIssueState.Idle
@@ -246,12 +251,15 @@ class AuthRepository(
      */
     fun cancelled(message: String? = null) {
         val s = _state.value
-        if (s is AuthState.SignedIn && store.issueOauthState != null) {
-            store.clearIssue()
-            if (message != null) _tokenIssue.value = TokenIssueState.Failed(message)
+        if (s is AuthState.SignedIn) {
+            // A token issue. A plain cancel can race the Custom Tab redirect just like sign-in, so the
+            // pending state is left for that redirect to claim; the next issue replaces it anyway.
+            if (message != null && synchronized(store) { store.issueOauthState?.also { store.clearIssue() } } != null) {
+                _tokenIssue.value = TokenIssueState.Failed(message)
+            }
             return
         }
-        if (s is AuthState.SignedIn || s is AuthState.Loading) return
+        if (s is AuthState.Loading) return
         _state.value = AuthState.SignedOut(message)
     }
 
@@ -278,6 +286,8 @@ class AuthRepository(
         if (store.token == null && _state.value is AuthState.SignedOut) return
         store.update(null, null)
         store.user = null
+        // Keep any pending issue so its redirect is recognised and dropped, not shown as a login error.
+        _tokenIssue.value = TokenIssueState.Idle
         _state.value = AuthState.SignedOut("Your session expired. Please sign in again.")
     }
 
