@@ -80,6 +80,33 @@ class SecureBoxTest {
         assertEquals(secret, cache.read("roster_e1", String.serializer()))
     }
 
+    @Test fun plaintextLeftByOlderBuilds_isScrubbed() = runBlocking {
+        // What the old identity fallback wrote: readable JSON files and a readable token.
+        cacheDir.mkdirs()
+        File(cacheDir, "roster_e1.bin").writeText("""{"eventId":"e1","participants":[{"display_name":"Mia Chen"}]}""")
+        val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
+        prefs.edit().putString("token", android.util.Base64.encodeToString("secret-token".toByteArray(), android.util.Base64.NO_WRAP))
+            .putString("expires_at", "2026-10-18T00:00:00Z").commit()
+        // Sealed data sits alongside and must survive.
+        SecureBox.injectForTesting(InMemoryAesCipher())
+        val cache = JsonCache(context)
+        cache.write("scan_queue", String.serializer(), secret)
+
+        cache.scrubPlaintext()
+        assertEquals(listOf("scan_queue.bin"), filesOnDisk().map { it.name })
+        assertEquals(secret, cache.read("scan_queue", String.serializer()))
+
+        assertNull(SecureTokenStore(context).token)
+        assertFalse(prefs.contains("token"))
+        assertFalse(prefs.contains("expires_at"))
+    }
+
+    @Test fun sealedTokens_areKept() {
+        SecureBox.injectForTesting(InMemoryAesCipher())
+        SecureTokenStore(context).update("secret-token", "2026-10-18T00:00:00Z")
+        assertEquals("secret-token", SecureTokenStore(context).token)
+    }
+
     @Test fun tokenStore_keepsTheSessionInMemoryOnly() {
         SecureBox.injectForTesting(null)
         val store = SecureTokenStore(context)

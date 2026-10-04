@@ -38,7 +38,7 @@ sealed interface TokenIssueState {
 
 /** Persists the session token (encrypted) and the in-flight PKCE verifier. */
 class SecureTokenStore(context: Context) : TokenStore {
-    private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE).also(::scrubPlaintext)
     @Volatile private var cached: String? = prefs.getString("token", null)?.let { SecureBox.decryptString(it) }
 
     override val token: String? get() = cached
@@ -69,6 +69,12 @@ class SecureTokenStore(context: Context) : TokenStore {
                 if (sealed == null) remove("user") else putString("user", sealed)
             }
         }
+
+    /** Older builds stored the token and user unencrypted when the Keystore failed; remove those. */
+    private fun scrubPlaintext(prefs: android.content.SharedPreferences) {
+        val stale = listOf("token", "user").filter { key -> prefs.getString(key, null)?.let(::isPlaintext) == true }
+        if (stale.isNotEmpty()) prefs.edit { stale.forEach(::remove); if ("token" in stale) remove("expires_at") }
+    }
 
     var pkceVerifier: String?
         get() = prefs.getString("pkce_verifier", null)
@@ -327,4 +333,14 @@ class AuthRepository(
         const val AUTHORIZE_URL = "https://auth.hackclub.com/oauth/authorize"
         const val MAX_DEVICE_NAME = 100
     }
+}
+
+/**
+ * True when a stored base64 value is readable text rather than sealed bytes: AES-GCM output (random IV,
+ * ciphertext, tag) is essentially never valid UTF-8 free of control characters.
+ */
+internal fun isPlaintext(base64: String): Boolean {
+    val bytes = runCatching { android.util.Base64.decode(base64, android.util.Base64.NO_WRAP) }.getOrNull() ?: return false
+    val text = runCatching { bytes.decodeToString(throwOnInvalidSequence = true) }.getOrNull() ?: return false
+    return text.isNotEmpty() && text.none { it.isISOControl() }
 }

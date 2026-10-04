@@ -49,6 +49,8 @@ data class PendingScan(
     val lastError: String? = null,
     /** Best-effort name for display while offline. */
     val knownName: String? = null,
+    /** The checkpoint checks people in (a missing waiver only blocks there), for the verdict on sync. */
+    val checksIn: Boolean = true,
 )
 
 sealed interface ScanOutcome {
@@ -89,6 +91,8 @@ sealed interface ScanOutcome {
         val offline: Boolean = false,
         val reverted: Boolean = false,
         val rosterAt: String? = null,
+        /** Undoing the scan Attend recorded failed: it still counts them as scanned. */
+        val stillRecorded: Boolean = false,
     ) : ScanOutcome
 
     /** The server turned this scan down after the app had shown it as going through. */
@@ -110,6 +114,8 @@ data class ScanRejection(
     val reason: String,
     val scannedAt: String,
     val contextName: String? = null,
+    /** Undoing the scan Attend recorded failed: it still counts them as scanned. */
+    val stillRecorded: Boolean = false,
 ) {
     /** "Mia Chen: consent not signed" */
     val headline: String get() = "$name: $reason"
@@ -128,6 +134,13 @@ class ScanRepository(
 ) {
     private val _pending = MutableStateFlow<List<PendingScan>>(emptyList())
     val pending: StateFlow<List<PendingScan>> = _pending.asStateFlow()
+
+    /**
+     * Scans that timed out and were then turned away by the offline pre-check. Attend may still have
+     * recorded them, so each is replayed (same client_scan_id, deduplicated by the server) and undone.
+     * Kept apart from [pending]: they aren't check-ins waiting to sync.
+     */
+    private val undos = MutableStateFlow<List<PendingScan>>(emptyList())
 
     private val _rejections = MutableStateFlow<List<ScanRejection>>(emptyList())
     /** Offline check-ins the server turned down when they were sent, until dismissed. */
@@ -164,6 +177,8 @@ class ScanRepository(
             try {
                 val saved = cache.read(KEY_QUEUE, ListSerializer(PendingScan.serializer())).orEmpty()
                 _pending.update { current -> saved + current.filter { c -> saved.none { it.clientScanId == c.clientScanId } } }
+                val savedUndos = cache.read(KEY_UNDOS, ListSerializer(PendingScan.serializer())).orEmpty()
+                undos.update { current -> savedUndos + current.filter { c -> savedUndos.none { it.clientScanId == c.clientScanId } } }
                 val rejected = cache.read(KEY_REJECTIONS, ListSerializer(ScanRejection.serializer())).orEmpty()
                 _rejections.update { current -> rejected + current.filter { c -> rejected.none { it.clientScanId == c.clientScanId } } }
             } finally {
@@ -178,6 +193,8 @@ class ScanRepository(
      * roster and queued (keeping its original time) only if nothing there says no.
      *
      * @param checksIn the checkpoint checks people in (a missing waiver only blocks there).
+     * @param enforceAdmission false for a deliberate check-in from someone's page: staff have looked
+     *   at them (e.g. a paper waiver signed at the desk), so the server's record isn't second-guessed.
      */
     suspend fun submit(
         eventId: String,
@@ -185,6 +202,7 @@ class ScanRepository(
         scanContextId: String?,
         scanContextName: String?,
         checksIn: Boolean = true,
+        enforceAdmission: Boolean = true,
     ): ScanOutcome {
         val clientScanId = UUID.randomUUID().toString()
         val scannedAt = Time.nowIso()
@@ -204,9 +222,10 @@ class ScanRepository(
             }
             val p = result.participant?.let { ParticipantRepository.mergeKeepingDetail(known, it) } ?: known
             result.participant?.let { participants.upsert(eventId, p!!) }
-            verdict(eventId, clientScanId, result, p, scanContextId, checksIn)
+            verdict(eventId, clientScanId, result, p, scanContextId, checksIn, enforceAdmission)
         } catch (e: TimeoutCancellationException) {
-            offline(eventId, clientScanId, input, scanContextId, scanContextName, checksIn, scannedAt, roster, known, "Attend took too long to respond.")
+            offline(eventId, clientScanId, input, scanContextId, scanContextName, checksIn, scannedAt, roster, known,
+                "Attend took too long to respond.", timedOut = true)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -229,8 +248,8 @@ class ScanRepository(
 
     /**
      * Turns a scan the server accepted into an outcome. Attend records scans for withdrawn people and
-     * missing waivers too, so its fresh record of the person gets the final say; a brand-new scan of
-     * someone who isn't admitted is taken back so they don't count as here.
+     * missing waivers too, so its fresh record of the person (never our cached copy) gets the final say;
+     * a brand-new scan of someone who isn't admitted is taken back so they don't count as here.
      */
     private suspend fun verdict(
         eventId: String,
@@ -239,27 +258,33 @@ class ScanRepository(
         p: Participant?,
         scanContextId: String?,
         checksIn: Boolean,
+        enforceAdmission: Boolean,
     ): ScanOutcome {
-        val problem = p?.let { ScanAdmission.problem(it, result.scanContext?.checksIn ?: checksIn) }
+        val problem = result.participant?.takeIf { enforceAdmission }?.let { ScanAdmission.problem(it, result.scanContext?.checksIn ?: checksIn) }
         return when {
-            problem != null -> ScanOutcome.Rejected(clientScanId, problem, p, reverted = revert(eventId, result, p, scanContextId))
+            problem != null -> {
+                val undo = revert(eventId, result, result.participant!!.participantEventId, scanContextId)
+                ScanOutcome.Rejected(clientScanId, problem, p, reverted = undo == Revert.Removed, stillRecorded = undo == Revert.Failed)
+            }
             result.isAlreadyScanned -> ScanOutcome.AlreadyScanned(clientScanId, result, p)
             else -> ScanOutcome.Scanned(clientScanId, result, p)
         }
     }
 
-    /** Undoes the scan Attend just recorded, if it was the person's first at that checkpoint. True if it's gone. */
-    private suspend fun revert(eventId: String, result: ScanResult, p: Participant, scanContextId: String?): Boolean {
-        if (result.isAlreadyScanned) return false
-        val contextId = result.scanContext?.id ?: scanContextId ?: return false
+    private enum class Revert { Removed, NotNeeded, Failed }
+
+    /** Undoes the scan Attend just recorded, if it was the person's first at that checkpoint. */
+    private suspend fun revert(eventId: String, result: ScanResult, participantEventId: String, scanContextId: String?): Revert {
+        if (result.isAlreadyScanned) return Revert.NotNeeded
+        val contextId = result.scanContext?.id ?: scanContextId ?: return Revert.Failed
         return try {
-            api.undoScans(eventId, p.participantEventId, contextId)
-            participants.applyUndo(eventId, p.participantEventId, contextId, emptyList())
-            true
+            api.undoScans(eventId, participantEventId, contextId)
+            participants.applyUndo(eventId, participantEventId, contextId, emptyList())
+            Revert.Removed
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            false
+            Revert.Failed
         }
     }
 
@@ -275,6 +300,7 @@ class ScanRepository(
         roster: Roster?,
         known: Participant?,
         reason: String,
+        timedOut: Boolean = false,
     ): ScanOutcome {
         queueLoaded.await()
         val code = input.badgeToken ?: input.participantId
@@ -283,9 +309,15 @@ class ScanRepository(
         } else emptyMap()
         val rosterAt = ScanAdmission.rosterTime(roster)
         return when (val pre = ScanAdmission.precheck(input, roster, scanContextId, checksIn, _pending.value, others)) {
-            is Precheck.Block -> ScanOutcome.Rejected(clientScanId, pre.reason, pre.participant, pre.detail, offline = true, rosterAt = rosterAt)
+            is Precheck.Block -> {
+                // The request that timed out may still have been recorded: make sure it doesn't stand.
+                if (timedOut && pre.reason in RECORDED_ANYWAY) {
+                    enqueueUndo(PendingScan(clientScanId, eventId, scanContextId, scanContextName, input, scannedAt, 1, reason, known?.name, checksIn))
+                }
+                ScanOutcome.Rejected(clientScanId, pre.reason, pre.participant, pre.detail, offline = true, rosterAt = rosterAt)
+            }
             is Precheck.Pass -> {
-                val pending = PendingScan(clientScanId, eventId, scanContextId, scanContextName, input, scannedAt, 1, reason, known?.name)
+                val pending = PendingScan(clientScanId, eventId, scanContextId, scanContextName, input, scannedAt, 1, reason, known?.name, checksIn)
                 enqueue(pending)
                 ScanOutcome.Queued(clientScanId, pending, known, reason, rosterAt)
             }
@@ -298,6 +330,48 @@ class ScanRepository(
         onQueued()
     } }
 
+    private suspend fun enqueueUndo(p: PendingScan) = queueLoaded.await().let { queueMutex.withLock {
+        undos.update { it + p }
+        cache.write(KEY_UNDOS, ListSerializer(PendingScan.serializer()), undos.value)
+        onQueued()
+    } }
+
+    /**
+     * Replays each timed-out-then-turned-away scan (deduplicated by client_scan_id, so this finds the
+     * original if it landed) and undoes it. Silent: staff already saw the rejection. Returns how many
+     * are left to retry.
+     */
+    private suspend fun flushUndos(): Int {
+        val remaining = undos.value.toMutableList()
+        val iterator = remaining.iterator()
+        while (iterator.hasNext()) {
+            val p = iterator.next()
+            try {
+                val contextId = p.scanContextId ?: fallbackContext(p.eventId)
+                val result = api.createScan(
+                    eventId = p.eventId,
+                    participantId = p.input.participantId,
+                    badgeToken = p.input.badgeToken,
+                    scanContextId = contextId,
+                    source = p.input.source.takeIf { it == "manual" },
+                    clientScanId = p.clientScanId,
+                    scannedAt = p.scannedAt,
+                )
+                val peid = result.participant?.participantEventId ?: result.scan?.participantEventId
+                if (peid != null && revert(p.eventId, result, peid, contextId) == Revert.Failed) break
+                iterator.remove()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (e.isTransient || (e as? ApiException)?.let { it.isUnauthorized || it.isForbidden } == true) break
+                iterator.remove() // e.g. not found: nothing was recorded
+            }
+        }
+        undos.value = remaining
+        cache.write(KEY_UNDOS, ListSerializer(PendingScan.serializer()), remaining)
+        return remaining.size
+    }
+
     /**
      * Sends queued scans oldest first, each with the time it was really scanned (`scanned_at`).
      * `client_scan_id` makes retries idempotent. Returns the number still pending; stops early on a
@@ -305,6 +379,7 @@ class ScanRepository(
      * [rejections] and reported through [onRejected], not just logged.
      */
     suspend fun flush(): Int = queueLoaded.await().let { queueMutex.withLock {
+        val undosLeft = flushUndos()
         val remaining = _pending.value.toMutableList()
         val rejected = mutableListOf<ScanRejection>()
         val iterator = remaining.iterator()
@@ -323,11 +398,12 @@ class ScanRepository(
                     scannedAt = p.scannedAt,
                 )
                 result.participant?.let { participants.upsert(p.eventId, it) }
-                val who = result.participant ?: known
                 // Accepted, but the server's record says they shouldn't have been let in (e.g. withdrawn since the roster synced).
-                who?.let { ScanAdmission.problem(it, result.scanContext?.checksIn ?: true) }?.let { problem ->
-                    revert(p.eventId, result, who, contextId)
-                    rejected += p.rejection(who, problem.short)
+                result.participant?.let { who ->
+                    ScanAdmission.problem(who, result.scanContext?.checksIn ?: p.checksIn)?.let { problem ->
+                        val undo = revert(p.eventId, result, who.participantEventId, contextId)
+                        rejected += p.rejection(who, problem.short).copy(stillRecorded = undo == Revert.Failed)
+                    }
                 }
                 iterator.remove()
             } catch (e: CancellationException) {
@@ -351,7 +427,7 @@ class ScanRepository(
             cache.write(KEY_REJECTIONS, ListSerializer(ScanRejection.serializer()), _rejections.value)
             onRejected(rejected)
         }
-        remaining.size
+        remaining.size + undosLeft
     } }
 
     private fun PendingScan.rejection(who: Participant?, reason: String) = ScanRejection(
@@ -379,14 +455,19 @@ class ScanRepository(
         api.undoScans(eventId, participantEventId, scanContextId)
 
     suspend fun clear() {
-        _pending.value = emptyList(); _log.value = emptyList(); _rejections.value = emptyList()
+        _pending.value = emptyList(); _log.value = emptyList(); _rejections.value = emptyList(); undos.value = emptyList()
         cache.remove(KEY_QUEUE)
         cache.remove(KEY_REJECTIONS)
+        cache.remove(KEY_UNDOS)
     }
 
     companion object {
         private const val KEY_QUEUE = "scan_queue"
         private const val KEY_REJECTIONS = "scan_rejections"
+        private const val KEY_UNDOS = "scan_undos"
+
+        /** Pre-check reasons where Attend would have recorded the scan had it arrived (it 404s the others). */
+        private val RECORDED_ANYWAY = setOf(RejectReason.Withdrawn, RejectReason.RegistrationRejected, RejectReason.ConsentMissing)
 
         /** A live scan that takes longer than this is treated as offline. */
         const val SCAN_TIMEOUT_MILLIS = 5_000L

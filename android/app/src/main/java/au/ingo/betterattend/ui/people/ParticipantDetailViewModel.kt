@@ -155,7 +155,9 @@ class ParticipantDetailViewModel(
         viewModelScope.launch {
             _state.update { it.copy(busy = DetailBusy.CheckingIn) }
             val ctx = context ?: _state.value.defaultCheckInContext
-            val outcome = c.scans.submit(eventId, ScanInput(participantId = participantEventId, source = "manual"), ctx?.id, ctx?.name, ctx?.checksIn ?: true)
+            // A deliberate check-in from their page: staff can see their status, so this overrides the admission rules.
+            val outcome = c.scans.submit(eventId, ScanInput(participantId = participantEventId, source = "manual"), ctx?.id, ctx?.name,
+                ctx?.checksIn ?: true, enforceAdmission = false)
             _state.update { it.copy(busy = null) }
             // Already scanned there = nothing changed, so it gets the "didn't happen" cue.
             cue(outcome is ScanOutcome.Scanned || outcome is ScanOutcome.Queued)

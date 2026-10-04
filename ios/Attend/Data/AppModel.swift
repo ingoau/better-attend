@@ -1,6 +1,7 @@
 import BackgroundTasks
 import Foundation
 import Network
+import UserNotifications
 import WidgetKit
 
 /// Hand-rolled dependency container: one per process, injected into SwiftUI with `.environment(app)`.
@@ -70,6 +71,7 @@ final class AppModel {
             if !demo { RejectionNotifier.requestPermissionIfNeeded() }
         }
         scans.onRejected = { rejected in if !demo { RejectionNotifier.notify(rejected) } }
+        if !demo { UNUserNotificationCenter.current().delegate = NotificationRouter.shared }
         // Offline "wrong event" check: the code may be on another of this user's events.
         scans.otherRosters = { [weak self] eventId in
             guard let self else { return [:] }
@@ -93,7 +95,7 @@ final class AppModel {
         await events.loadCache()
         await tickets.loadCache()
         await scans.loadQueue()
-        if !scans.pending.isEmpty { scheduleScanRetry(immediately: true) }
+        if scans.hasQueuedWork { scheduleScanRetry(immediately: true) }
     }
 
     var user: User? { auth.currentUser }
@@ -133,7 +135,7 @@ final class AppModel {
     private func connectivityChanged(_ online: Bool) {
         let cameBack = online && !isOnline
         isOnline = online
-        if cameBack, !scans.pending.isEmpty { scheduleScanRetry(immediately: true) }
+        if cameBack, scans.hasQueuedWork { scheduleScanRetry(immediately: true) }
     }
 
     /// Retries the queue with exponential backoff (15 s → 5 min) until it's empty.
@@ -212,7 +214,7 @@ final class AppModel {
         scheduleBackgroundRefresh()
         guard let user else { return }
         await loadCaches()
-        if !scans.pending.isEmpty { await scans.flush() }
+        if scans.hasQueuedWork { await scans.flush() }
         if user.isOrganizer || user.globalAdmin {
             if events.events?.isEmpty ?? true { _ = try? await events.refresh() }
             if let event = events.selectedEvent {

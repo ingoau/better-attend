@@ -7,7 +7,7 @@ extension ScanOutcome {
         case .alreadyScanned: .alreadyScanned
         case .queued: .savedOffline
         case .failed: .rejected
-        case .rejected(_, let reason, _, _, _, _, _): reason == .alreadyCheckedIn ? .alreadyScanned : .rejected
+        case .rejected(_, let reason, _, _, _, _, _, _): reason == .alreadyCheckedIn ? .alreadyScanned : .rejected
         }
     }
 
@@ -18,7 +18,7 @@ extension ScanOutcome {
         case .alreadyScanned: "Already scanned"
         case .queued: "Saved offline"
         case .failed(_, let message, _, let notFound, _): notFound ? "Not registered" : message
-        case .rejected(_, let reason, _, _, let offline, _, _): reason.title + (offline ? " (offline check)" : "")
+        case .rejected(_, let reason, _, _, let offline, _, _, _): reason.title + (offline ? " (offline check)" : "")
         }
     }
 
@@ -67,7 +67,7 @@ extension ScanOutcome {
             c.message = notFound ? "No registration for this event matches that code." : message
             c.retryable = !notFound
             return c
-        case let .rejected(_, reason, p, detail, offline, reverted, rosterAt):
+        case let .rejected(_, reason, p, detail, offline, reverted, rosterAt, stillRecorded):
             var c = base
             c.title = reason.title
             if reason == .alreadyCheckedIn {
@@ -76,8 +76,11 @@ extension ScanOutcome {
                 c.rosterNote = ScanAdmission.rosterAgeLabel(rosterAt).map { "Offline · \($0)" }
             } else {
                 c.kind = .rejected
-                c.message = [reason.message(name: p?.name, detail: detail), reverted ? "Scan removed." : nil]
-                    .compactMap { $0 }.joined(separator: " ")
+                c.message = [
+                    reason.message(name: p?.name, detail: detail),
+                    reverted ? "Scan removed." : nil,
+                    stillRecorded ? "Still recorded on Attend: undo it from their page." : nil,
+                ].compactMap { $0 }.joined(separator: " ")
                 // Offline the roster might be out of date: let staff try again once they're back online.
                 c.retryable = offline
                 c.rosterNote = offline ? "Offline, not saved · " + (ScanAdmission.rosterAgeLabel(rosterAt) ?? "no roster") : nil

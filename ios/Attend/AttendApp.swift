@@ -20,7 +20,7 @@ struct AttendApp: App {
                 app.scheduleBackgroundRefresh()
                 Task { await app.publishWidgets() }
             case .active:
-                if !app.scans.pending.isEmpty { app.scheduleScanRetry(immediately: true) }
+                if app.scans.hasQueuedWork { app.scheduleScanRetry(immediately: true) }
             default:
                 break
             }

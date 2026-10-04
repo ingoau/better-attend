@@ -81,7 +81,7 @@ struct OfflineRejectionsCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ScanRejectionText.offlineTitle(count: rejections.count))
                         .font(.headline)
-                    Text("Scanned while offline, then turned down by Attend. They aren't checked in.")
+                    Text("Scanned while offline, then turned down by Attend.")
                         .font(.caption)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -102,7 +102,8 @@ struct OfflineRejectionsCard: View {
 
     private func row(_ r: ScanRejection) -> some View {
         let open = r.participantEventId == nil ? nil : onOpen
-        let detail = [r.reason.capitalizedFirst, r.contextName, Time.dayTime(r.scannedAt, tz: timezone)].compactMap { $0 }
+        let detail = [r.reason.capitalizedFirst, r.contextName, Time.dayTime(r.scannedAt, tz: timezone),
+                      r.stillRecorded ? "still recorded on Attend, undo it from their page" : nil].compactMap { $0 }
         return HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.name).font(.subheadline.weight(.semibold)).lineLimit(1)

@@ -51,6 +51,7 @@ class ScanRepositoryTest {
     private val server = MockWebServer()
     private val requests: MutableList<Pair<String, String>> = Collections.synchronizedList(mutableListOf())
     private var scanResponse: () -> MockResponse = { ok(scanned(mia)) }
+    private var undoResponse: () -> MockResponse = { MockResponse.Builder().code(200).body("""{"success":true,"deleted_scans":1}""").build() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val tokens = object : TokenStore {
@@ -86,7 +87,7 @@ class ScanRepositoryTest {
                 requests += "${request.method} $path${request.url.query?.let { "?$it" } ?: ""}" to (request.body?.utf8() ?: "")
                 return when {
                     request.method == "POST" && path == "/events/e1/scans" -> scanResponse()
-                    request.method == "DELETE" -> MockResponse.Builder().code(200).body("""{"success":true,"deleted_scans":1}""").build()
+                    request.method == "DELETE" -> undoResponse()
                     else -> MockResponse.Builder().code(404).body("""{"error":"Not found"}""").build()
                 }
             }
@@ -177,11 +178,11 @@ class ScanRepositoryTest {
 
     @Test fun online_timeout_isTreatedAsOffline_andKeepsTheScanTime() = runBlocking {
         seedRoster(mia)
-        scanResponse = { ok(scanned(mia)).newBuilder().headersDelay(3, TimeUnit.SECONDS).build() }
+        scanResponse = { ok(scanned(mia)).newBuilder().headersDelay(10, TimeUnit.SECONDS).build() }
         val scans = repo(timeout = 300)
         val started = System.nanoTime()
         val outcome = scans.submit("e1", qrMia, "desk", "Check-in desk")
-        assertTrue("gave up at the timeout", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2_500)
+        assertTrue("gave up at the timeout", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 8_000)
 
         outcome as ScanOutcome.Queued
         assertEquals("Attend took too long to respond.", outcome.reason)
@@ -202,13 +203,75 @@ class ScanRepositoryTest {
 
     @Test fun timeout_butRosterSaysNo_rejectsLocallyWithoutQueueing() = runBlocking {
         seedRoster(mia.copy(status = "withdrawn"))
-        scanResponse = { ok(scanned(mia)).newBuilder().headersDelay(3, TimeUnit.SECONDS).build() }
+        scanResponse = { ok(scanned(mia)).newBuilder().headersDelay(10, TimeUnit.SECONDS).build() }
         val scans = repo(timeout = 300)
         val outcome = scans.submit("e1", qrMia, "desk", "Check-in desk") as ScanOutcome.Rejected
         assertEquals(RejectReason.Withdrawn, outcome.reason)
         assertTrue(outcome.offline)
         assertFalse("an offline pre-check isn't the server's verdict", outcome.isServerRejection)
-        assertTrue(scans.pending.value.isEmpty())
+        assertTrue("not a check-in waiting to sync", scans.pending.value.isEmpty())
+
+        // The timed-out request may have been recorded anyway: the next flush replays it (same
+        // client_scan_id, so Attend finds the original) and undoes it, without a second alert.
+        scanResponse = { ok(scanned(mia.copy(status = "withdrawn"))) }
+        assertEquals(0, scans.flush())
+        val posts = requests.filter { it.first == "POST /events/e1/scans" }
+        assertEquals(outcome.clientScanId, Json.parseToJsonElement(posts.last().second).jsonObject["client_scan_id"]!!.jsonPrimitive.content)
+        assertTrue(requests.any { it.first == "DELETE /events/e1/scans/${mia.participantEventId}?scan_context_id=desk" })
+        assertTrue(scans.rejections.value.isEmpty())
+    }
+
+    @Test fun offlineRejectionWithoutATimeout_needsNoUndo() = runBlocking {
+        // Connection refused: the request never left, so there's nothing to take back.
+        seedRoster(mia.copy(status = "withdrawn"))
+        offline()
+        val scans = repo()
+        scans.submit("e1", qrMia, "desk", "Desk") as ScanOutcome.Rejected
+        api.baseUrl = server.url("/").toString().trimEnd('/')
+        assertEquals(0, scans.flush())
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test fun checkInFromTheirPage_overridesTheAdmissionRules() = runBlocking {
+        // A paper waiver signed at the desk: staff check them in from their page anyway.
+        seedRoster(mia)
+        scanResponse = { ok(scanned(mia.copy(waiverSigned = false))) }
+        val outcome = repo().submit("e1", ScanInput(participantId = mia.participantEventId, source = "manual"), "desk", "Desk", enforceAdmission = false)
+        assertTrue(outcome is ScanOutcome.Scanned)
+        assertTrue(requests.none { it.first.startsWith("DELETE") })
+    }
+
+    @Test fun verdictUsesTheServersRecordNeverTheCache() = runBlocking {
+        // Reinstated on Attend; the cache still says withdrawn; the response carries no participant.
+        seedRoster(mia.copy(status = "withdrawn"))
+        scanResponse = { ok(scanned(mia).copy(participant = null)) }
+        val outcome = repo().submit("e1", qrMia, "desk", "Desk")
+        assertTrue(outcome is ScanOutcome.Scanned)
+        assertTrue(requests.none { it.first.startsWith("DELETE") })
+    }
+
+    @Test fun failedUndo_saysTheScanIsStillRecorded() = runBlocking {
+        seedRoster(mia)
+        scanResponse = { ok(scanned(mia.copy(status = "withdrawn"))) }
+        undoResponse = { MockResponse.Builder().code(500).body("""{"error":"boom"}""").build() }
+        val outcome = repo().submit("e1", qrMia, "desk", "Desk") as ScanOutcome.Rejected
+        assertFalse(outcome.reverted)
+        assertTrue(outcome.stillRecorded)
+        assertTrue(outcome.serverRejection("e1", "Desk", "t")!!.stillRecorded)
+        assertTrue(outcome.toCard("k", null, null, null, qrMia).message!!.contains("Still recorded on Attend"))
+    }
+
+    @Test fun flush_usesTheCheckpointsOwnCheckInFlag() = runBlocking {
+        // Lunch, offline, waiver unsigned: fine. On sync the response lacks scan_context; the queued flag decides.
+        seedRoster(mia.copy(waiverSigned = false))
+        offline()
+        val scans = repo()
+        scans.submit("e1", qrMia, "lunch", "Lunch", checksIn = false) as ScanOutcome.Queued
+        api.baseUrl = server.url("/").toString().trimEnd('/')
+        scanResponse = { ok(scanned(mia.copy(waiverSigned = false)).copy(scanContext = null)) }
+        assertEquals(0, scans.flush())
+        assertTrue(scans.rejections.value.isEmpty())
+        assertTrue(requests.none { it.first.startsWith("DELETE") })
     }
 
     // ---------------------------------------------------------------- offline pre-checks

@@ -44,6 +44,8 @@ class AppContainer(context: Context) {
             events.loadContexts(eventId)
             events.cachedContexts(eventId)?.let { list -> (list.firstOrNull { it.checksIn } ?: list.firstOrNull())?.id }
         }
+        // Plaintext left by older builds that fell back to no encryption.
+        scope.launch { runCatching { cache.scrubPlaintext() } }
         // Offline "wrong event" check: the code may be on another of this user's events.
         scans.otherRosters = { eventId ->
             events.events.value.orEmpty().filter { it.id != eventId }

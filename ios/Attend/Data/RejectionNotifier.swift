@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import UserNotifications
 
 /// Tells staff when scans saved offline are turned down as they sync (they may already have let the
@@ -23,6 +24,25 @@ enum RejectionNotifier {
         content.userInfo = ["url": "attend://home"]
         let request = UNNotificationRequest(identifier: "offline-rejections", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+}
+
+/// Shows the rejection notification even while the app is open (when most syncs happen), and opens
+/// the link it carries (Home) when tapped.
+final class NotificationRouter: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    static let shared = NotificationRouter()
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let link = (response.notification.request.content.userInfo["url"] as? String).flatMap(URL.init(string:))
+        completionHandler()
+        guard let link else { return }
+        Task { @MainActor in UIApplication.shared.open(link) }
     }
 }
 

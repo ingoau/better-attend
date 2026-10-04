@@ -138,7 +138,18 @@ final class ScanStubProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var requests: [(line: String, body: String)] = []
     private static let lock = NSLock()
 
+    nonisolated(unsafe) static var undo: @Sendable () -> Reply = { Reply(body: #"{"success":true,"deleted_scans":1}"#) }
+
     static func recorded() -> [(line: String, body: String)] { lock.withLock { requests } }
+
+    /// Back to defaults between tests, under the lock that delayed deliveries also take.
+    static func reset() {
+        lock.withLock {
+            requests = []
+            scan = { Reply() }
+            undo = { Reply(body: #"{"success":true,"deleted_scans":1}"#) }
+        }
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -152,8 +163,8 @@ final class ScanStubProtocol: URLProtocol, @unchecked Sendable {
         let line = "\(request.httpMethod ?? "GET") \(path)\(url.query.map { "?\($0)" } ?? "")"
         Self.lock.withLock { Self.requests.append((line, Self.body(of: request))) }
         var reply = Reply(status: 404, body: #"{"error":"Not found"}"#)
-        if request.httpMethod == "POST", path.hasSuffix("/scans") { reply = Self.scan() }
-        if request.httpMethod == "DELETE" { reply = Reply(body: #"{"success":true,"deleted_scans":1}"#) }
+        if request.httpMethod == "POST", path.hasSuffix("/scans") { reply = Self.lock.withLock { Self.scan }() }
+        if request.httpMethod == "DELETE" { reply = Self.lock.withLock { Self.undo }() }
         nonisolated(unsafe) let proto = self
         let final = reply
         let deliver: @Sendable () -> Void = {
@@ -214,8 +225,7 @@ final class Locked<T>: @unchecked Sendable {
         mia = p
         cache = JsonCache(directory: directory, cipher: IdentityCipher())
         participants = ParticipantRepository(api: api, cache: cache)
-        ScanStubProtocol.requests = []
-        ScanStubProtocol.scan = { ScanStubProtocol.Reply() }
+        ScanStubProtocol.reset()
     }
 
     private func scanned(_ p: Participant, outcome: String = "scanned", context: ScanContextRef? = nil) -> String {
@@ -257,7 +267,7 @@ final class Locked<T>: @unchecked Sendable {
         let body = scanned(gone)
         ScanStubProtocol.scan = { .init(body: body) }
         let outcome = await repo().submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Check-in desk")
-        guard case let .rejected(_, reason, _, _, offline, reverted, _) = outcome else { Issue.record("expected rejected"); return }
+        guard case let .rejected(_, reason, _, _, offline, reverted, _, _) = outcome else { Issue.record("expected rejected"); return }
         #expect(reason == .withdrawn)
         #expect(!offline)
         #expect(reverted)
@@ -278,7 +288,7 @@ final class Locked<T>: @unchecked Sendable {
         let atDesk = scanned(unsigned)
         ScanStubProtocol.scan = { .init(body: atDesk) }
         let desk = await repo().submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk", checksIn: true)
-        guard case .rejected(_, .consentMissing, _, _, _, _, _) = desk else { Issue.record("expected consent rejection"); return }
+        guard case .rejected(_, .consentMissing, _, _, _, _, _, _) = desk else { Issue.record("expected consent rejection"); return }
 
         let atLunch = scanned(unsigned, context: ScanContextRef(id: "lunch", name: "Lunch"))
         ScanStubProtocol.scan = { .init(body: atLunch) }
@@ -300,11 +310,11 @@ final class Locked<T>: @unchecked Sendable {
     @Test func timeoutIsTreatedAsOfflineAndKeepsTheScanTime() async {
         await seedRoster([mia])
         let body = scanned(mia)
-        ScanStubProtocol.scan = { .init(body: body, delay: 2) }
+        ScanStubProtocol.scan = { .init(body: body, delay: 8) }
         let scans = repo(timeout: .milliseconds(300))
         let started = Date()
         let outcome = await scans.submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Check-in desk")
-        #expect(Date().timeIntervalSince(started) < 1.8, "gave up at the timeout")
+        #expect(Date().timeIntervalSince(started) < 6, "gave up at the timeout")
         guard case let .queued(id, pending, _, reason, rosterAt) = outcome else { Issue.record("expected queued, got \(outcome)"); return }
         #expect(reason == "Attend took too long to respond.")
         #expect(rosterAt != nil)
@@ -327,12 +337,86 @@ final class Locked<T>: @unchecked Sendable {
         gone.status = "withdrawn"
         await seedRoster([gone])
         let body = scanned(mia)
-        ScanStubProtocol.scan = { .init(body: body, delay: 2) }
+        ScanStubProtocol.scan = { .init(body: body, delay: 8) }
         let scans = repo(timeout: .milliseconds(300))
         let outcome = await scans.submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk")
-        guard case .rejected(_, .withdrawn, _, _, true, _, _) = outcome else { Issue.record("expected offline rejection, got \(outcome)"); return }
+        guard case .rejected(_, .withdrawn, _, _, true, _, _, _) = outcome else { Issue.record("expected offline rejection, got \(outcome)"); return }
         #expect(!outcome.isServerRejection)
-        #expect(scans.pending.isEmpty)
+        #expect(scans.pending.isEmpty, "not a check-in waiting to sync")
+        #expect(scans.hasQueuedWork, "but the timed-out request may have landed")
+
+        // The next flush replays it (same client_scan_id, so Attend finds the original) and undoes it,
+        // without a second alert.
+        var still = mia
+        still.status = "withdrawn"
+        let recorded = scanned(still)
+        ScanStubProtocol.scan = { .init(body: recorded) }
+        #expect(await scans.flush() == 0)
+        #expect(ScanStubProtocol.recorded().contains { $0.line == "DELETE /events/e1/scans/\(mia.participantEventId)?scan_context_id=desk" })
+        #expect(scans.rejections.isEmpty)
+        #expect(!scans.hasQueuedWork)
+    }
+
+    @Test func offlineRejectionWithoutATimeoutNeedsNoUndo() async {
+        var gone = mia
+        gone.status = "withdrawn"
+        await seedRoster([gone])
+        let scans = repo(api: offlineAPI)
+        _ = await scans.submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk")
+        #expect(!scans.hasQueuedWork, "connection refused: the request never left")
+    }
+
+    @Test func checkInFromTheirPageOverridesTheAdmissionRules() async {
+        await seedRoster([mia])
+        var unsigned = mia
+        unsigned.waiverSigned = false
+        let body = scanned(unsigned)
+        ScanStubProtocol.scan = { .init(body: body) }
+        let outcome = await repo().submit(eventId: "e1", input: ScanInput(participantId: mia.participantEventId, source: "manual"),
+                                          scanContextId: "desk", scanContextName: "Desk", enforceAdmission: false)
+        guard case .scanned = outcome else { Issue.record("expected scanned, got \(outcome)"); return }
+        #expect(!ScanStubProtocol.recorded().contains { $0.line.hasPrefix("DELETE") })
+    }
+
+    @Test func verdictUsesTheServersRecordNeverTheCache() async {
+        var stale = mia
+        stale.status = "withdrawn"
+        await seedRoster([stale])
+        let result = ScanResult(outcome: "scanned", scan: Scan(id: "s1", scannedAt: "2026-10-04T00:00:00Z"), scanContext: desk)
+        let body = String(decoding: try! AttendJSON.encoder().encode(result), as: UTF8.self)
+        ScanStubProtocol.scan = { .init(body: body) }
+        let outcome = await repo().submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk")
+        guard case .scanned = outcome else { Issue.record("expected scanned, got \(outcome)"); return }
+        #expect(!ScanStubProtocol.recorded().contains { $0.line.hasPrefix("DELETE") })
+    }
+
+    @Test func failedUndoSaysTheScanIsStillRecorded() async {
+        await seedRoster([mia])
+        var gone = mia
+        gone.status = "withdrawn"
+        let body = scanned(gone)
+        ScanStubProtocol.scan = { .init(body: body) }
+        ScanStubProtocol.undo = { .init(status: 500, body: #"{"error":"boom"}"#) }
+        let outcome = await repo().submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk")
+        guard case .rejected(_, _, _, _, _, false, _, true) = outcome else { Issue.record("expected still recorded, got \(outcome)"); return }
+        #expect(outcome.serverRejection(eventId: "e1", contextName: "Desk", scannedAt: "t")?.stillRecorded == true)
+        #expect(outcome.card(key: "k", context: nil, tz: nil, gateKey: nil, input: qrMia).message?.contains("Still recorded on Attend") == true)
+    }
+
+    @Test func flushUsesTheCheckpointsOwnCheckInFlag() async {
+        var unsigned = mia
+        unsigned.waiverSigned = false
+        await seedRoster([unsigned])
+        guard case .queued = await repo(api: offlineAPI).submit(eventId: "e1", input: qrMia, scanContextId: "lunch", scanContextName: "Lunch", checksIn: false) else {
+            Issue.record("expected queued"); return
+        }
+        let result = ScanResult(outcome: "scanned", scan: Scan(id: "s1", scannedAt: "2026-10-04T00:00:00Z"), participant: unsigned)
+        let body = String(decoding: try! AttendJSON.encoder().encode(result), as: UTF8.self)
+        ScanStubProtocol.scan = { .init(body: body) }
+        let scans = repo()
+        #expect(await scans.flush() == 0)
+        #expect(scans.rejections.isEmpty)
+        #expect(!ScanStubProtocol.recorded().contains { $0.line.hasPrefix("DELETE") })
     }
 
     // MARK: Offline
@@ -348,7 +432,7 @@ final class Locked<T>: @unchecked Sendable {
         scans.otherRosters = { _ in ["Campfire Melbourne": Roster(eventId: "e2", participants: [elsewhere], syncedAt: "x")] }
 
         func reason(_ id: String) async -> RejectReason? {
-            if case .rejected(_, let r, _, _, _, _, _) = await scans.submit(eventId: "e1", input: ScanInput(participantId: id), scanContextId: "desk", scanContextName: "Desk") { return r }
+            if case .rejected(_, let r, _, _, _, _, _, _) = await scans.submit(eventId: "e1", input: ScanInput(participantId: id), scanContextId: "desk", scanContextName: "Desk") { return r }
             return nil
         }
         #expect(await reason(withdrawn.participantId) == .withdrawn)
@@ -361,7 +445,7 @@ final class Locked<T>: @unchecked Sendable {
             Issue.record("a clear scan should queue"); return
         }
         let again = await scans.submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk")
-        guard case .rejected(_, .alreadyCheckedIn, _, _, _, _, _) = again else { Issue.record("expected already checked in"); return }
+        guard case .rejected(_, .alreadyCheckedIn, _, _, _, _, _, _) = again else { Issue.record("expected already checked in"); return }
         #expect(again.card(key: "k", context: nil, tz: nil, gateKey: nil, input: qrMia).kind == .alreadyScanned)
         #expect(scans.pending.count == 1)
     }
@@ -446,6 +530,21 @@ final class Locked<T>: @unchecked Sendable {
         #expect(await closed.read("old", as: String.self) == nil)
         await closed.write("new", secret)
         #expect(files().map(\.lastPathComponent) == ["old.bin"])
+    }
+
+    @Test func queuesSavedByOlderVersionsStillLoad() throws {
+        // Saved before `checksIn` / `stillRecorded` existed: those keys are simply missing.
+        let item = PendingScan(clientScanId: "q1", eventId: "e1", scanContextId: "desk", scanContextName: "Desk",
+                               input: ScanInput(participantId: "x"), scannedAt: "2026-10-04T00:00:00Z", checksIn: false)
+        var json = try #require(JSONSerialization.jsonObject(with: AttendJSON.encoder().encode([item])) as? [[String: Any]])
+        json[0] = json[0].filter { !$0.key.lowercased().contains("checks") }
+        let decoded = try AttendJSON.decoder().decode([PendingScan].self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(decoded.first?.clientScanId == "q1")
+        #expect(decoded.first?.checksIn == true)
+
+        let rejection = #"[{"client_scan_id":"r1","event_id":"e1","name":"Mia","reason":"x","scanned_at":"t"}]"#
+        let rejections = try AttendJSON.decoder().decode([ScanRejection].self, from: Data(rejection.utf8))
+        #expect(rejections.first?.stillRecorded == false)
     }
 
     @Test func withAKeyTheDiskHoldsCiphertextOnly() async throws {

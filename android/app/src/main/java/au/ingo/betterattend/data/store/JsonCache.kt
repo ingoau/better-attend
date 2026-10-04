@@ -41,6 +41,17 @@ class JsonCache(context: Context) {
         }
     }
 
+    /**
+     * Deletes files that older builds wrote in plaintext when the Keystore was unavailable (they then
+     * stored data unencrypted). Sealed files never parse as JSON, so only those leftovers match.
+     */
+    suspend fun scrubPlaintext() = withContext(Dispatchers.IO) {
+        dir.listFiles()?.forEach { f ->
+            val isJson = runCatching { AttendJson.parseToJsonElement(f.readBytes().decodeToString(throwOnInvalidSequence = true)) }.isSuccess
+            if (isJson) f.delete()
+        }
+    }
+
     suspend fun remove(key: String) = withContext(Dispatchers.IO) { file(key).delete() }
 
     suspend fun clear() = withContext(Dispatchers.IO) { dir.listFiles()?.forEach { it.delete() } }

@@ -109,7 +109,7 @@ fun OfflineRejectionsCard(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                     Text(offlineRejectionsTitle(rejections.size), style = MaterialTheme.typography.titleMedium)
-                    Text("Scanned while offline, then turned down by Attend. They aren't checked in.", style = MaterialTheme.typography.bodySmall)
+                    Text("Scanned while offline, then turned down by Attend.", style = MaterialTheme.typography.bodySmall)
                 }
                 TextButton(onClick = onDismissAll) { Text("Dismiss", color = s.onDangerContainer) }
             }
@@ -125,7 +125,10 @@ fun OfflineRejectionsCard(
                     Column(Modifier.weight(1f)) {
                         Text(r.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            listOfNotNull(r.reason.replaceFirstChar { it.uppercase() }, r.contextName, Time.dayTime(r.scannedAt, timezone)).joinToString(" · "),
+                            listOfNotNull(
+                                r.reason.replaceFirstChar { it.uppercase() }, r.contextName, Time.dayTime(r.scannedAt, timezone),
+                                "still recorded on Attend, undo it from their page".takeIf { r.stillRecorded },
+                            ).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )
                     }

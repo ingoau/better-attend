@@ -207,7 +207,11 @@ fun ScanOutcome.toCard(key: String, context: ScanContext?, tz: String?, gateKey:
         ) else base.copy(
             kind = ResultKind.Rejected,
             title = reason.title,
-            message = listOfNotNull(reason.message(participant?.name, detail), "Scan removed.".takeIf { reverted }).joinToString(" "),
+            message = listOfNotNull(
+                reason.message(participant?.name, detail),
+                "Scan removed.".takeIf { reverted },
+                "Still recorded on Attend: undo it from their page.".takeIf { stillRecorded },
+            ).joinToString(" "),
             // Offline the roster might be out of date: let staff try again once they're back online.
             retryable = offline,
             rosterNote = if (offline) "Offline, not saved · " + (ScanAdmission.rosterAgeLabel(rosterAt) ?: "no roster") else null,
@@ -237,7 +241,8 @@ fun ScanOutcome.serverRejection(eventId: String, contextName: String?, scannedAt
         is ScanOutcome.Failed -> if (notFound) RejectReason.NotRegistered.short else message
         else -> return null
     }
-    return ScanRejection(clientScanId, eventId, participant?.participantEventId, participant?.name ?: "Unknown attendee", reason, scannedAt, contextName)
+    return ScanRejection(clientScanId, eventId, participant?.participantEventId, participant?.name ?: "Unknown attendee", reason, scannedAt, contextName,
+        stillRecorded = (this as? ScanOutcome.Rejected)?.stillRecorded == true)
 }
 
 /** "9:41 AM" today, else "Fri 9:41 AM". */
