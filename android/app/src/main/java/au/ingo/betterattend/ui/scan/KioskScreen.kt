@@ -100,6 +100,8 @@ import java.security.MessageDigest
 private const val KIOSK_RESULT_MS = 3_000L
 private const val MAX_PIN_TRIES = 3
 private const val LOCKOUT_MS = 30_000L
+/** Past this many digits the PIN shows as a count instead of dots, so long PINs don't push the keypad off screen. */
+private const val MAX_PIN_DOTS = 16
 
 /** State for the attendee-facing kiosk UI. */
 data class KioskUiState(
@@ -151,21 +153,23 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
             contextName = ctx?.name,
             contextIcon = ctx?.icon(),
             confirming = confirming,
-            entered = if (confirming) confirm.length else first.length,
+            // After a mismatch the rejected entry stays up (in red) until the next key.
+            entered = if (confirming || error != null) confirm.length else first.length,
             error = error,
             onDigit = { d ->
-                error = null
                 haptics.tick()
+                if (error != null) { error = null; confirm = "" }
                 if (confirming) confirm += d else first += d
             },
             onBackspace = {
                 haptics.tick()
-                if (confirming) confirm = confirm.dropLast(1) else first = first.dropLast(1)
+                if (error != null) { error = null; confirm = "" }
+                else if (confirming) confirm = confirm.dropLast(1) else first = first.dropLast(1)
             },
             onSubmit = {
                 if (!confirming) { haptics.tick(); confirming = true }
                 else if (confirm == first) { haptics.confirm(); pinHash = hashPin(first) }
-                else { haptics.reject(); error = "PINs don't match. Try again."; first = ""; confirm = ""; confirming = false }
+                else { haptics.reject(); error = "PINs don't match. Try again."; first = ""; confirming = false }
             },
             onCancel = nav::back,
         )
@@ -397,7 +401,12 @@ fun PinPad(entered: Int, error: Boolean, enabled: Boolean, onDigit: (Char) -> Un
             modifier = Modifier.widthIn(max = 300.dp).heightIn(min = 18.dp).semantics { contentDescription = "$entered ${if (entered == 1) "digit" else "digits"} entered" },
         ) {
             val pop = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
-            repeat(entered) {
+            if (entered > MAX_PIN_DOTS) Text(
+                "$entered digits",
+                style = MaterialTheme.typography.titleMedium,
+                color = if (error) MaterialTheme.status.danger else MaterialTheme.colorScheme.primary,
+            )
+            else repeat(entered) {
                 val dot by animateColorAsState(
                     if (error) MaterialTheme.status.danger else MaterialTheme.colorScheme.primary,
                     MaterialTheme.motionScheme.fastEffectsSpec(),
@@ -419,14 +428,18 @@ fun PinPad(entered: Int, error: Boolean, enabled: Boolean, onDigit: (Char) -> Un
                                 Icon(Icons.AutoMirrored.Outlined.Backspace, "Delete digit")
                             }
                         }
-                        '>' -> Surface(
-                            onClick = onSubmit,
-                            enabled = enabled && entered > 0,
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(76.dp).alpha(if (enabled && entered > 0) 1f else 0.38f),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Check, "Done") }
+                        '>' -> {
+                            // A rejected entry is only on screen to show what went wrong; it can't be resubmitted.
+                            val canSubmit = enabled && entered > 0 && !error
+                            Surface(
+                                onClick = onSubmit,
+                                enabled = canSubmit,
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(76.dp).alpha(if (canSubmit) 1f else 0.38f),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Check, "Done") }
+                            }
                         }
                         else -> Surface(
                             onClick = { onDigit(key) },
@@ -521,12 +534,13 @@ fun KioskExitDialog(check: (String) -> Boolean, onUnlocked: () -> Unit, onDismis
             error = error,
             wrongTries = wrong,
             lockoutSeconds = if (lockedUntil > now) secondsLeft.toInt() else 0,
-            onDigit = { d -> error = false; haptics.tick(); pin += d },
-            onBackspace = { haptics.tick(); pin = pin.dropLast(1) },
+            // A wrong entry stays up (in red) until the next key.
+            onDigit = { d -> haptics.tick(); if (error) { error = false; pin = "" }; pin += d },
+            onBackspace = { haptics.tick(); if (error) { error = false; pin = "" } else pin = pin.dropLast(1) },
             onSubmit = {
                 if (check(pin)) { haptics.confirm(); onUnlocked() }
                 else {
-                    haptics.reject(); onWrong(); error = true; wrong++; pin = ""
+                    haptics.reject(); onWrong(); error = true; wrong++
                     if (wrong >= MAX_PIN_TRIES) lockedUntil = System.currentTimeMillis() + LOCKOUT_MS
                 }
             },

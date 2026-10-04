@@ -456,16 +456,33 @@ struct PinField: View {
                     .focused($focused)
                     .disabled(!isEnabled)
                     .onSubmit(submit)
+                    .toolbar {
+                        // The number pad has no return key, and on small iPhones it can cover the button below.
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button(submitTitle, action: submit)
+                                .bold()
+                                .disabled(!isEnabled || pin.isEmpty)
+                        }
+                    }
                     .frame(width: 1, height: 1)
                     .opacity(0.02)
                     .accessibilityLabel(label)
                     .accessibilityValue("\(pin.count) \(pin.count == 1 ? "digit" : "digits") entered")
-                FlowLayout(spacing: 20, lineSpacing: 14) {
-                    ForEach(0..<pin.count, id: \.self) { _ in
-                        Circle()
-                            .fill(Color.primary.opacity(isEnabled ? 1 : 0.4))
-                            .frame(width: 16, height: 16)
-                            .transition(.scale.combined(with: .opacity))
+                Group {
+                    if pin.count > KioskLogic.maxPinDots {
+                        Text("\(pin.count) digits")
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                            .contentTransition(.numericText())
+                    } else {
+                        FlowLayout(spacing: 20, lineSpacing: 14) {
+                            ForEach(0..<pin.count, id: \.self) { _ in
+                                Circle()
+                                    .fill(Color.primary.opacity(isEnabled ? 1 : 0.4))
+                                    .frame(width: 16, height: 16)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
+                        }
                     }
                 }
                 .animation(.bouncy(duration: 0.25), value: pin.count)
@@ -511,7 +528,8 @@ struct PinField: View {
         guard isEnabled, !pin.isEmpty else { return }
         let entered = pin
         pin = ""
-        focused = true
         onComplete(entered)
+        // Return unfocuses the field after this runs; take focus back on the next turn.
+        Task { focused = true }
     }
 }

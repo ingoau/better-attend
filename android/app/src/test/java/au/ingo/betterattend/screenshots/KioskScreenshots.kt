@@ -58,6 +58,14 @@ class KioskScreenshots : ScreenshotTest() {
         KioskSetupContent("Campfire Canberra", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = false, entered = 14, error = null, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
     }
 
+    @Test fun setupVeryLongPin() = snap("kiosk_setup_very_long_pin") {
+        KioskSetupContent("Campfire Canberra", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = true, entered = 23, error = null, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
+    }
+
+    @Test fun setupMismatch() = snap("kiosk_setup_mismatch") {
+        KioskSetupContent("Campfire Canberra", "Check-in desk", Icons.AutoMirrored.Outlined.Login, confirming = false, entered = 6, error = "PINs don't match. Try again.", onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
+    }
+
     @Test fun exitLocked() = snap("kiosk_exit_locked") {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             KioskExitContent(entered = 0, error = true, wrongTries = 3, lockoutSeconds = 27, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
@@ -66,7 +74,7 @@ class KioskScreenshots : ScreenshotTest() {
 
     @Test fun exitWrong() = snap("kiosk_exit_wrong") {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            KioskExitContent(entered = 1, error = true, wrongTries = 1, lockoutSeconds = 0, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
+            KioskExitContent(entered = 5, error = true, wrongTries = 1, lockoutSeconds = 0, onDigit = {}, onBackspace = {}, onSubmit = {}, onCancel = {})
         }
     }
 }

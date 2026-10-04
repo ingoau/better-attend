@@ -183,6 +183,8 @@ enum KioskLogic {
     /// How long a final result stays up before it hides itself (privacy).
     static let resultSeconds: Double = 3
     static let maxPinTries = 3
+    /// Past this many digits the PIN shows as a count instead of dots, so long PINs keep the layout.
+    static let maxPinDots = 16
     static let lockoutSeconds: TimeInterval = 30
 
     struct Message: Hashable, Sendable {
