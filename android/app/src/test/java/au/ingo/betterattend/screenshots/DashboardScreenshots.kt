@@ -1,6 +1,7 @@
 package au.ingo.betterattend.screenshots
 
 import androidx.compose.runtime.Composable
+import au.ingo.betterattend.data.repo.ScanRejection
 import au.ingo.betterattend.ui.dashboard.DashboardContent
 import au.ingo.betterattend.ui.dashboard.DashboardState
 import au.ingo.betterattend.ui.preview.OrganizerSamples
@@ -40,6 +41,16 @@ class DashboardScreenshots : ScreenshotTest() {
 
     @Test @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
     fun liveFull() = snap("dashboard_live_full") { Content(live) }
+
+    @Test fun offlineRejections() = snap("dashboard_offline_rejections") {
+        val p = SampleData.participants
+        Content(live.copy(rejections = listOf(
+            ScanRejection("r1", SampleData.event.id, p[10].participantEventId, p[10].name, "registration withdrawn", "2026-10-03T00:41:00Z", "Check-in desk"),
+            ScanRejection("r2", SampleData.event.id, null, "Unknown attendee", "not registered for this event", "2026-10-03T00:44:00Z", "Check-in desk"),
+        )))
+    }
+
+    @Test fun storageUnavailable() = snap("dashboard_storage_unavailable") { Content(live.copy(storageUnavailable = true)) }
 
     @Test fun loadingEvents() = snap("dashboard_loading") { Content(DashboardState(user = SampleData.user)) }
 

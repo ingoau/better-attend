@@ -1,5 +1,11 @@
 package au.ingo.betterattend.ui.scan
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
@@ -83,6 +89,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import au.ingo.betterattend.data.auth.AuthState
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.User
+import au.ingo.betterattend.data.repo.ScanRejection
+import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.data.store.AppSettings
 import au.ingo.betterattend.scan.FeedbackKind
 import au.ingo.betterattend.scan.NfcStatus
@@ -121,6 +129,9 @@ class ScanActions(
     val onKiosk: () -> Unit = {},
     val onToggleSounds: () -> Unit = {},
     val onToggleHaptics: () -> Unit = {},
+    /** Opens the person a red rejection banner is about (null when staff can't open people). */
+    val onOpenAlert: ((ScanRejection) -> Unit)? = null,
+    val onDismissAlert: (ScanRejection) -> Unit = {},
 )
 
 @Composable
@@ -143,6 +154,8 @@ fun ScanScreen(nav: AppNavigator) {
     val log by container.scans.log.collectAsStateWithLifecycle()
     val syncing by vm.syncing.collectAsStateWithLifecycle()
     val search by vm.search.collectAsStateWithLifecycle()
+    val alerts by vm.alerts.collectAsStateWithLifecycle()
+    val storageAvailable by SecureBox.available.collectAsStateWithLifecycle()
 
     var sheet by rememberSaveable { mutableStateOf<ScanSheet?>(null) }
     var torchOn by rememberSaveable { mutableStateOf(false) }
@@ -169,6 +182,18 @@ fun ScanScreen(nav: AppNavigator) {
         view.keepScreenOn = settings.keepScreenOn
         onDispose { view.keepScreenOn = false }
     }
+    // Once something is waiting to sync, ask (once) to notify if it's later rejected.
+    var askedToNotify by rememberSaveable { mutableStateOf(false) }
+    val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(pending.isNotEmpty()) {
+        if (pending.isNotEmpty() && !askedToNotify && Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            askedToNotify = true
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     // Retry the offline queue whenever the scanner comes back into view.
     LifecycleResumeEffect(vm) {
         vm.onResume()
@@ -192,6 +217,8 @@ fun ScanScreen(nav: AppNavigator) {
         nfc = nfc,
         sounds = settings.sounds,
         haptics = settings.haptics,
+        alerts = alerts,
+        storageUnavailable = !storageAvailable,
     )
     val canOpenDetails = event?.canViewParticipants == true
 
@@ -223,6 +250,8 @@ fun ScanScreen(nav: AppNavigator) {
                 if (on) feedback.play(FeedbackKind.Info, sound = false, haptic = true)
                 scope.launch { container.settings.setHaptics(on) }
             },
+            onOpenAlert = if (canOpenDetails) { a -> a.participantEventId?.let { haptics.click(); nav.openParticipant(a.eventId, it) } } else null,
+            onDismissAlert = { haptics.tick(); vm.dismissAlert(it.clientScanId) },
         ),
         camera = {
             CameraScanner(
@@ -292,6 +321,14 @@ fun ScanContent(
                     )
                 }
                 else -> {
+                    if (state.storageUnavailable) StorageUnavailableBanner(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
+                    ScanAlertBanners(
+                        alerts = state.alerts,
+                        timezone = state.event.timezone,
+                        onOpen = actions.onOpenAlert,
+                        onDismiss = actions.onDismissAlert,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+                    )
                     ContextSelector(
                         contexts = state.contexts,
                         selectedId = state.selectedContextId,
@@ -367,7 +404,7 @@ private fun Viewport(state: ScanUiState, actions: ScanActions, camera: @Composab
         if (state.camera == CameraAccess.Granted) {
             camera()
             val accent = when (card?.kind) {
-                null, ResultKind.Checking, ResultKind.Undone -> Color.White
+                null, ResultKind.Checking, ResultKind.Confirming, ResultKind.Undone -> Color.White
                 else -> card.kind.colors().strong
             }
             // The frame tints to the outcome and makes room for the card, smoothly rather than jumping.

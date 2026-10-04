@@ -83,6 +83,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.store.AppSettings
 import au.ingo.betterattend.scan.NfcStatus
+import au.ingo.betterattend.scan.RejectReason
 import au.ingo.betterattend.scan.ScanFeedback
 import au.ingo.betterattend.scan.rememberNfcReader
 import au.ingo.betterattend.ui.LocalAppContainer
@@ -201,7 +202,7 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
     // front of the camera isn't scanned again until it's been taken away.
     val current = card
     LaunchedEffect(current?.key, current?.kind) {
-        if (current != null && current.kind != ResultKind.Checking) {
+        if (current != null && current.kind != ResultKind.Checking && current.kind != ResultKind.Confirming) {
             delay(KIOSK_RESULT_MS)
             vm.hide(current.key)
         }
@@ -259,12 +260,15 @@ private data class KioskMessage(val title: String, val body: String)
 private fun ScanCard.kioskMessage(): KioskMessage {
     val first = participant?.firstName()
     return when (kind) {
-        ResultKind.Checking -> KioskMessage(if (first != null) "Hi $first!" else "One moment…", "Checking your ticket. Hold steady.")
+        ResultKind.Checking, ResultKind.Confirming -> KioskMessage(if (first != null) "Hi $first!" else "One moment…", "Checking your ticket. Hold steady.")
         ResultKind.Scanned, ResultKind.SavedOffline -> KioskMessage(if (first != null) "Welcome, $first!" else "Welcome!", "You're all set. Enjoy the event!")
         ResultKind.AlreadyScanned -> KioskMessage(if (first != null) "You're already in, $first" else "Already scanned", "No need to scan again. Have fun!")
         ResultKind.Rejected -> if (title == "Still loading") KioskMessage("Just a moment", "The kiosk is still getting ready. Try again in a few seconds.")
         else if (title == "Not an Attend code" || title == "Not an Attend badge")
             KioskMessage("That's not an Attend ticket", "Scan the QR code on your Attend ticket, or ask a staff member.")
+        // Withdrawn, missing consent, wrong event…: never say why on a public screen.
+        else if (RejectReason.entries.any { it.title == title && it != RejectReason.NotRegistered })
+            KioskMessage("Please see a staff member", "They'll help you get checked in.")
         else KioskMessage("We couldn't find your ticket", "Please see a staff member and they'll sort it out.")
         ResultKind.Undone -> KioskMessage("Ready", "Scan your ticket")
     }
@@ -284,7 +288,7 @@ fun KioskContent(
         if (state.camera == CameraAccess.Granted) {
             camera()
             val card = state.card
-            val accent = if (card == null || card.kind == ResultKind.Checking) Color.White else card.kind.colors().strong
+            val accent = if (card == null || card.kind == ResultKind.Checking || card.kind == ResultKind.Confirming) Color.White else card.kind.colors().strong
             val frameColor by animateColorAsState(accent, MaterialTheme.motionScheme.defaultEffectsSpec(), label = "frameColor")
             ScanFrame(accent = frameColor, maxSize = 360.dp, verticalBias = 0.4f)
         } else {
@@ -368,7 +372,7 @@ private fun KioskResult(card: ScanCard) {
     ) {
         Column(
             Modifier.padding(horizontal = 24.dp, vertical = 32.dp).clearAndSetSemantics {
-                liveRegion = if (card.kind == ResultKind.Checking) LiveRegionMode.Polite else LiveRegionMode.Assertive
+                liveRegion = if (card.kind == ResultKind.Checking || card.kind == ResultKind.Confirming) LiveRegionMode.Polite else LiveRegionMode.Assertive
                 contentDescription = "${msg.title}. ${msg.body}"
             },
             horizontalAlignment = Alignment.CenterHorizontally,

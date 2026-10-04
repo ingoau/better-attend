@@ -7,7 +7,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import java.io.File
 
-/** Tiny encrypted key→JSON file cache. Keys become file names, so keep them simple. */
+/**
+ * Tiny encrypted key→JSON file cache. Keys become file names, so keep them simple. Writes nothing
+ * when [SecureBox] has no key: the repositories' in-memory state keeps the app working online.
+ */
 class JsonCache(context: Context) {
     private val dir = File(context.filesDir, "cache_v1").apply { mkdirs() }
 
@@ -27,13 +30,25 @@ class JsonCache(context: Context) {
     }
 
     suspend fun <T> write(key: String, serializer: KSerializer<T>, value: T) = withContext(Dispatchers.IO) {
+        val sealed = SecureBox.encrypt(AttendJson.encodeToString(serializer, value).toByteArray()) ?: return@withContext
         val f = file(key)
         val tmp = File(f.parentFile, f.name + "." + java.util.UUID.randomUUID() + ".tmp")
         try {
-            tmp.writeBytes(SecureBox.encrypt(AttendJson.encodeToString(serializer, value).toByteArray()))
+            tmp.writeBytes(sealed)
             if (!tmp.renameTo(f)) tmp.delete()
         } catch (e: java.io.IOException) {
             tmp.delete() // e.g. disk full: keep the previous cache rather than crash
+        }
+    }
+
+    /**
+     * Deletes files that older builds wrote in plaintext when the Keystore was unavailable (they then
+     * stored data unencrypted). Sealed files never parse as JSON, so only those leftovers match.
+     */
+    suspend fun scrubPlaintext() = withContext(Dispatchers.IO) {
+        dir.listFiles()?.forEach { f ->
+            val isJson = runCatching { AttendJson.parseToJsonElement(f.readBytes().decodeToString(throwOnInvalidSequence = true)) }.isSuccess
+            if (isJson) f.delete()
         }
     }
 

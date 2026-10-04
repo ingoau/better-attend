@@ -5,14 +5,15 @@ import Foundation
 // helpers). The mapping from a repository `ScanOutcome` to a card lives app-side in
 // `ScanCard+Outcome.swift`, because `ScanOutcome` isn't part of the shared module.
 
-/// What the result card is showing.
+/// What the result card is showing. `checking`: sent, nothing known yet. `confirming`: the cached
+/// roster says they're fine and we're waiting for the server to agree (a muted tick, not a success).
 enum ResultKind: String, Hashable, Sendable, CaseIterable {
-    case checking, scanned, alreadyScanned, savedOffline, rejected, undone
+    case checking, confirming, scanned, alreadyScanned, savedOffline, rejected, undone
 
     /// The sound + haptic for a final outcome (nil while checking, and for staff undo).
     var feedback: FeedbackKind? {
         switch self {
-        case .checking, .undone: nil
+        case .checking, .confirming, .undone: nil
         case .scanned: .success
         case .alreadyScanned: .warning
         case .savedOffline: .info
@@ -26,14 +27,14 @@ enum ResultKind: String, Hashable, Sendable, CaseIterable {
         case .alreadyScanned: .warning
         case .checking, .savedOffline: .info
         case .rejected: .danger
-        case .undone: .neutral
+        case .undone, .confirming: .neutral
         }
     }
 
     var systemImage: String {
         switch self {
         case .checking: "hourglass"
-        case .scanned: "checkmark"
+        case .scanned, .confirming: "checkmark"
         case .alreadyScanned: "clock.arrow.circlepath"
         case .savedOffline: "icloud.and.arrow.up"
         case .rejected: "xmark"
@@ -42,7 +43,7 @@ enum ResultKind: String, Hashable, Sendable, CaseIterable {
     }
 
     /// True once the server (or the offline queue) has answered.
-    var isFinal: Bool { self != .checking }
+    var isFinal: Bool { self != .checking && self != .confirming }
 }
 
 /// One scan attempt as shown on the result card. The next scan replaces it.
@@ -62,12 +63,16 @@ struct ScanCard: Hashable, Sendable, Identifiable {
     /// Same-code gate key, released when the card is dismissed.
     var gateKey: String?
     var input: ScanInput?
+    /// Offline only: how old the roster it was checked against is, e.g. "Roster from 14 min ago".
+    var rosterNote: String?
+    /// The roster is missing or over an hour old: `rosterNote` is shown as a warning.
+    var rosterStale = false
 
     var id: String { key }
 
     /// Spoken by VoiceOver when the outcome arrives.
     var accessibilityText: String {
-        [title, participant?.name, contextName, message].compactMap { $0?.nonBlank }.joined(separator: ". ")
+        [title, participant?.name, contextName, message, rosterNote].compactMap { $0?.nonBlank }.joined(separator: ". ")
     }
 
     // MARK: Cards that never reach the server
@@ -197,7 +202,7 @@ enum KioskLogic {
     static func message(for card: ScanCard) -> Message {
         let first = card.participant.map(firstName)
         switch card.kind {
-        case .checking:
+        case .checking, .confirming:
             return Message(title: first.map { "Hi \($0)!" } ?? "One moment…", body: "Checking your ticket. Hold steady.")
         case .scanned, .savedOffline:
             return Message(title: first.map { "Welcome, \($0)!" } ?? "Welcome!", body: "You're all set. Enjoy the event!")
@@ -209,6 +214,10 @@ enum KioskLogic {
             }
             if card.title == ScanCard.notAttendCodeTitle || card.title == ScanCard.notAttendBadgeTitle {
                 return Message(title: "That's not an Attend ticket", body: "Scan the QR code on your Attend ticket, or ask a staff member.")
+            }
+            // Withdrawn, missing consent, wrong event…: never say why on a public screen.
+            if RejectReason.allCases.contains(where: { $0.title == card.title && $0 != .notRegistered }) {
+                return Message(title: "Please see a staff member", body: "They'll help you get checked in.")
             }
             return Message(title: "We couldn't find your ticket", body: "Please see a staff member and they'll sort it out.")
         case .undone:

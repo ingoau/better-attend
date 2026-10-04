@@ -24,7 +24,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import au.ingo.betterattend.AttendApp
 import au.ingo.betterattend.MainActivity
+import au.ingo.betterattend.data.IdentityCipher
 import au.ingo.betterattend.data.api.AttendJson
+import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.data.model.*
 import au.ingo.betterattend.ui.preview.SampleData
 import kotlinx.serialization.KSerializer
@@ -68,6 +70,8 @@ class AppSmokeTest {
         .addHeader("Content-Type", "application/json").body(AttendJson.encodeToString(ser, value)).build()
 
     @Before fun setUp() {
+        // The JVM has no Android Keystore, and SecureBox never falls back to plaintext: opt in explicitly.
+        SecureBox.injectForTesting(IdentityCipher)
         WorkManagerTestInitHelper.initializeTestWorkManager(app)
         val eid = liveEvent.id
         server.dispatcher = object : Dispatcher() {
@@ -101,7 +105,10 @@ class AppSmokeTest {
         app.container.api.baseUrl = server.url("/").toString().trimEnd('/')
     }
 
-    @After fun tearDown() { server.close() }
+    @After fun tearDown() {
+        server.close()
+        SecureBox.resetForTesting()
+    }
 
     private fun waitForText(text: String, timeout: Long = 10_000) {
         try {

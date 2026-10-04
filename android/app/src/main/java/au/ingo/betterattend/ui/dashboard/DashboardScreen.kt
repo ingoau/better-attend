@@ -21,6 +21,8 @@ import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.repo.Roster
+import au.ingo.betterattend.data.repo.ScanRejection
+import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.PollWhileVisible
 import au.ingo.betterattend.ui.nav.AppNavigator
@@ -60,6 +62,10 @@ data class DashboardState(
     val error: String? = null,
     val lastUpdated: Instant? = null,
     val pendingScans: Int = 0,
+    /** Offline check-ins the server turned down on sync (any event), until dismissed. */
+    val rejections: List<ScanRejection> = emptyList(),
+    /** The encryption key is unavailable, so nothing is saved on this device. */
+    val storageUnavailable: Boolean = false,
 ) {
     val canViewParticipants: Boolean get() = event?.canViewParticipants == true
 }
@@ -90,9 +96,13 @@ class DashboardViewModel(private val c: AppContainer) : ViewModel() {
         )
     }
 
-    val state: StateFlow<DashboardState> = combine(repoState, c.events.events, c.auth.state, local) { s, events, auth, l ->
+    private val alerts = combine(c.scans.rejections, SecureBox.available) { r, available -> r to !available }
+
+    val state: StateFlow<DashboardState> = combine(repoState, c.events.events, c.auth.state, local, alerts) { s, events, auth, l, (rejections, noStorage) ->
         val same = l.eventId != null && l.eventId == s.event?.id
         s.copy(
+            rejections = rejections,
+            storageUnavailable = noStorage,
             user = (auth as? AuthState.SignedIn)?.user,
             events = events,
             scans = if (same) l.scans else null,
@@ -176,6 +186,8 @@ class DashboardViewModel(private val c: AppContainer) : ViewModel() {
     fun refreshAsync(event: Event, force: Boolean = true) = refresh(event, force)
 
     fun refreshEvents() { viewModelScope.launch { c.events.refresh() } }
+
+    fun dismissRejections() { viewModelScope.launch { c.scans.dismissRejections() } }
 }
 
 @Composable
@@ -209,5 +221,7 @@ fun DashboardScreen(nav: AppNavigator) {
         onOpenParticipant = { pe -> event?.let { nav.openParticipant(it.id, pe) } },
         onAnnounce = { event?.let { nav.openBlasts(it.id) } },
         onKiosk = { event?.let { nav.openKiosk(it.id, null) } },
+        onOpenRejection = { r -> r.participantEventId?.let { nav.openParticipant(r.eventId, it) } },
+        onDismissRejections = vm::dismissRejections,
     )
 }

@@ -19,8 +19,9 @@ struct ScanToast: Hashable, Identifiable {
 }
 
 /// Drives the scanner and the kiosk (port of Android's `ScanViewModel`): event + checkpoint
-/// selection, the same-code gate, submitting scans with an instant "Checking…" card, undo, the
-/// offline queue and the find-person search.
+/// selection, the same-code gate, submitting scans with an instant "Confirming…" card from the cached
+/// roster, the red interrupt when the server then turns one down, undo, the offline queue and the
+/// find-person search.
 @MainActor
 @Observable
 final class ScanModel {
@@ -40,6 +41,8 @@ final class ScanModel {
     @ObservationIgnored var actionFeedback: (Bool) -> Void = { ok in ok ? Haptics.confirm() : Haptics.reject() }
 
     private(set) var card: ScanCard?
+    /// Scans the server turned down after the card said "Confirming…", newest first, until dismissed.
+    private(set) var alerts: [ScanRejection] = []
     private(set) var inFlight = 0
     private(set) var syncing = false
     private(set) var contextErrors: [String: String] = [:]
@@ -191,21 +194,40 @@ final class ScanModel {
         }
         let ctx = selectedContext
         let key = newKey()
-        let cached = app.participants.roster(e.id)?.find(input.badgeToken ?? input.participantId ?? "")
-        card = ScanCard(key: key, kind: .checking, title: "Checking…", participant: cached, contextName: ctx?.name, contextId: ctx?.id,
-                        gateKey: gateKey, input: input)
+        let checksIn = ctx?.checksIn ?? true
+        // Shown straight away from the cache. A muted tick only when the roster knows them and sees no problem.
+        let cachedCheck = ScanAdmission.precheck(input, roster: app.participants.roster(e.id), contextId: ctx?.id, checksIn: checksIn)
+        let cached = cachedCheck.participant
+        var confirming = false
+        if case .pass(let p) = cachedCheck, p != nil { confirming = true }
+        card = ScanCard(key: key, kind: confirming ? .confirming : .checking, title: confirming ? "Confirming…" : "Checking…",
+                        participant: cached, contextName: ctx?.name, contextId: ctx?.id, gateKey: gateKey, input: input)
         inFlight += 1
         Task {
             defer { inFlight -= 1 }
-            let outcome = await app.scans.submit(eventId: e.id, input: input, scanContextId: ctx?.id, scanContextName: ctx?.name)
-            let result = outcome.card(key: key, context: ctx, tz: e.timezone, gateKey: gateKey, input: input)
+            let scannedAt = Time.nowISO()
+            let outcome = await app.scans.submit(eventId: e.id, input: input, scanContextId: ctx?.id, scanContextName: ctx?.name, checksIn: checksIn)
+            var result = outcome.card(key: key, context: ctx, tz: e.timezone, gateKey: gateKey, input: input)
+            if result.kind == .savedOffline, !app.secureStorage {
+                result.message = "Offline, will confirm later. Not saved to this phone: keep the app open until it syncs."
+            }
             if let kind = result.kind.feedback { playFeedback(kind) }
             if card?.key == key { card = result }
+            // Don't just swap the card: a turned-down scan also raises a banner that stays until dismissed.
+            if let alert = outcome.serverRejection(eventId: e.id, contextName: ctx?.name, scannedAt: scannedAt) {
+                alerts = Array(([alert] + alerts).prefix(Self.maxAlerts))
+            }
             if result.kind == .rejected, result.message?.localizedCaseInsensitiveContains("context") == true {
                 await refreshContexts(e.id)
             }
         }
     }
+
+    func dismissAlert(_ clientScanId: String) {
+        alerts.removeAll { $0.clientScanId == clientScanId }
+    }
+
+    private static let maxAlerts = 20
 
     /// Dismiss the card and let the same code scan again straight away.
     func dismiss() {

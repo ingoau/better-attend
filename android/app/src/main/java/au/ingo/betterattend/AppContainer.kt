@@ -10,6 +10,7 @@ import au.ingo.betterattend.data.repo.ScanRepository
 import au.ingo.betterattend.data.repo.TicketRepository
 import au.ingo.betterattend.data.repo.TravelRepository
 import au.ingo.betterattend.data.store.JsonCache
+import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.data.store.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,9 @@ import au.ingo.betterattend.data.auth.AuthState
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** False when the Keystore key is unavailable: nothing sensitive is written to disk, the app runs online only. */
+    val secureStorage: Boolean = SecureBox.check()
 
     val settings = SettingsStore(appContext)
     val cache = JsonCache(appContext)
@@ -39,6 +43,14 @@ class AppContainer(context: Context) {
         scans.fallbackContext = { eventId ->
             events.loadContexts(eventId)
             events.cachedContexts(eventId)?.let { list -> (list.firstOrNull { it.checksIn } ?: list.firstOrNull())?.id }
+        }
+        // Plaintext left by older builds that fell back to no encryption.
+        scope.launch { runCatching { cache.scrubPlaintext() } }
+        // Offline "wrong event" check: the code may be on another of this user's events.
+        scans.otherRosters = { eventId ->
+            events.events.value.orEmpty().filter { it.id != eventId }
+                .mapNotNull { e -> participants.load(e.id)?.let { e.name to it } }
+                .toMap()
         }
         // Whenever the session ends (sign-out or expiry), wipe cached account data.
         scope.launch {

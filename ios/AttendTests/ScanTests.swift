@@ -86,7 +86,7 @@ extension Fixtures {
             .card(key: "k", context: ctx, tz: tz, gateKey: nil, input: pending.input)
         #expect(card.kind == .savedOffline)
         #expect(card.title == "Saved offline")
-        #expect(card.message == "Will sync automatically when you're back online")
+        #expect(card.message == "Offline, will confirm later")
         #expect(card.contextName == "Check-in desk")
         #expect(!card.retryable)
     }
@@ -361,7 +361,7 @@ extension Fixtures {
     }
 
     func settle() async {
-        for _ in 0..<60 where model.card?.kind == .checking || model.inFlight > 0 || model.syncing {
+        for _ in 0..<60 where model.card?.kind.isFinal == false || model.inFlight > 0 || model.syncing {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
@@ -376,12 +376,15 @@ extension Fixtures {
         #expect(app.settings.selectedContexts[DemoData.mainEventId] == "c1")
     }
 
-    @Test func scanShowsCheckingThenScannedAndGatesRepeats() async {
+    @Test func scanShowsConfirmingThenScannedAndGatesRepeats() async {
         model.selectContext("c1")
         let p = unscanned(0)
         let code = "attend://checkin/\(p.participantId)"
         model.onCameraCodes([code])
-        #expect(model.card?.kind == .checking)
+        // The roster knows them and sees no problem: a muted "Confirming…", not a success yet.
+        #expect(model.card?.kind == .confirming)
+        #expect(model.card?.title == "Confirming…")
+        #expect(played.isEmpty)
         #expect(model.card?.participant?.participantEventId == p.participantEventId)
         let key = model.card?.key
         // The same code in the next frames is ignored.
@@ -416,6 +419,29 @@ extension Fixtures {
         #expect(model.card?.canUndo == false)
         #expect(model.card?.busy == false)
         #expect(app.participants.roster(DemoData.mainEventId)?.byEventId[p.participantEventId]?.isCheckedIn == false)
+    }
+
+    @Test func serverRejectionInterruptsWithABanner() async throws {
+        model.selectContext("c1")
+        let roster = app.participants.roster(DemoData.mainEventId)?.participants ?? []
+        let p = try #require(roster.first { $0.status == "withdrawn" && !$0.scansByContext.contains { $0.scanContextId == "c1" } })
+        model.onCameraCodes(["attend://checkin/\(p.participantId)"])
+        // The cache already has doubts, so no muted tick.
+        #expect(model.card?.kind == .checking)
+        await settle()
+        #expect(model.card?.kind == .rejected)
+        #expect(model.card?.title == "Withdrawn")
+        #expect(played == [.reject])
+        let alert = try #require(model.alerts.first)
+        #expect(alert.headline == "\(p.name): registration withdrawn")
+        #expect(alert.participantEventId == p.participantEventId)
+        // The scan Attend recorded was taken back.
+        #expect(app.participants.roster(DemoData.mainEventId)?.byEventId[p.participantEventId]?.scansByContext.contains { $0.scanContextId == "c1" } == false)
+        // The banner outlives the card until it's dismissed.
+        model.dismiss()
+        #expect(model.alerts.count == 1)
+        model.dismissAlert(alert.clientScanId)
+        #expect(model.alerts.isEmpty)
     }
 
     @Test func foreignCodesAreRejectedLocally() {
@@ -491,7 +517,7 @@ extension Fixtures {
     }
 
     static func settle(_ m: ScanModel) async {
-        for _ in 0..<60 where m.card?.kind == .checking || m.inFlight > 0 {
+        for _ in 0..<60 where m.card?.kind.isFinal == false || m.inFlight > 0 {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }

@@ -1,6 +1,7 @@
 import BackgroundTasks
 import Foundation
 import Network
+import UserNotifications
 import WidgetKit
 
 /// Hand-rolled dependency container: one per process, injected into SwiftUI with `.environment(app)`.
@@ -22,6 +23,10 @@ final class AppModel {
     /// False while the network is unreachable (drives "offline" hints and queued-scan retries).
     private(set) var isOnline = true
 
+    /// False when the cache's encryption key is unavailable: nothing is saved on this device, so the
+    /// app works online only (and says so).
+    var secureStorage: Bool { cache.isEncrypted }
+
     @ObservationIgnored let cache: JsonCache
     @ObservationIgnored private let pathMonitor = NWPathMonitor()
     @ObservationIgnored private var widgetPublish: Task<Void, Never>?
@@ -39,7 +44,7 @@ final class AppModel {
             let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             try? FileManager.default.removeItem(at: base.appending(path: "demo_cache"))
         }
-        let cache = JsonCache.standard(namespace: demo ? "demo_cache" : "cache_v1", keychain: keychain)
+        let cache = demo ? JsonCache.ephemeral(namespace: "demo_cache") : JsonCache.standard(keychain: keychain)
         let tokenStore = SecureTokenStore(keychain: keychain)
         let api = AttendAPI(tokens: tokenStore, session: demo ? DemoBackend.makeSession() : nil)
 
@@ -61,7 +66,21 @@ final class AppModel {
             let list = events.cachedContexts(eventId) ?? []
             return (list.first(where: \.checksIn) ?? list.first)?.id
         }
-        scans.onQueued = { [weak self] in self?.scheduleScanRetry() }
+        scans.onQueued = { [weak self] in
+            self?.scheduleScanRetry()
+            if !demo { RejectionNotifier.requestPermissionIfNeeded() }
+        }
+        scans.onRejected = { rejected in if !demo { RejectionNotifier.notify(rejected) } }
+        if !demo { UNUserNotificationCenter.current().delegate = NotificationRouter.shared }
+        // Offline "wrong event" check: the code may be on another of this user's events.
+        scans.otherRosters = { [weak self] eventId in
+            guard let self else { return [:] }
+            var found: [String: Roster] = [:]
+            for e in events.events ?? [] where e.id != eventId {
+                if let r = await participants.load(e.id) { found[e.name] = r }
+            }
+            return found
+        }
         events.onChange = { [weak self] in self?.scheduleWidgetPublish() }
         participants.onChange = { [weak self] in self?.scheduleWidgetPublish() }
         tickets.onChange = { [weak self] in self?.scheduleWidgetPublish() }
@@ -76,7 +95,7 @@ final class AppModel {
         await events.loadCache()
         await tickets.loadCache()
         await scans.loadQueue()
-        if !scans.pending.isEmpty { scheduleScanRetry(immediately: true) }
+        if scans.hasQueuedWork { scheduleScanRetry(immediately: true) }
     }
 
     var user: User? { auth.currentUser }
@@ -116,7 +135,7 @@ final class AppModel {
     private func connectivityChanged(_ online: Bool) {
         let cameBack = online && !isOnline
         isOnline = online
-        if cameBack, !scans.pending.isEmpty { scheduleScanRetry(immediately: true) }
+        if cameBack, scans.hasQueuedWork { scheduleScanRetry(immediately: true) }
     }
 
     /// Retries the queue with exponential backoff (15 s → 5 min) until it's empty.
@@ -195,7 +214,7 @@ final class AppModel {
         scheduleBackgroundRefresh()
         guard let user else { return }
         await loadCaches()
-        if !scans.pending.isEmpty { await scans.flush() }
+        if scans.hasQueuedWork { await scans.flush() }
         if user.isOrganizer || user.globalAdmin {
             if events.events?.isEmpty ?? true { _ = try? await events.refresh() }
             if let event = events.selectedEvent {

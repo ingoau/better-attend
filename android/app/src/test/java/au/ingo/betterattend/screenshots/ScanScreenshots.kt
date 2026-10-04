@@ -12,6 +12,8 @@ import au.ingo.betterattend.data.repo.PendingScan
 import au.ingo.betterattend.data.repo.ScanInput
 import au.ingo.betterattend.data.repo.ScanLogEntry
 import au.ingo.betterattend.data.repo.ScanOutcome
+import au.ingo.betterattend.data.repo.ScanRejection
+import au.ingo.betterattend.scan.RejectReason
 import au.ingo.betterattend.scan.NfcStatus
 import au.ingo.betterattend.ui.preview.SampleData
 import au.ingo.betterattend.ui.scan.CameraAccess
@@ -70,8 +72,33 @@ class ScanScreenshots : ScreenshotTest() {
     }
 
     @Test fun savedOffline() = snap("scan_card_offline") {
-        Screen(base.copy(pendingCount = 3, card = card(ResultKind.SavedOffline, "Saved offline", "Will sync automatically when you're back online", sam)))
+        Screen(base.copy(pendingCount = 3, card = card(ResultKind.SavedOffline, "Saved offline", "Offline, will confirm later", sam)
+            .copy(rosterNote = "Roster from 14 min ago")))
     }
+
+    @Test fun savedOfflineStaleRoster() = snap("scan_card_offline_stale") {
+        Screen(base.copy(pendingCount = 3, card = card(ResultKind.SavedOffline, "Saved offline", "Offline, will confirm later", sam)
+            .copy(rosterNote = "Roster from 3 h ago", rosterStale = true)))
+    }
+
+    @Test fun confirming() = snap("scan_card_confirming") {
+        Screen(base.copy(inFlight = 1, card = card(ResultKind.Confirming, "Confirming…", p = maya)))
+    }
+
+    @Test fun offlineRejected() = snap("scan_card_offline_rejected") {
+        val withdrawn = SampleData.participants[10]
+        Screen(base.copy(card = card(ResultKind.Rejected, "Withdrawn", "Isla has withdrawn from this event.", withdrawn, retry = true)
+            .copy(rosterNote = "Offline, not saved · Roster from 14 min ago")))
+    }
+
+    @Test fun serverRejectedInterrupt() = snap("scan_server_rejected") {
+        Screen(base.copy(
+            card = card(ResultKind.Rejected, "Consent not signed", "Maya's waiver hasn't been signed. Sort it out before checking them in. Scan removed.", maya),
+            alerts = listOf(ScanRejection("a1", event.id, maya.participantEventId, maya.fullName!!, "consent not signed", "2026-10-03T00:41:00Z", "Check-in desk")),
+        ))
+    }
+
+    @Test fun storageUnavailable() = snap("scan_storage_unavailable") { Screen(base.copy(storageUnavailable = true)) }
 
     @Test fun notRegistered() = snap("scan_card_not_registered") {
         Screen(base.copy(card = card(ResultKind.Rejected, "Not registered", "No registration for this event matches that code.")))
@@ -166,6 +193,7 @@ class ScanScreenshots : ScreenshotTest() {
                 ScanLogEntry(ScanOutcome.AlreadyScanned("s2", ScanResult(outcome = "already_scanned", scanContext = ctx), noah), "Check-in desk", "2026-10-03T01:27:00Z"),
                 ScanLogEntry(ScanOutcome.Queued("s3", pending(3, "Arjun Patel"), null, "offline"), "Check-in desk", "2026-10-03T01:25:00Z"),
                 ScanLogEntry(ScanOutcome.Failed("s4", "Not registered for this event", null, true), "Check-in desk", "2026-10-03T01:20:00Z"),
+                ScanLogEntry(ScanOutcome.Rejected("s5", RejectReason.Withdrawn, SampleData.participants[10], offline = true), "Check-in desk", "2026-10-03T01:18:00Z"),
             ),
             event.timezone,
             onOpen = {},

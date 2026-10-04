@@ -38,7 +38,7 @@ sealed interface TokenIssueState {
 
 /** Persists the session token (encrypted) and the in-flight PKCE verifier. */
 class SecureTokenStore(context: Context) : TokenStore {
-    private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE).also(::scrubPlaintext)
     @Volatile private var cached: String? = prefs.getString("token", null)?.let { SecureBox.decryptString(it) }
 
     override val token: String? get() = cached
@@ -47,16 +47,34 @@ class SecureTokenStore(context: Context) : TokenStore {
         cached = token
         prefs.edit {
             if (token == null) { remove("token"); remove("expires_at") }
-            else { putString("token", SecureBox.encryptString(token)); putString("expires_at", expiresAt) }
+            else {
+                // Without a key the token lives in memory only (signed out on restart), never in plaintext.
+                val sealed = SecureBox.encryptString(token)
+                if (sealed == null) { remove("token"); remove("expires_at") }
+                else { putString("token", sealed); putString("expires_at", expiresAt) }
+            }
         }
     }
 
+    @Volatile private var cachedUser: User? = prefs.getString("user", null)?.let { SecureBox.decryptString(it) }
+        ?.let { runCatching { AttendJson.decodeFromString(User.serializer(), it) }.getOrNull() }
+
+    /** Like the token, kept in memory too, so a missing key only costs the session on restart. */
     var user: User?
-        get() = prefs.getString("user", null)?.let { SecureBox.decryptString(it) }
-            ?.let { runCatching { AttendJson.decodeFromString(User.serializer(), it) }.getOrNull() }
-        set(value) = prefs.edit {
-            if (value == null) remove("user") else putString("user", SecureBox.encryptString(AttendJson.encodeToString(User.serializer(), value)))
+        get() = cachedUser
+        set(value) {
+            cachedUser = value
+            prefs.edit {
+                val sealed = value?.let { SecureBox.encryptString(AttendJson.encodeToString(User.serializer(), it)) }
+                if (sealed == null) remove("user") else putString("user", sealed)
+            }
         }
+
+    /** Older builds stored the token and user unencrypted when the Keystore failed; remove those. */
+    private fun scrubPlaintext(prefs: android.content.SharedPreferences) {
+        val stale = listOf("token", "user").filter { key -> prefs.getString(key, null)?.let(::isPlaintext) == true }
+        if (stale.isNotEmpty()) prefs.edit { stale.forEach(::remove); if ("token" in stale) remove("expires_at") }
+    }
 
     var pkceVerifier: String?
         get() = prefs.getString("pkce_verifier", null)
@@ -315,4 +333,14 @@ class AuthRepository(
         const val AUTHORIZE_URL = "https://auth.hackclub.com/oauth/authorize"
         const val MAX_DEVICE_NAME = 100
     }
+}
+
+/**
+ * True when a stored base64 value is readable text rather than sealed bytes: AES-GCM output (random IV,
+ * ciphertext, tag) is essentially never valid UTF-8 free of control characters.
+ */
+internal fun isPlaintext(base64: String): Boolean {
+    val bytes = runCatching { android.util.Base64.decode(base64, android.util.Base64.NO_WRAP) }.getOrNull() ?: return false
+    val text = runCatching { bytes.decodeToString(throwOnInvalidSequence = true) }.getOrNull() ?: return false
+    return text.isNotEmpty() && text.none { it.isISOControl() }
 }

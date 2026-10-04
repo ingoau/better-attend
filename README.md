@@ -61,9 +61,17 @@ They show up as **BetterAttend** and install **alongside** the official app (`au
 - **Scan** — continuous QR scanning (CameraX + on-device ML Kit, works offline), **NFC badge reading**
   (the old app had no Android NFC), scan-point selector, big colour-coded results with safety alerts,
   undo, sounds + haptics, recent-scans log, and "Find person" for manual check-ins.
-- **Offline first** — scans made without signal are queued, shown as "N waiting to sync", and
-  retried automatically (WorkManager) with idempotent `client_scan_id`s. Rosters, tickets and travel
-  are cached (encrypted with an Android Keystore key) so everything still reads offline.
+- **Server-confirmed scans** — a scan shows "Confirming…" from the cached roster straight away and
+  only turns green once Attend confirms it. If Attend turns it down (or its record says the person
+  has withdrawn or hasn't signed the waiver), the scanner buzzes, plays the error sound and raises a
+  red banner naming the person and the reason that stays until dismissed.
+- **Offline first** — when Attend can't be reached within 5 s, the scan is checked against the cached
+  roster (withdrawn, missing consent, wrong event, already checked in, not registered) and only
+  queued if it passes, with the roster's age on the card. Queued scans keep their original time,
+  retry automatically (WorkManager) with idempotent `client_scan_id`s, and any Attend rejects on
+  sync are notified and listed on Home. Rosters, tickets and travel are cached encrypted with an
+  Android Keystore key; if that key is unavailable nothing is written to disk and the app says it's
+  running online only.
 - **People** — instant search (name, email, pronouns, short code), filter chips with live counts
   (Here / Not here / Needs attention / Not complete / Withdrawn), advanced filters and sorting.
 - **Participant detail** — safety alerts first, check in / undo per scan point, call · SMS ·

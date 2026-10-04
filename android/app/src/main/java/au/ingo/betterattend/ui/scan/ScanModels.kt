@@ -20,14 +20,21 @@ import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.repo.PendingScan
 import au.ingo.betterattend.data.repo.ScanInput
 import au.ingo.betterattend.data.repo.ScanOutcome
+import au.ingo.betterattend.data.repo.ScanRejection
 import au.ingo.betterattend.scan.FeedbackKind
 import au.ingo.betterattend.scan.NfcStatus
+import au.ingo.betterattend.scan.RejectReason
+import au.ingo.betterattend.scan.ScanAdmission
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 import java.time.Instant
 import java.time.LocalDate
 
-enum class ResultKind { Checking, Scanned, AlreadyScanned, SavedOffline, Rejected, Undone }
+/**
+ * [Checking]: sent, nothing known yet. [Confirming]: the cached roster says they're fine and we're
+ * waiting for the server to agree (a muted tick, not a success).
+ */
+enum class ResultKind { Checking, Confirming, Scanned, AlreadyScanned, SavedOffline, Rejected, Undone }
 
 /** What the result card shows. One per scan attempt; the next scan replaces it. */
 @Immutable
@@ -46,6 +53,10 @@ data class ScanCard(
     /** Same-code gate key, released when the card is dismissed. */
     val gateKey: String? = null,
     val input: ScanInput? = null,
+    /** Offline only: how old the roster it was checked against is, e.g. "Roster from 14 min ago". */
+    val rosterNote: String? = null,
+    /** The roster is missing or over an hour old: [rosterNote] is shown as a warning. */
+    val rosterStale: Boolean = false,
 )
 
 enum class CameraAccess { Unknown, Granted, NeedsRequest, PermanentlyDenied }
@@ -68,6 +79,10 @@ data class ScanUiState(
     val nfc: NfcStatus = NfcStatus.Unavailable,
     val sounds: Boolean = true,
     val haptics: Boolean = true,
+    /** Scans the server turned down after showing "Confirming…": red banners until dismissed. */
+    val alerts: List<ScanRejection> = emptyList(),
+    /** The encryption key is unavailable, so nothing is saved on this device. */
+    val storageUnavailable: Boolean = false,
 ) {
     val selectedContext: ScanContext? get() = contexts?.firstOrNull { it.id == selectedContextId }
     val ready: Boolean get() = event != null && (contexts != null || contextsError != null)
@@ -86,7 +101,7 @@ data class SearchUiState(
 )
 
 fun ResultKind.feedback(): FeedbackKind? = when (this) {
-    ResultKind.Checking, ResultKind.Undone -> null
+    ResultKind.Checking, ResultKind.Confirming, ResultKind.Undone -> null
     ResultKind.Scanned -> FeedbackKind.Success
     ResultKind.AlreadyScanned -> FeedbackKind.Warning
     ResultKind.SavedOffline -> FeedbackKind.Info
@@ -103,6 +118,10 @@ fun ResultKind.colors(): OutcomeColors {
         ResultKind.Scanned -> OutcomeColors(s.success, s.onSuccess, s.successContainer, s.onSuccessContainer)
         ResultKind.AlreadyScanned -> OutcomeColors(s.warning, s.onWarning, s.warningContainer, s.onWarningContainer)
         ResultKind.Checking, ResultKind.SavedOffline -> OutcomeColors(s.info, s.onInfo, s.infoContainer, s.onInfoContainer)
+        // Deliberately muted: it isn't a success until the server says so.
+        ResultKind.Confirming -> MaterialTheme.colorScheme.let {
+            OutcomeColors(it.outlineVariant, it.onSurfaceVariant, it.surfaceContainerHighest, it.onSurfaceVariant)
+        }
         ResultKind.Rejected -> OutcomeColors(s.danger, s.onDanger, s.dangerContainer, s.onDangerContainer)
         ResultKind.Undone -> MaterialTheme.colorScheme.let { OutcomeColors(it.secondary, it.onSecondary, it.secondaryContainer, it.onSecondaryContainer) }
     }
@@ -110,7 +129,7 @@ fun ResultKind.colors(): OutcomeColors {
 
 fun ResultKind.icon(): ImageVector = when (this) {
     ResultKind.Checking -> Icons.Outlined.History
-    ResultKind.Scanned -> Icons.Outlined.CheckCircle
+    ResultKind.Scanned, ResultKind.Confirming -> Icons.Outlined.CheckCircle
     ResultKind.AlreadyScanned -> Icons.Outlined.History
     ResultKind.SavedOffline -> Icons.Outlined.CloudQueue
     ResultKind.Rejected -> Icons.Outlined.ErrorOutline
@@ -169,7 +188,9 @@ fun ScanOutcome.toCard(key: String, context: ScanContext?, tz: String?, gateKey:
         is ScanOutcome.Queued -> base.copy(
             kind = ResultKind.SavedOffline,
             title = "Saved offline",
-            message = "Will sync automatically when you're back online",
+            message = "Offline, will confirm later",
+            rosterNote = ScanAdmission.rosterAgeLabel(rosterAt) ?: "No roster on this phone to check against",
+            rosterStale = ScanAdmission.isRosterStale(rosterAt),
         )
         is ScanOutcome.Failed -> base.copy(
             kind = ResultKind.Rejected,
@@ -177,7 +198,51 @@ fun ScanOutcome.toCard(key: String, context: ScanContext?, tz: String?, gateKey:
             message = if (notFound) "No registration for this event matches that code." else message,
             retryable = !notFound,
         )
+        is ScanOutcome.Rejected -> if (reason == RejectReason.AlreadyCheckedIn) base.copy(
+            kind = ResultKind.AlreadyScanned,
+            title = reason.title,
+            message = detail?.let { "First scanned at ${firstScanLabel(it, tz)}" },
+            rosterNote = ScanAdmission.rosterAgeLabel(rosterAt)?.let { "Offline · $it" },
+            rosterStale = ScanAdmission.isRosterStale(rosterAt),
+        ) else base.copy(
+            kind = ResultKind.Rejected,
+            title = reason.title,
+            message = listOfNotNull(
+                reason.message(participant?.name, detail),
+                "Scan removed.".takeIf { reverted },
+                "Still recorded on Attend: undo it from their page.".takeIf { stillRecorded },
+            ).joinToString(" "),
+            // Offline the roster might be out of date: let staff try again once they're back online.
+            retryable = offline,
+            rosterNote = if (offline) "Offline, not saved · " + (ScanAdmission.rosterAgeLabel(rosterAt) ?: "no roster") else null,
+            rosterStale = offline && ScanAdmission.isRosterStale(rosterAt),
+        )
     }
+}
+
+/** One sentence for the result card explaining a rejection. */
+fun RejectReason.message(name: String?, detail: String?): String {
+    val who = name ?: "This person"
+    return when (this) {
+        RejectReason.Withdrawn -> "$who has withdrawn from this event."
+        RejectReason.RegistrationRejected -> "$who's registration was rejected."
+        RejectReason.ConsentMissing -> "$who's waiver hasn't been signed. Sort it out before checking them in."
+        RejectReason.WrongEvent -> "Registered for ${detail ?: "another event"}, not this one."
+        RejectReason.AlreadyCheckedIn -> "$who has already been scanned here."
+        RejectReason.NotRegistered -> "No registration for this event matches that code."
+    }
+}
+
+/** The banner for a scan the server turned down, or null if [outcome] isn't one. */
+fun ScanOutcome.serverRejection(eventId: String, contextName: String?, scannedAt: String): ScanRejection? {
+    if (!isServerRejection) return null
+    val reason = when (this) {
+        is ScanOutcome.Rejected -> reason.short
+        is ScanOutcome.Failed -> if (notFound) RejectReason.NotRegistered.short else message
+        else -> return null
+    }
+    return ScanRejection(clientScanId, eventId, participant?.participantEventId, participant?.name ?: "Unknown attendee", reason, scannedAt, contextName,
+        stillRecorded = (this as? ScanOutcome.Rejected)?.stillRecorded == true)
 }
 
 /** "9:41 AM" today, else "Fri 9:41 AM". */
