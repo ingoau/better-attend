@@ -182,7 +182,6 @@ extension ScanContext {
 enum KioskLogic {
     /// How long a final result stays up before it hides itself (privacy).
     static let resultSeconds: Double = 3
-    static let pinLength = 4
     static let maxPinTries = 3
     static let lockoutSeconds: TimeInterval = 30
 
@@ -230,9 +229,9 @@ enum KioskLogic {
         SHA256.hash(data: Data("attend-kiosk:\(pin)".utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Keeps only digits, capped at the PIN length (paste-safe input filter).
+    /// Keeps only digits (paste-safe input filter). PINs can be any length.
     static func sanitizePin(_ text: String) -> String {
-        String(text.filter(\.isASCII).filter(\.isNumber).prefix(pinLength))
+        String(text.filter(\.isASCII).filter(\.isNumber))
     }
 }
 
@@ -242,11 +241,11 @@ struct KioskPinSetup: Hashable, Sendable {
     private(set) var error: String?
 
     var confirming: Bool { first != nil }
-    var prompt: String { error ?? (confirming ? "Enter the PIN again to confirm" : "Choose a 4-digit exit PIN") }
+    var prompt: String { error ?? (confirming ? "Enter the PIN again to confirm" : "Choose an exit PIN") }
 
-    /// Feed a complete 4-digit entry. Returns the PIN's hash once both entries match.
+    /// Feed a complete entry (any non-empty length). Returns the PIN's hash once both entries match.
     mutating func submit(_ pin: String) -> String? {
-        guard pin.count == KioskLogic.pinLength else { return nil }
+        guard !pin.isEmpty else { return nil }
         guard let first else {
             self.first = pin
             error = nil
@@ -304,6 +303,6 @@ struct KioskPinLock: Hashable, Sendable {
     func prompt(after last: Attempt?, now: Date = Date()) -> String {
         if isLocked(now: now) { return "Too many wrong tries. Try again in \(secondsLeft(now: now)) s." }
         if case .wrong(let left)? = last { return "Wrong PIN. \(left) \(left == 1 ? "try" : "tries") left." }
-        return "Staff: enter the 4-digit PIN."
+        return "Staff: enter the PIN."
     }
 }

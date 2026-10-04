@@ -10,7 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -35,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Backspace
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FlipCameraAndroid
 import androidx.compose.material.icons.outlined.Lock
@@ -142,8 +144,8 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
         BackHandler { nav.back() }
         var first by rememberSaveable { mutableStateOf("") }
         var confirm by rememberSaveable { mutableStateOf("") }
+        var confirming by rememberSaveable { mutableStateOf(false) }
         var error by rememberSaveable { mutableStateOf<String?>(null) }
-        val confirming = first.length == 4
         KioskSetupContent(
             eventName = event?.name ?: "",
             contextName = ctx?.name,
@@ -153,20 +155,17 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
             error = error,
             onDigit = { d ->
                 error = null
-                if (!confirming) {
-                    first += d
-                    haptics.tick()
-                } else {
-                    confirm += d
-                    if (confirm.length == 4) {
-                        if (confirm == first) { haptics.confirm(); pinHash = hashPin(first) }
-                        else { haptics.reject(); error = "PINs don't match. Try again."; first = ""; confirm = "" }
-                    } else haptics.tick()
-                }
+                haptics.tick()
+                if (confirming) confirm += d else first += d
             },
             onBackspace = {
                 haptics.tick()
-                if (confirming) { if (confirm.isEmpty()) first = first.dropLast(1) else confirm = confirm.dropLast(1) } else first = first.dropLast(1)
+                if (confirming) confirm = confirm.dropLast(1) else first = first.dropLast(1)
+            },
+            onSubmit = {
+                if (!confirming) { haptics.tick(); confirming = true }
+                else if (confirm == first) { haptics.confirm(); pinHash = hashPin(first) }
+                else { haptics.reject(); error = "PINs don't match. Try again."; first = ""; confirm = ""; confirming = false }
             },
             onCancel = nav::back,
         )
@@ -388,41 +387,50 @@ private fun KioskResult(card: ScanCard) {
 
 // ---------------------------------------------------------------- PIN
 
-/** Four dots and a big numeric keypad, shared by setup and exit. */
+/** One dot per digit entered (PINs can be any length) and a big numeric keypad, shared by setup and exit. */
 @Composable
-fun PinPad(entered: Int, error: Boolean, enabled: Boolean, onDigit: (Char) -> Unit, onBackspace: () -> Unit, modifier: Modifier = Modifier) {
+fun PinPad(entered: Int, error: Boolean, enabled: Boolean, onDigit: (Char) -> Unit, onBackspace: () -> Unit, onSubmit: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.semantics { contentDescription = "$entered of 4 digits entered" }) {
-            repeat(4) { i ->
-                val filled = i < entered
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.widthIn(max = 300.dp).heightIn(min = 18.dp).semantics { contentDescription = "$entered ${if (entered == 1) "digit" else "digits"} entered" },
+        ) {
+            val pop = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
+            repeat(entered) {
                 val dot by animateColorAsState(
-                    when {
-                        error -> MaterialTheme.status.danger
-                        filled -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
-                    },
+                    if (error) MaterialTheme.status.danger else MaterialTheme.colorScheme.primary,
                     MaterialTheme.motionScheme.fastEffectsSpec(),
                     label = "pinDot",
                 )
-                val scale by animateFloatAsState(if (filled || error) 1f else 0.8f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "pinDotScale")
-                Box(Modifier.size(18.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(CircleShape).background(dot))
+                val scale = remember { Animatable(0.6f) }
+                LaunchedEffect(Unit) { scale.animateTo(1f, pop) }
+                Box(Modifier.size(18.dp).graphicsLayer { scaleX = scale.value; scaleY = scale.value }.clip(CircleShape).background(dot))
             }
         }
         Spacer(Modifier.height(28.dp))
-        val rows = listOf("123", "456", "789", " 0<")
+        val rows = listOf("123", "456", "789", "<0>")
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                 row.forEach { key ->
                     when (key) {
-                        ' ' -> Spacer(Modifier.size(76.dp))
                         '<' -> Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) {
                             IconButton(onClick = onBackspace, enabled = enabled && entered > 0, modifier = Modifier.size(64.dp)) {
                                 Icon(Icons.AutoMirrored.Outlined.Backspace, "Delete digit")
                             }
                         }
+                        '>' -> Surface(
+                            onClick = onSubmit,
+                            enabled = enabled && entered > 0,
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(76.dp).alpha(if (enabled && entered > 0) 1f else 0.38f),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Check, "Done") }
+                        }
                         else -> Surface(
                             onClick = { onDigit(key) },
-                            enabled = enabled && entered < 4,
+                            enabled = enabled,
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             modifier = Modifier.size(76.dp),
@@ -446,6 +454,7 @@ fun KioskSetupContent(
     error: String?,
     onDigit: (Char) -> Unit,
     onBackspace: () -> Unit,
+    onSubmit: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -478,13 +487,13 @@ fun KioskSetupContent(
             }
             Spacer(Modifier.height(28.dp))
             Text(
-                error ?: if (confirming) "Enter the PIN again to confirm" else "Choose a 4-digit exit PIN",
+                error ?: if (confirming) "Enter the PIN again to confirm" else "Choose an exit PIN",
                 style = MaterialTheme.typography.titleMedium,
                 color = if (error != null) MaterialTheme.status.danger else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
             Spacer(Modifier.height(20.dp))
-            PinPad(entered, error != null, enabled = true, onDigit = onDigit, onBackspace = onBackspace)
+            PinPad(entered, error != null, enabled = true, onDigit = onDigit, onBackspace = onBackspace, onSubmit = onSubmit)
             Spacer(Modifier.weight(0.6f))
         }
     }
@@ -512,25 +521,22 @@ fun KioskExitDialog(check: (String) -> Boolean, onUnlocked: () -> Unit, onDismis
             error = error,
             wrongTries = wrong,
             lockoutSeconds = if (lockedUntil > now) secondsLeft.toInt() else 0,
-            onDigit = { d ->
-                error = false
-                pin += d
-                if (pin.length == 4) {
-                    if (check(pin)) { haptics.confirm(); onUnlocked() }
-                    else {
-                        haptics.reject(); onWrong(); error = true; wrong++; pin = ""
-                        if (wrong >= MAX_PIN_TRIES) lockedUntil = System.currentTimeMillis() + LOCKOUT_MS
-                    }
-                } else haptics.tick()
-            },
+            onDigit = { d -> error = false; haptics.tick(); pin += d },
             onBackspace = { haptics.tick(); pin = pin.dropLast(1) },
+            onSubmit = {
+                if (check(pin)) { haptics.confirm(); onUnlocked() }
+                else {
+                    haptics.reject(); onWrong(); error = true; wrong++; pin = ""
+                    if (wrong >= MAX_PIN_TRIES) lockedUntil = System.currentTimeMillis() + LOCKOUT_MS
+                }
+            },
             onCancel = onDismiss,
         )
     }
 }
 
 @Composable
-fun KioskExitContent(entered: Int, error: Boolean, wrongTries: Int, lockoutSeconds: Int, onDigit: (Char) -> Unit, onBackspace: () -> Unit, onCancel: () -> Unit) {
+fun KioskExitContent(entered: Int, error: Boolean, wrongTries: Int, lockoutSeconds: Int, onDigit: (Char) -> Unit, onBackspace: () -> Unit, onSubmit: () -> Unit, onCancel: () -> Unit) {
     Surface(shape = RoundedCornerShape(36.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.padding(16.dp).widthIn(max = 420.dp)) {
         Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.Lock, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
@@ -542,7 +548,7 @@ fun KioskExitContent(entered: Int, error: Boolean, wrongTries: Int, lockoutSecon
                 when {
                     locked -> "Too many wrong tries. Try again in $lockoutSeconds s."
                     error -> "Wrong PIN. ${MAX_PIN_TRIES - wrongTries} ${if (MAX_PIN_TRIES - wrongTries == 1) "try" else "tries"} left."
-                    else -> "Staff: enter the 4-digit PIN."
+                    else -> "Staff: enter the PIN."
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (locked || error) MaterialTheme.status.danger else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -550,7 +556,7 @@ fun KioskExitContent(entered: Int, error: Boolean, wrongTries: Int, lockoutSecon
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive },
             )
             Spacer(Modifier.height(20.dp))
-            PinPad(entered, error, enabled = !locked, onDigit = onDigit, onBackspace = onBackspace)
+            PinPad(entered, error, enabled = !locked, onDigit = onDigit, onBackspace = onBackspace, onSubmit = onSubmit)
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = onCancel, shapes = ButtonDefaults.shapes()) { Text("Keep kiosk running") }
         }

@@ -275,26 +275,28 @@ extension Fixtures {
         #expect(!h.contains("1234"))
     }
 
-    @Test func pinInputIsDigitsOnlyAndCapped() {
-        #expect(KioskLogic.sanitizePin("12a3-45") == "1234")
+    @Test func pinInputIsDigitsOnlyAndUncapped() {
+        #expect(KioskLogic.sanitizePin("12a3-45") == "12345")
+        #expect(KioskLogic.sanitizePin("1234567890123") == "1234567890123")
         #expect(KioskLogic.sanitizePin("٣٤") == "")
         #expect(KioskLogic.sanitizePin("") == "")
     }
 
     @Test func setupNeedsTwoMatchingEntries() {
         var setup = KioskPinSetup()
-        #expect(setup.prompt == "Choose a 4-digit exit PIN")
-        #expect(setup.submit("12") == nil)
+        #expect(setup.prompt == "Choose an exit PIN")
+        #expect(setup.submit("") == nil)
         #expect(!setup.confirming)
-        #expect(setup.submit("1234") == nil)
+        #expect(setup.submit("123456") == nil)
         #expect(setup.confirming)
         #expect(setup.prompt == "Enter the PIN again to confirm")
-        #expect(setup.submit("4321") == nil)
+        // A prefix of the first entry isn't a match.
+        #expect(setup.submit("12345") == nil)
         #expect(!setup.confirming)
         #expect(setup.prompt == "PINs don't match. Try again.")
-        #expect(setup.submit("2468") == nil)
+        #expect(setup.submit("24") == nil)
         #expect(setup.error == nil)
-        #expect(setup.submit("2468") == KioskLogic.hashPin("2468"))
+        #expect(setup.submit("24") == KioskLogic.hashPin("24"))
     }
 
     @Test func setupCanStartOver() {
@@ -307,7 +309,13 @@ extension Fixtures {
     @Test func lockUnlocksWithTheRightPin() {
         var lock = KioskPinLock(hash: KioskLogic.hashPin("1234"))
         #expect(lock.attempt("1234", now: Fixtures.now) == .unlocked)
-        #expect(lock.prompt(after: nil, now: Fixtures.now) == "Staff: enter the 4-digit PIN.")
+        #expect(lock.prompt(after: nil, now: Fixtures.now) == "Staff: enter the PIN.")
+    }
+
+    @Test func longPinsWork() {
+        var lock = KioskPinLock(hash: KioskLogic.hashPin("314159265358"))
+        #expect(lock.attempt("31415926535", now: Fixtures.now) == .wrong(triesLeft: 2))
+        #expect(lock.attempt("314159265358", now: Fixtures.now) == .unlocked)
     }
 
     @Test func threeWrongTriesLockForThirtySeconds() {
