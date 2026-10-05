@@ -117,6 +117,15 @@ struct SettingsView: View {
                     SettingsIcon(systemImage: "calendar", color: HackClub.red)
                 }
             }
+            // GET /staff is admin-only, so the row is hidden for everyone else.
+            if let event, EventPermissions.canManageStaff(event) {
+                NavigationLink {
+                    EventStaffView(eventId: event.id)
+                } label: {
+                    SettingsLabel("Event Staff", subtitle: "Who works on this event, and their roles",
+                                  systemImage: "person.3.fill", color: HackClub.purple)
+                }
+            }
         } header: {
             Text("Current Event")
         } footer: {

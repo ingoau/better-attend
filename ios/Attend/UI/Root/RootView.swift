@@ -120,5 +120,6 @@ struct TabRoot: View {
                 }
             }
         }
+        .toast(Binding(get: { router.tab == tab ? router.toast : nil }, set: { router.toast = $0 }))
     }
 }
