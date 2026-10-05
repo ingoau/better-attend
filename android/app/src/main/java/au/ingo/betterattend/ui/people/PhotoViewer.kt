@@ -83,10 +83,10 @@ fun PhotoViewerContent(name: String, onDismiss: () -> Unit, image: @Composable (
             modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp),
         ) { Icon(Icons.Outlined.Close, "Close") }
         Text(
-                name,
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp),
-            )
-        }
+            name,
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp),
+        )
+    }
 }

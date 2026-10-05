@@ -420,4 +420,19 @@ extension Fixtures {
         #expect(ContactLinks.slack("U123\n")?.absoluteString == "slack://user?team=T0266FRGM&id=U123")
         #expect(ContactLinks.slack("  ") == nil)
     }
+
+    @Test func contactSheetOptions() {
+        let p = Participant(participantId: "p1", participantEventId: "pe1", email: "maya@example.com", phone: "+61 400 000 002", slackUserId: "U02")
+        let all = ContactLinks.options(for: p, canViewPii: true, hasWhatsApp: true)
+        #expect(all.map(\.title) == ["Call", "Message", "WhatsApp", "FaceTime", "Mail", "Slack"])
+        #expect(all.last?.url.absoluteString == "slack://user?team=T0266FRGM&id=U02")
+        #expect(all.last?.fallback?.absoluteString == "https://hackclub.slack.com/team/U02")
+
+        // No PII permission: the phone is hidden, but email and Slack are already on screen.
+        #expect(ContactLinks.options(for: p, canViewPii: false, hasWhatsApp: true).map(\.title) == ["Mail", "Slack"])
+        #expect(!ContactLinks.options(for: p, canViewPii: true, hasWhatsApp: false).contains { $0.title == "WhatsApp" })
+
+        let unreachable = Participant(participantId: "p2", participantEventId: "pe2", email: " ", slackUserId: "")
+        #expect(ContactLinks.options(for: unreachable, canViewPii: true, hasWhatsApp: true).isEmpty)
+    }
 }

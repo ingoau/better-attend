@@ -616,5 +616,38 @@ enum ContactLinks {
         return nonEmpty(userId.trimmingCharacters(in: .whitespacesAndNewlines).addingPercentEncoding(withAllowedCharacters: allowed) ?? "")
     }
 
+    /// Every way to reach `p` that this viewer may use, for the Contact sheet. Phone actions need the
+    /// PII permission; email and Slack are already on screen for anyone who can open the page.
+    static func options(for p: Participant, canViewPii: Bool, hasWhatsApp: Bool) -> [ContactOption] {
+        var out: [ContactOption] = []
+        if canViewPii, let phone = p.phone?.nonBlank {
+            if let url = call(phone) { out.append(ContactOption(title: "Call", detail: phone, systemImage: "phone.fill", url: url)) }
+            if let url = sms(phone) { out.append(ContactOption(title: "Message", detail: phone, systemImage: "message.fill", url: url)) }
+            if hasWhatsApp, let url = whatsApp(phone) {
+                out.append(ContactOption(title: "WhatsApp", detail: phone, systemImage: "bubble.left.and.bubble.right.fill", url: url))
+            }
+            if let url = faceTime(phone) { out.append(ContactOption(title: "FaceTime", detail: phone, systemImage: "video.fill", url: url)) }
+        }
+        // Not `email`: that would shadow `email(_:)`.
+        if let address = p.email?.nonBlank, let url = email(address) {
+            out.append(ContactOption(title: "Mail", detail: address, systemImage: "envelope.fill", url: url))
+        }
+        if let id = p.slackUserId?.nonBlank, let url = slack(id) {
+            out.append(ContactOption(title: "Slack", detail: "Direct message · \(id)", systemImage: "number", url: url, fallback: slackWeb(id)))
+        }
+        return out
+    }
+
     private static func nonEmpty(_ s: String) -> String? { s.isEmpty || s == "+" ? nil : s }
+}
+
+/// One way to reach someone: "Call" · "+61 400 000 002".
+struct ContactOption: Hashable, Sendable, Identifiable {
+    var id: String { title }
+    let title: String
+    let detail: String
+    let systemImage: String
+    let url: URL
+    /// Opens if nothing handles `url` (Slack not installed → its web profile).
+    var fallback: URL? = nil
 }
