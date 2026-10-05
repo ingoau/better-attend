@@ -39,6 +39,14 @@ class DashboardScreenshots : ScreenshotTest() {
 
     @Test fun live() = snap("dashboard_live") { Content(live) }
 
+    /** Home with the roll call and first-aid entry points (shown to roles that can see participants). */
+    @Test fun safetyTools() = snap("dashboard_safety_tools") {
+        DashboardContent(
+            state = live, onRefresh = {}, onPickEvent = {}, onAccount = {}, onSwitchTab = {},
+            onOpenParticipant = {}, onAnnounce = {}, onKiosk = {}, now = now, onRollCall = {}, onFirstAid = {},
+        )
+    }
+
     @Test @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
     fun liveFull() = snap("dashboard_live_full") { Content(live) }
 
