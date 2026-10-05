@@ -36,7 +36,7 @@ struct DemoData: Sendable {
                   timezone: Self.timezone, locationCity: "Sydney", role: "event_admin", canViewParticipantPii: true,
                   canViewParticipants: true, canViewSensitiveData: true, travelEnabled: true),
             Event(id: Self.upcomingEventId, name: "Scrapyard Melbourne", slug: "scrapyard-melbourne", startsAt: iso(60 * 24 * 12),
-                  endsAt: iso(60 * 24 * 12 + 60 * 34), timezone: "Australia/Melbourne", locationCity: "Melbourne", role: "ops",
+                  endsAt: iso(60 * 24 * 12 + 60 * 34), timezone: "Australia/Melbourne", locationCity: "Melbourne", role: "event_admin",
                   canViewParticipantPii: true, canViewParticipants: true),
             Event(id: Self.pastEventId, name: "Counterspell Brisbane", slug: "counterspell-brisbane", startsAt: iso(-60 * 24 * 40),
                   endsAt: iso(-60 * 24 * 39), timezone: "Australia/Brisbane", locationCity: "Brisbane", role: "read_only",
@@ -223,7 +223,7 @@ struct DemoData: Sendable {
         )
     }
 
-    /// The sensitive fields the list endpoint includes for safeguarding leads and admins, so the
+    /// The sensitive fields the list endpoint includes for safeguarding leads and global admins, so the
     /// first-aid sheet has realistic medical needs and contacts to show. Safety flags (and so the
     /// "Need attention" count) are left as they are.
     static func withFirstAidDetails(_ p: Participant, index i: Int) -> Participant {

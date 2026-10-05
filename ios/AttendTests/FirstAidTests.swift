@@ -154,6 +154,8 @@ private let people: [Participant] = {
         let html = FirstAidLogic.html(eventName: "Campfire", entries: entries, canViewSensitive: false, scope: .hereNow,
                                       tz: nil, rosterAt: nil, now: Fixtures.now)
         #expect(html.contains(FirstAidLogic.restrictedNotice))
+        // Upstream sends medical details only to safeguarding leads and global admins.
+        #expect(FirstAidLogic.restrictedNotice == "Medical details are visible to safeguarding leads and global admins.")
         #expect(html.contains("People here now"))
         #expect(!html.contains("Insulin"))
         #expect(!html.contains("Peanuts"))

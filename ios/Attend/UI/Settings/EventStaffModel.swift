@@ -26,6 +26,12 @@ final class EventStaffModel {
 
     func roleLabel(_ role: String) -> String { StaffLogic.roleLabel(role, roles: roles) }
 
+    /// Roles the person with this email already holds here (other than in `excluding`), which can't
+    /// be picked for them again.
+    func rolesHeld(byEmail email: String, excluding assignmentId: String? = nil) -> Set<String> {
+        StaffLogic.rolesHeld(byEmail: email, in: staff ?? [], excluding: assignmentId)
+    }
+
     // MARK: Loading
 
     func load(_ app: AppModel) async {
@@ -51,6 +57,7 @@ final class EventStaffModel {
     /// Adds someone by email. Returns why it failed (for the sheet to show inline), or nil.
     func add(_ app: AppModel, email: String, role: String) async -> String? {
         guard app.isOnline else { return Self.offline }
+        if rolesHeld(byEmail: email).contains(role) { return "They're already \(roleLabel(role)) on this event." }
         do {
             let res = try await app.api.addStaff(eventId: eventId, email: email.trimmingCharacters(in: .whitespacesAndNewlines), role: role)
             let member = res.staffMember
@@ -70,13 +77,16 @@ final class EventStaffModel {
     /// Changes someone's role. Returns why it failed, or nil.
     func changeRole(_ app: AppModel, member: StaffMember, role: String) async -> String? {
         guard app.isOnline else { return Self.offline }
+        if rolesHeld(byEmail: member.user.email, excluding: member.id).contains(role) {
+            return "They're already \(roleLabel(role)) on this event."
+        }
         do {
             let updated = try await app.api.updateStaffRole(eventId: eventId, assignmentId: member.id, role: role)
             staff = (staff ?? []).map { $0.id == updated.id ? updated : $0 }
             Haptics.confirm()
             toast = Toast(message: "\(updated.user.displayName) is now \(StaffLogic.roleLabel(updated, roles: roles))",
                           systemImage: "person.crop.circle.badge.checkmark")
-            if StaffLogic.isSelf(member, user: app.user) { await refreshOwnAccess(app) }
+            if StaffLogic.isSelf(member, user: app.user) { await updateOwnAccess(app) }
             return nil
         } catch {
             guard !error.isCancellation else { return "Not changed." }
@@ -100,13 +110,19 @@ final class EventStaffModel {
         staff?.removeAll { $0.id == member.id }
         Haptics.confirm()
         toast = Toast(message: "Removed \(member.user.displayName)", systemImage: "person.fill.xmark", tone: .neutral)
-        if StaffLogic.isSelf(member, user: app.user) { await refreshOwnAccess(app) }
+        if StaffLogic.isSelf(member, user: app.user) { await updateOwnAccess(app) }
         return nil
     }
 
-    /// After changing your own assignment, reload events so the app's idea of your role (and with it
-    /// what this screen and the rest of the app offer) catches up.
-    private func refreshOwnAccess(_ app: AppModel) async {
-        _ = try? await app.events.refresh()
+    /// After changing your own assignment, the app's idea of your role (and with it what this screen
+    /// and the rest of the app offer) changes straight away, worked out from your remaining rows;
+    /// the event list then reloads in the background to confirm it.
+    private func updateOwnAccess(_ app: AppModel) async {
+        let events = app.events
+        if let event = events.events?.first(where: { $0.id == eventId }),
+           let updated = StaffLogic.ownAccess(after: staff ?? [], user: app.user, event: event) {
+            await events.replace(updated)
+        }
+        Task { _ = try? await events.refresh() }
     }
 }

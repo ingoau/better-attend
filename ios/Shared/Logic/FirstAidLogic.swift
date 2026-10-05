@@ -155,7 +155,7 @@ enum FirstAidLogic {
     // MARK: HTML
 
     static let sensitiveFooter = "Contains sensitive medical information. Handle and dispose of securely."
-    static let restrictedNotice = "Medical details are visible to safeguarding leads and admins."
+    static let restrictedNotice = "Medical details are visible to safeguarding leads and global admins."
 
     /// Escapes text for HTML element content and attribute values.
     static func escape(_ s: String) -> String {

@@ -58,6 +58,35 @@ struct RollCallTick: Codable, Hashable, Sendable {
     var at: String
 }
 
+/// What the roll call knows about the scan behind someone's tick, when ticks are recorded as scans.
+/// The rule is "own the scan or leave it alone": unticking only ever takes back a scan the roll call
+/// is sure it made, because Attend's undo deletes every scan the person has at the scan point.
+enum RollCallScanState: String, Codable, Hashable, Sendable {
+    /// Ticked; the scan is on its way (or the app closed before Attend answered, so it's uncertain).
+    case sending
+    /// Waiting in the offline queue (`clientScanId`): nothing has reached Attend yet.
+    case queued
+    /// Attend confirmed the roll call made their first scan at the scan point (`clientScanId`).
+    case recorded
+    /// They already had a scan there before the roll call ticked them: it's never taken back.
+    case preExisting
+    /// Unticked, but the scan at the scan point stays: it couldn't safely be taken back.
+    case kept
+    /// Recording the tick as a scan failed or was refused, so nothing was recorded.
+    case notRecorded
+}
+
+/// One person's scan bookkeeping (see `RollCallScanState`).
+struct RollCallScanRecord: Codable, Hashable, Sendable {
+    var participantEventId: String
+    var state: RollCallScanState
+    var clientScanId: String?
+    /// The roster already showed a scan at the scan point when they were ticked.
+    @Default<False> var hadEarlierScan: Bool = false
+    /// Queued because Attend took too long to answer: the request may have landed anyway.
+    @Default<False> var timedOut: Bool = false
+}
+
 /// A roll call in progress for one event. Persisted in the encrypted cache so it survives restarts.
 /// Ids are kept in arrays (not dictionaries) so the snake_case cache coders never touch them.
 struct RollCallSession: Codable, Hashable, Sendable {
@@ -71,11 +100,9 @@ struct RollCallSession: Codable, Hashable, Sendable {
     /// People who weren't on the expected list but were found ("Add someone"), in the order added.
     var addedIds: [String] = []
     var ticks: [RollCallTick] = []
-    /// People whose scan at `scanPoint` this roll call created (or queued), so unticking only ever
-    /// takes back a scan we made, never one they already had there.
-    var recordedIds: [String] = []
-    /// Unticked while offline: the scan we made is still recorded at the scan point.
-    var stillRecordedIds: [String] = []
+    /// What happened to each tick's scan at `scanPoint`, so unticking only ever takes back a scan
+    /// this roll call made, never one they already had there.
+    @Default<Empty<RollCallScanRecord>> var scans: [RollCallScanRecord] = []
 
     var isRecordingScans: Bool { scanPoint != nil }
 
@@ -115,19 +142,55 @@ struct RollCallSession: Codable, Hashable, Sendable {
         set(id, accounted: true, at: at)
     }
 
-    mutating func noteRecorded(_ id: String) {
-        if !recordedIds.contains(id) { recordedIds.append(id) }
-        stillRecordedIds.removeAll { $0 == id }
+    // MARK: Scan bookkeeping
+
+    func scanRecord(_ id: String) -> RollCallScanRecord? { scans.first { $0.participantEventId == id } }
+
+    func scanState(_ id: String) -> RollCallScanState? { scanRecord(id)?.state }
+
+    /// Records what happened to someone's scan; nil forgets it (nothing of ours is at the scan point).
+    mutating func noteScan(_ id: String, _ state: RollCallScanState?, clientScanId: String? = nil, timedOut: Bool = false) {
+        guard let state else {
+            scans.removeAll { $0.participantEventId == id }
+            return
+        }
+        if let i = scans.firstIndex(where: { $0.participantEventId == id }) {
+            scans[i].state = state
+            scans[i].clientScanId = clientScanId
+            scans[i].timedOut = timedOut
+        } else {
+            scans.append(RollCallScanRecord(participantEventId: id, state: state, clientScanId: clientScanId, timedOut: timedOut))
+        }
     }
 
-    mutating func noteUndone(_ id: String) {
-        recordedIds.removeAll { $0 == id }
-        stillRecordedIds.removeAll { $0 == id }
+    /// Bookkeeping at the moment someone is ticked (the scan itself follows in the background).
+    /// - Parameter hadEarlierScan: the cached roster already shows them scanned at the scan point.
+    mutating func noteTicked(_ id: String, hadEarlierScan: Bool) {
+        switch scanState(id) {
+        case nil, .notRecorded:
+            scans.removeAll { $0.participantEventId == id }
+            scans.append(RollCallScanRecord(participantEventId: id, state: .sending, hadEarlierScan: hadEarlierScan))
+        case .kept, .preExisting:
+            // A scan is already standing there, and it isn't one the roll call can vouch for.
+            noteScan(id, .preExisting)
+        case .sending, .queued, .recorded:
+            // Unticked a moment ago and that untick hasn't run yet: it sorts this out when it does.
+            break
+        }
     }
 
-    mutating func noteStillRecorded(_ id: String) {
-        if !stillRecordedIds.contains(id) { stillRecordedIds.append(id) }
+    /// Bookkeeping at the moment someone is unticked. A failed recording has nothing to take back.
+    mutating func noteUnticked(_ id: String) {
+        if scanState(id) == .notRecorded { noteScan(id, nil) }
     }
+}
+
+/// Something the roll call's background work wants to tell whoever is looking (a toast).
+struct RollCallNotice: Hashable, Sendable, Identifiable {
+    var id = UUID()
+    var eventId: String
+    var message: String
+    var isError = false
 }
 
 /// A row on the roll call list.
@@ -137,8 +200,11 @@ struct RollCallEntry: Hashable, Sendable, Identifiable {
     var accountedAt: String?
     /// Not on the expected list: added during the roll call.
     var added: Bool
-    /// Unticked offline after their scan was recorded: it still stands at the scan point.
+    /// Unticked, but a scan of theirs still stands at the scan point (one they already had, or one
+    /// the roll call couldn't safely take back).
     var stillRecorded: Bool = false
+    /// Ticked, but recording it as a scan failed or was refused.
+    var notRecorded: Bool = false
     /// False when they've dropped out of the cached roster since the roll call started.
     var known: Bool = true
     var id: String { participant.participantEventId }
@@ -181,6 +247,8 @@ struct RollCallCounts: Hashable, Sendable {
     var accounted = 0
     /// Added during the roll call (included in `total` and `accounted`).
     var added = 0
+    /// Ticked, but the scan wasn't recorded (included in `accounted`).
+    var notRecorded = 0
 
     var missing: Int { max(0, total - accounted) }
     var progress: Double { total == 0 ? 0 : Double(accounted) / Double(total) }
@@ -213,16 +281,22 @@ enum RollCallLogic {
     static func entries(_ session: RollCallSession, roster: [Participant]) -> [RollCallEntry] {
         let byId = Dictionary(roster.map { ($0.participantEventId, $0) }, uniquingKeysWith: { _, b in b })
         let ticks = Dictionary(session.ticks.map { ($0.participantEventId, $0.at) }, uniquingKeysWith: { a, _ in a })
-        let still = Set(session.stillRecordedIds)
+        let states = Dictionary(session.scans.map { ($0.participantEventId, $0.state) }, uniquingKeysWith: { a, _ in a })
         let expected = Set(session.expectedIds)
         return session.listIds.map { id in
-            RollCallEntry(participant: byId[id] ?? placeholder(id), accounted: ticks[id] != nil, accountedAt: ticks[id],
-                          added: !expected.contains(id), stillRecorded: still.contains(id), known: byId[id] != nil)
+            let accounted = ticks[id] != nil
+            let state = session.scanPoint == nil ? nil : states[id]
+            return RollCallEntry(participant: byId[id] ?? placeholder(id), accounted: accounted, accountedAt: ticks[id],
+                                 added: !expected.contains(id),
+                                 stillRecorded: !accounted && (state == .kept || state == .preExisting),
+                                 notRecorded: accounted && state == .notRecorded,
+                                 known: byId[id] != nil)
         }
     }
 
     static func counts(_ entries: [RollCallEntry]) -> RollCallCounts {
-        RollCallCounts(total: entries.count, accounted: entries.count(where: \.accounted), added: entries.count(where: \.added))
+        RollCallCounts(total: entries.count, accounted: entries.count(where: \.accounted), added: entries.count(where: \.added),
+                       notRecorded: entries.count(where: \.notRecorded))
     }
 
     /// Search by name, email, pronouns or ticket code (same rules as the People list).
@@ -270,4 +344,55 @@ enum RollCallLogic {
 
     /// The cache key for an event's roll call.
     static func cacheKey(_ eventId: String) -> String { "rollcall_\(eventId)" }
+
+    /// The participant has at least one scan at the scan point (per their record).
+    static func hasScan(_ p: Participant?, at scanPointId: String) -> Bool {
+        p?.scansByContext.contains { $0.scanContextId == scanPointId && $0.scanCount > 0 } ?? false
+    }
+
+    /// How many scans the participant has at the scan point (per their record).
+    static func scanCount(_ p: Participant, at scanPointId: String) -> Int {
+        p.scansByContext.first { $0.scanContextId == scanPointId }?.scanCount ?? 0
+    }
+
+    /// The setup screen's footer once a scan point is picked.
+    static func recordingFooter(_ scanPointName: String) -> String {
+        "Each tick is recorded as a scan at \(scanPointName), and waits to sync if you're offline. "
+            + "Unticking takes back a scan only when the roll call made the only scan there; earlier scans are never removed."
+    }
+}
+
+/// What the roll call tells staff when a tick's scan couldn't be recorded or taken back.
+enum RollCallText {
+    static func notRecorded(_ name: String, at point: String, reason: String) -> String {
+        "\(name) is ticked, but no scan was recorded at \(point): \(reason)"
+    }
+
+    static func keptOffline(_ name: String, at point: String) -> String {
+        "You're offline, so \(name)'s scan at \(point) stays recorded."
+    }
+
+    static func keptUnchecked(_ name: String, at point: String, reason: String) -> String {
+        "Couldn't check \(name)'s scans at \(point), so the scan stays: \(reason)"
+    }
+
+    static func keptOthers(_ name: String, at point: String) -> String {
+        "\(name) has other scans at \(point), so the roll call's scan stays."
+    }
+
+    static func keptSynced(_ name: String, at point: String) -> String {
+        "\(name)'s scan at \(point) had already synced, so it stays recorded."
+    }
+
+    static func keptUncertain(_ name: String, at point: String) -> String {
+        "\(name)'s scan at \(point) may have reached Attend, so it stays recorded."
+    }
+
+    static func keptTimedOut(_ name: String, at point: String) -> String {
+        "\(name)'s scan at \(point) may have reached Attend before it timed out, so any scan there stays."
+    }
+
+    static func keptUndoFailed(_ name: String, at point: String, reason: String) -> String {
+        "Couldn't take back \(name)'s scan at \(point), so it stays: \(reason)"
+    }
 }

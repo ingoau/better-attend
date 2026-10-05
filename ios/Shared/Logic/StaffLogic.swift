@@ -72,13 +72,49 @@ enum StaffLogic {
     }
 
     /// True when changing your own row to `newRole` (nil = removing it) would take away your access to
-    /// managing staff. Global admins and series members keep it through their other role.
-    static func losesStaffAccess(_ member: StaffMember, newRole: String?, user: User?, event: Event?) -> Bool {
+    /// managing staff: it's your event admin row, and you have no other event admin or series row
+    /// here. Global admins and series members keep it through their other role.
+    static func losesStaffAccess(_ member: StaffMember, newRole: String?, user: User?, event: Event?, staff: [StaffMember]) -> Bool {
         guard isSelf(member, user: user) else { return false }
         if user?.globalAdmin == true || member.user.globalAdmin { return false }
         if ["global_admin", "series_member"].contains(event?.role ?? "") { return false }
-        guard let newRole else { return true }
-        return newRole != "event_admin"
+        guard member.role == "event_admin", newRole != "event_admin" else { return false }
+        let keepsAnother = staff.contains { $0.id != member.id && isSelf($0, user: user) && ($0.role == "event_admin" || $0.inheritedFromSeries) }
+        return !keepsAnother
+    }
+
+    /// Roles the person with `email` already holds on this event, in rows other than `excluding`.
+    /// Attend allows one assignment per role per person, so these can't be picked for them again.
+    static func rolesHeld(byEmail email: String, in staff: [StaffMember], excluding assignmentId: String? = nil) -> Set<String> {
+        let wanted = normalizedEmail(email)
+        guard !wanted.isEmpty else { return [] }
+        return Set(staff.filter { $0.id != assignmentId && normalizedEmail($0.user.email) == wanted }.map(\.role))
+    }
+
+    /// "Already Ops": why a role can't be picked for someone.
+    static func alreadyHolds(_ role: String, roles: [StaffRole]) -> String { "Already \(roleLabel(role, roles: roles))" }
+
+    private static func normalizedEmail(_ email: String) -> String { email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
+    /// Upstream's order when someone holds several roles on one event (EventsController::ROLE_PRECEDENCE).
+    static let rolePrecedence = ["event_admin", "safeguarding_lead", "ops", "limited", "read_only"]
+    private static let participantAPIRoles: Set = ["event_admin", "ops", "limited", "safeguarding_lead"]
+
+    /// The signed-in user's standing on `event` worked out from their rows left in `staff`, the way
+    /// Attend's event list reports it (role by precedence, plus the capability flags), so the app can
+    /// act on a change to their own row straight away. No role and no access when none are left.
+    /// nil when their own rows don't decide it (global admins and series members keep theirs).
+    static func ownAccess(after staff: [StaffMember], user: User?, event: Event) -> Event? {
+        guard let user, !user.globalAdmin, !["global_admin", "series_member"].contains(event.role ?? "") else { return nil }
+        let mine = staff.filter { isSelf($0, user: user) }
+        if mine.contains(where: \.inheritedFromSeries) { return nil }
+        let held = Set(mine.map(\.role))
+        var e = event
+        e.role = rolePrecedence.first { held.contains($0) } ?? held.sorted().first
+        e.canViewParticipants = !held.isDisjoint(with: participantAPIRoles)
+        e.canViewParticipantPii = held.contains { $0 != "limited" }
+        e.canViewSensitiveData = held.contains("safeguarding_lead")
+        return e
     }
 
     /// Whether a staff email entry is plausible enough to send.

@@ -89,6 +89,22 @@ private func person(_ n: Int, status: String = "complete", waiver: Bool = true, 
         #expect(check(ScanInput(participantId: "ccccccc0-0000-4000-8000-000000000000")) == .block(.notRegistered, nil))
     }
 
+    @Test func deliberateCheckInsSkipOnlyTheAdmissionRules() {
+        // A check-in from someone's page or a roll call tick: as online, only what Attend itself would
+        // refuse, or a duplicate, stops it offline.
+        func deliberate(_ input: ScanInput) -> Precheck {
+            ScanAdmission.precheck(input, roster: roster, contextId: "desk", checksIn: true,
+                                   otherRosters: ["Campfire Melbourne": otherEvent], enforceAdmission: false)
+        }
+        #expect(deliberate(qr(withdrawn)) == .pass(withdrawn))
+        #expect(deliberate(qr(rejected)) == .pass(rejected))
+        #expect(deliberate(qr(noWaiver)) == .pass(noWaiver))
+        #expect(deliberate(qr(inAlready)) == .block(.alreadyCheckedIn, inAlready, detail: "2026-10-04T00:10:00Z"))
+        #expect(deliberate(ScanInput(participantId: "ccccccc0-0000-4000-8000-000000000000")) == .block(.notRegistered, nil))
+        let other = otherEvent.participants[0]
+        #expect(deliberate(qr(other)) == .block(.wrongEvent, other, detail: "Campfire Melbourne"))
+    }
+
     @Test func cantProveAbsenceWithoutAFullRosterOrForBadges() {
         let stranger = ScanInput(participantId: "ccccccc0-0000-4000-8000-000000000000")
         #expect(check(stranger, roster: .some(nil)) == .pass(nil))
@@ -376,6 +392,37 @@ final class Locked<T>: @unchecked Sendable {
                                           scanContextId: "desk", scanContextName: "Desk", enforceAdmission: false)
         guard case .scanned = outcome else { Issue.record("expected scanned, got \(outcome)"); return }
         #expect(!ScanStubProtocol.recorded().contains { $0.line.hasPrefix("DELETE") })
+    }
+
+    @Test func offlineCheckInFromTheirPageIsQueuedAndNotRevertedOnSync() async {
+        var unsigned = mia
+        unsigned.waiverSigned = false
+        await seedRoster([unsigned])
+        let input = ScanInput(participantId: mia.participantEventId, source: "manual")
+        guard case let .queued(_, pending, _, _, _) = await repo(api: offlineAPI).submit(
+            eventId: "e1", input: input, scanContextId: "desk", scanContextName: "Desk", enforceAdmission: false) else {
+            Issue.record("expected queued"); return
+        }
+        #expect(!pending.enforceAdmission)
+        let body = scanned(unsigned)
+        ScanStubProtocol.scan = { .init(body: body) }
+        let scans = repo()
+        #expect(await scans.flush() == 0)
+        #expect(scans.rejections.isEmpty)
+        #expect(!ScanStubProtocol.recorded().contains { $0.line.hasPrefix("DELETE") })
+    }
+
+    @Test func discardSaysWhetherTheScanWasStillQueued() async {
+        await seedRoster([mia])
+        let scans = repo(api: offlineAPI)
+        guard case let .queued(id, _, _, _, _) = await scans.submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk") else {
+            Issue.record("expected queued"); return
+        }
+        let first = await scans.discardPending(id)
+        let second = await scans.discardPending(id)
+        #expect(first)
+        #expect(!second, "already gone")
+        #expect(scans.pending.isEmpty)
     }
 
     @Test func verdictUsesTheServersRecordNeverTheCache() async {

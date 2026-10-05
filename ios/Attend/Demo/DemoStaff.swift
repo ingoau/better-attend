@@ -16,6 +16,13 @@ extension DemoData {
         staffRoles.first { $0.role == role }?.label ?? role
     }
 
+    /// The upcoming event's team so far: just the organizer, as its event admin.
+    static func upcomingStaff(user: User, now: Date = Date()) -> [StaffMember] {
+        [StaffMember(id: "5e0b0000-1c2d-4e3f-8a9b-0c1d2e3f4a5b", role: "event_admin", roleLabel: staffRoleLabel("event_admin"),
+                     createdAt: Time.iso(now.addingTimeInterval(-20 * 86_400)),
+                     user: StaffUser(id: user.id, email: user.email, name: user.name, globalAdmin: user.globalAdmin))]
+    }
+
     static func demoStaff(user: User, now: Date = Date()) -> [StaffMember] {
         func member(_ n: Int, _ role: String, _ name: String, _ email: String, globalAdmin: Bool = false,
                     seriesRole: String? = nil, days: Double) -> StaffMember {

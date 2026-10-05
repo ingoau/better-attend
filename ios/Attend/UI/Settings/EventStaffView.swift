@@ -50,7 +50,7 @@ struct EventStaffView: View {
                 Button("Remove", role: .destructive) { remove(member) }
                 Button("Cancel", role: .cancel) {}
             } message: { member in
-                Text(StaffText.removeMessage(member, user: app.user, event: event))
+                Text(StaffText.removeMessage(member, user: app.user, event: event, staff: model.staff ?? []))
             }
             .task(id: canManage) {
                 if canManage { await model.load(app) }
@@ -150,10 +150,13 @@ struct EventStaffView: View {
 /// Confirmation copy shared by the list's swipe action and the member sheet.
 @MainActor
 enum StaffText {
-    static func removeMessage(_ member: StaffMember, user: User?, event: Event?) -> String {
+    static func removeMessage(_ member: StaffMember, user: User?, event: Event?, staff: [StaffMember]) -> String {
         let eventName = event?.name ?? "this event"
-        if StaffLogic.losesStaffAccess(member, newRole: nil, user: user, event: event) {
+        if StaffLogic.losesStaffAccess(member, newRole: nil, user: user, event: event, staff: staff) {
             return "This is you. You'll lose access to managing staff for \(eventName), and to the event itself unless you have another role."
+        }
+        if StaffLogic.isSelf(member, user: user) {
+            return "This is you. You keep access to \(eventName) through your other roles."
         }
         return "They'll lose access to \(eventName) straight away. You can add them again later."
     }
@@ -221,13 +224,16 @@ private struct StaffRow: View {
 
 // MARK: - Role options
 
-/// The server's role catalogue as a checkmark list, each with its summary.
+/// The server's role catalogue as a checkmark list, each with its summary. Roles in `unavailable`
+/// (ones the person already holds in another row) are shown but can't be picked.
 private struct RoleOptions: View {
     let roles: [StaffRole]
     @Binding var selection: String?
+    var unavailable: Set<String> = []
 
     var body: some View {
         ForEach(roles) { r in
+            let held = unavailable.contains(r.role)
             Button {
                 Haptics.selection()
                 selection = r.role
@@ -235,8 +241,12 @@ private struct RoleOptions: View {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(r.label)
-                            .foregroundStyle(.primary)
-                        if let summary = r.summary?.nonBlank {
+                            .foregroundStyle(held ? Color.secondary : Color.primary)
+                        if held {
+                            Text(StaffLogic.alreadyHolds(r.role, roles: roles))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        } else if let summary = r.summary?.nonBlank {
                             Text(summary)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -253,6 +263,7 @@ private struct RoleOptions: View {
                 .contentShape(.rect)
             }
             .tint(.primary)
+            .disabled(held)
             .accessibilityAddTraits(selection == r.role ? .isSelected : [])
         }
     }
@@ -310,7 +321,7 @@ private struct AddStaffSheet: View {
                     }
                 }
                 Section("Role") {
-                    RoleOptions(roles: model.roles, selection: $role)
+                    RoleOptions(roles: model.roles, selection: $role, unavailable: model.rolesHeld(byEmail: email))
                 }
             }
             .disabled(saving)
@@ -327,13 +338,15 @@ private struct AddStaffSheet: View {
                     } else {
                         Button("Add") { add() }
                             .fontWeight(.semibold)
-                            .disabled(email.isBlank || role == nil)
+                            .disabled(email.isBlank || role == nil || role.map { model.rolesHeld(byEmail: email).contains($0) } == true)
                     }
                 }
             }
             .onAppear { focused = true }
             .onChange(of: email) {
                 if emailProblem != nil { emailProblem = StaffLogic.emailProblem(email) }
+                // They turned out to hold that role already.
+                if let role, model.rolesHeld(byEmail: email).contains(role) { self.role = nil }
             }
             // Shown here rather than on the list so it isn't lost while this sheet closes.
             .alert("New to Attend", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
@@ -428,11 +441,12 @@ private struct StaffMemberSheet: View {
                 } else {
                     if let serverError { FormError(message: serverError) }
                     Section {
-                        RoleOptions(roles: model.roles, selection: $role)
+                        RoleOptions(roles: model.roles, selection: $role,
+                                    unavailable: model.rolesHeld(byEmail: member.user.email, excluding: member.id))
                     } header: {
                         Text("Role")
                     } footer: {
-                        if changed && StaffLogic.losesStaffAccess(member, newRole: role, user: app.user, event: event) {
+                        if changed && StaffLogic.losesStaffAccess(member, newRole: role, user: app.user, event: event, staff: model.staff ?? []) {
                             Label("You'll lose access to managing staff.", systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(Tone.warning.color)
                         }
@@ -472,7 +486,7 @@ private struct StaffMemberSheet: View {
                 Button("Remove", role: .destructive) { remove() }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text(StaffText.removeMessage(member, user: app.user, event: event))
+                Text(StaffText.removeMessage(member, user: app.user, event: event, staff: model.staff ?? []))
             }
             .alert("Change Your Own Role?", isPresented: $confirmDemote) {
                 Button("Cancel", role: .cancel) {}
@@ -487,7 +501,7 @@ private struct StaffMemberSheet: View {
 
     private func save(confirmed: Bool) {
         guard let newRole = role, newRole != member.role, !saving else { return }
-        if !confirmed && StaffLogic.losesStaffAccess(member, newRole: newRole, user: app.user, event: event) {
+        if !confirmed && StaffLogic.losesStaffAccess(member, newRole: newRole, user: app.user, event: event, staff: model.staff ?? []) {
             Haptics.warn()
             confirmDemote = true
             return

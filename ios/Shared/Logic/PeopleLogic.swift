@@ -468,6 +468,38 @@ enum ParticipantDetailLogic {
         return m
     }
 
+    /// The page's copy after a profile edit, for when the full profile can't be fetched again: the
+    /// PATCH answer (roster shape) over the old detail, then every edited field set from the edit
+    /// itself, so a field that was just cleared (a phone number, say) isn't brought back from the old
+    /// copy, and legal names, birthday and size show the edit.
+    static func applying(_ edit: ParticipantEdit, live: Participant, to detail: Participant?, now: Date = Date()) -> Participant {
+        var p = overlay(live: live, detail: detail) ?? live
+        func value(_ s: String) -> String? { s.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank }
+        if let v = edit.phone { p.phone = value(v) }
+        if let v = edit.pronouns { p.pronouns = value(v) }
+        if let v = edit.email, let email = value(v) { p.email = email }
+        if let v = edit.tshirtSize { p.tshirtSize = value(v) }
+        let touchesPersonal = [edit.legalFirstName, edit.legalLastName, edit.preferredName, edit.tshirtSize, edit.dateOfBirth]
+            .contains { $0 != nil }
+        guard touchesPersonal else { return p }
+        var personal = p.personal ?? Personal()
+        if let v = edit.legalFirstName { personal.legalFirstName = value(v) }
+        if let v = edit.legalLastName { personal.legalLastName = value(v) }
+        if let v = edit.preferredName { personal.preferredName = value(v) }
+        if let v = edit.tshirtSize { personal.tshirtSize = value(v) }
+        if let v = edit.dateOfBirth {
+            let born = CalendarDay(iso: value(v))
+            personal.dateOfBirth = born?.description
+            personal.age = born.map { born in
+                let today = CalendarDay(now, in: .current)
+                let hadBirthday = today.month > born.month || (today.month == born.month && today.day >= born.day)
+                return today.year - born.year - (hadBirthday ? 0 : 1)
+            }
+        }
+        p.personal = personal
+        return p
+    }
+
     /// Attend web admin page for a participant.
     static func webURL(event: Event?, participantEventId: String) -> URL? {
         guard let slug = event?.slug else { return nil }

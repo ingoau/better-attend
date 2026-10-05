@@ -187,9 +187,10 @@ final class ParticipantDetailModel {
         do {
             let updated = try await app.api.updateParticipant(eventId: eventId, participantEventId: participantEventId, edit: edit)
             await app.participants.upsert(eventId, updated)
-            detail = ParticipantDetailLogic.overlay(live: updated, detail: detail)
-            // The PATCH answers with the short (roster) shape; fetch the full profile so legal names,
-            // birthday and size show the edit. If that fails the next refresh catches up.
+            // The PATCH answers with the short (roster) shape: show the edit on the old profile straight
+            // away (without bringing back anything it cleared), then fetch the full profile. If that
+            // fails, the edited copy stands until the next refresh.
+            detail = ParticipantDetailLogic.applying(edit, live: updated, to: detail)
             if let full = try? await app.participants.detail(eventId, participantEventId: participantEventId) {
                 detail = full
                 detailLoaded = true

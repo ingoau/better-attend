@@ -47,6 +47,16 @@ final class EventRepository {
         return list
     }
 
+    /// Swaps in a locally updated copy of one event (e.g. your own role after changing your staff
+    /// row), until the next refresh brings Attend's.
+    func replace(_ event: Event) async {
+        guard var list = events, let i = list.firstIndex(where: { $0.id == event.id }), list[i] != event else { return }
+        list[i] = event
+        events = list
+        await cache.write("events", list)
+        onChange()
+    }
+
     func select(_ eventId: String) {
         settings.selectedEventId = eventId
         onChange()
