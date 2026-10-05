@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LocalHospital
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.HorizontalDivider
@@ -68,6 +69,7 @@ import au.ingo.betterattend.data.model.TravelLeg
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
+import java.net.URLEncoder
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -78,10 +80,23 @@ data class ContactActions(
     val sms: (String) -> Unit = {},
     val whatsApp: (String) -> Unit = {},
     val email: (String) -> Unit = {},
+    /** Opens a DM with this Slack user ID in the Slack app (the web profile if Slack isn't installed). */
+    val slack: (String) -> Unit = {},
     val openUrl: (String) -> Unit = {},
     /** Long-press on a value: copy it. [label] names what was copied ("Phone number", "Email"…). */
     val copy: (label: String, value: String) -> Unit = { _, _ -> },
 )
+
+/** Links into Hack Club's Slack, where Attend's Slack IDs live. */
+object SlackLinks {
+    const val TEAM_ID = "T0266FRGM"
+
+    /** Slack's deep link: opens a DM with the user in the app. */
+    fun app(userId: String) = "slack://user?team=$TEAM_ID&id=${URLEncoder.encode(userId.trim(), "UTF-8")}"
+
+    /** Their profile on the web, for when the app isn't installed. */
+    fun web(userId: String) = "https://hackclub.slack.com/team/${URLEncoder.encode(userId.trim(), "UTF-8")}"
+}
 
 private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault())
 fun formatDate(iso: String?): String? = iso?.let { runCatching { LocalDate.parse(it.take(10)).format(dateFmt) }.getOrNull() ?: it }
@@ -216,13 +231,15 @@ private fun FlagChip(label: String) {
 fun ContactSection(p: Participant, canViewPii: Boolean, actions: ContactActions) {
     val phone = p.phone?.takeIf { canViewPii && it.isNotBlank() }
     val email = p.email?.takeIf { it.isNotBlank() }
-    if (phone == null && email == null && p.slackUserId == null) return
+    if (phone == null && email == null && p.slackUserId.isNullOrBlank()) return
     SectionCard("Contact", Icons.Outlined.ContactPhone) {
         phone?.let { LinkRow(Icons.Outlined.Call, "Mobile", it, { actions.call(it) }, "Call", onLongClick = { actions.copy("Phone number", it) }) }
         email?.let {
-            LinkRow(Icons.Outlined.Email, "Email", it, if (canViewPii) { { actions.email(it) } } else null, "Email", onLongClick = { actions.copy("Email", it) })
+            LinkRow(Icons.Outlined.Email, "Email", it, { actions.email(it) }, "Email", onLongClick = { actions.copy("Email", it) })
         }
-        p.slackUserId?.let { Field("Slack ID", it, onCopy = { actions.copy("Slack ID", it) }) }
+        p.slackUserId?.takeIf { it.isNotBlank() }?.let {
+            LinkRow(Icons.Outlined.Tag, "Slack", it, { actions.slack(it) }, "Message on Slack", onLongClick = { actions.copy("Slack ID", it) })
+        }
     }
 }
 

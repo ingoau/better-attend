@@ -69,7 +69,7 @@ private struct ParticipantPage: View {
         let p = model.participant(app)
         Group {
             if let p {
-                DetailList(participant: p, model: model, confirm: $confirm, addingNote: $addingNote, headerHidden: $headerHidden)
+                DetailList(participant: p, model: model, confirm: $confirm, addingNote: $addingNote, headerHidden: $headerHidden, editing: $editing)
             } else if !model.attempted || model.loading {
                 ProgressView().controlSize(.large)
             } else {
@@ -105,7 +105,7 @@ private struct ParticipantPage: View {
             }
             if let p {
                 ToolbarItem(placement: .topBarTrailing) {
-                    MoreMenu(participant: p, model: model, confirm: $confirm, editing: $editing)
+                    MoreMenu(participant: p, model: model, confirm: $confirm)
                 }
             }
         }
@@ -209,27 +209,18 @@ enum DetailConfirmation: Equatable {
     var destructive: Bool { self != .reinstate }
 }
 
-/// The "…" menu: edit, web link, copy id, badge reset, withdraw / reinstate, remove.
+/// The "…" menu: copy id / ticket code, badge reset, withdraw / reinstate, remove. Edit and the
+/// web link are buttons under the name.
 private struct MoreMenu: View {
     let participant: Participant
     let model: ParticipantDetailModel
     @Binding var confirm: DetailConfirmation?
-    @Binding var editing: Bool
     @Environment(AppModel.self) private var app
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let event = model.event(app)
         let can = ParticipantActionVisibility(event)
         Menu {
-            // Only once the full profile is in, so the form starts from what's actually on file.
-            if can.edit && model.detailLoaded {
-                Button("Edit Details", systemImage: "pencil") { editing = true }
-                    .disabled(model.busy != nil)
-            }
-            if let url = ParticipantDetailLogic.webURL(event: event, participantEventId: participant.participantEventId) {
-                Button("Open in Attend Web", systemImage: "safari") { openURL(url) }
-            }
             Button("Copy Participant ID", systemImage: "doc.on.doc") {
                 Clipboard.copy(participant.participantEventId)
                 model.toast = .info("Participant ID copied", systemImage: "doc.on.doc.fill")

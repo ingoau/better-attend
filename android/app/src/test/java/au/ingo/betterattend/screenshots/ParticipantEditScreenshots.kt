@@ -1,7 +1,6 @@
 package au.ingo.betterattend.screenshots
 
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import au.ingo.betterattend.ui.people.EditDetailsContent
@@ -47,11 +46,12 @@ class ParticipantEditScreenshots : ScreenshotTest() {
     }
 
     private fun openMenu() {
-        compose.onAllNodes(hasContentDescription("More options")).onFirst().performClick()
+        // Not "More options": the action row's button groups have overflow indicators with that label.
+        compose.onNodeWithContentDescription("More actions for this person").performClick()
         compose.waitForIdle()
     }
 
-    /** Event admin: Edit details first, Withdraw and the destructive Remove at the bottom. */
+    /** Event admin: Withdraw and the destructive Remove at the bottom (Edit and Web are in the action row). */
     @Test fun overflowMenuAdmin() = snap("detail_menu_admin", screen = true, prepare = ::openMenu) {
         ParticipantDetailContent(DetailFixtures.state(admin, DetailFixtures.sensitive), now = now)
     }

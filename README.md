@@ -74,10 +74,10 @@ They show up as **BetterAttend** and install **alongside** the official app (`au
   running online only.
 - **People** — instant search (name, email, pronouns, short code), filter chips with live counts
   (Here / Not here / Needs attention / Not complete / Withdrawn), advanced filters and sorting.
-- **Participant detail** — safety alerts first, check in / undo per scan point, call · SMS ·
-  WhatsApp · email, travel legs with live flight status, medical/accessibility/safeguarding
-  (role-gated), guardians, consents, notes with type + sensitivity, and **NFC badge writing**
-  (ensure → write → verify → confirm).
+- **Participant detail** — safety alerts first, check in / undo per scan point, a Contact sheet
+  (call · SMS · WhatsApp · email · Slack DM), tap the photo to see it full screen, travel legs with
+  live flight status, medical/accessibility/safeguarding (role-gated), guardians, consents, notes
+  with type + sensitivity, and **NFC badge writing** (ensure → write → verify → confirm).
 - **Travel** — arrivals/departures by day in the event timezone, pickup states, UM flags.
 - **Announcements** — send Slack blasts with confirmation and live delivery progress.
 - **Kiosk mode** — self check-in on a spare phone/tablet: front camera, pinned screen, PIN to exit.

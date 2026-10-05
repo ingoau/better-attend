@@ -8,6 +8,7 @@ struct DetailList: View {
     @Binding var confirm: DetailConfirmation?
     @Binding var addingNote: Bool
     @Binding var headerHidden: Bool
+    @Binding var editing: Bool
     @Environment(AppModel.self) private var app
 
     var body: some View {
@@ -22,7 +23,7 @@ struct DetailList: View {
             + (can.remove ? " Removing deletes the registration for good; withdrawing can be undone." : "")
 
         List {
-            DetailHeader(participant: p, timezone: tz, canViewPii: pii, model: model)
+            DetailHeader(participant: p, timezone: tz, canViewPii: pii, model: model, editing: $editing)
 
             if let error = model.error, !model.detailLoaded {
                 Section {
@@ -124,6 +125,8 @@ private struct DetailHeader: View {
     let timezone: String?
     let canViewPii: Bool
     let model: ParticipantDetailModel
+    @Binding var editing: Bool
+    @State private var showingPhoto = false
 
     var body: some View {
         let p = participant
@@ -131,18 +134,21 @@ private struct DetailHeader: View {
             .compactMap { $0 }.joined(separator: " · ")
         Section {
             VStack(spacing: 12) {
-                Avatar(name: p.fullName ?? p.name, url: p.headshotUrl, size: 96)
-                    .overlay(alignment: .bottomTrailing) {
-                        if p.isCheckedIn {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title)
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, Tone.success.color)
-                                .background(Circle().fill(Color(uiColor: .systemGroupedBackground)).padding(-3))
-                                .transition(.scale.combined(with: .opacity))
-                                .accessibilityHidden(true)
+                // Only a real photo opens full screen; initials have nothing more to show.
+                if let photo = p.headshotUrl?.nonBlank.flatMap(URL.init(string:)) {
+                    Button { showingPhoto = true } label: { avatar }
+                        .buttonStyle(.plain)
+                        // The avatar hides itself from VoiceOver, so give the button its own element.
+                        .accessibilityRepresentation {
+                            Button("Photo of \(p.name)") { showingPhoto = true }
+                                .accessibilityHint("Shows it full screen.")
                         }
-                    }
+                        .fullScreenCover(isPresented: $showingPhoto) {
+                            PhotoViewer(url: photo, name: p.fullName?.nonBlank ?? p.name)
+                        }
+                } else {
+                    avatar
+                }
                 VStack(spacing: 3) {
                     Text(p.name)
                         .font(.title.weight(.bold))
@@ -168,43 +174,79 @@ private struct DetailHeader: View {
                         }
                         .accessibilityLabel("Ticket code \(p.shortCode.map(String.init).joined(separator: " "))")
                 }
-                if canViewPii {
-                    ContactTiles(participant: p)
-                        .padding(.top, 4)
-                }
+                HeaderActions(participant: p, canViewPii: canViewPii, model: model, editing: $editing)
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
         }
     }
+
+    private var avatar: some View {
+        Avatar(name: participant.fullName ?? participant.name, url: participant.headshotUrl, size: 96)
+            .overlay(alignment: .bottomTrailing) {
+                if participant.isCheckedIn {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Tone.success.color)
+                        .background(Circle().fill(Color(uiColor: .systemGroupedBackground)).padding(-3))
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityHidden(true)
+                }
+            }
+    }
 }
 
-/// Contacts-style action buttons: call, message, WhatsApp, FaceTime, mail.
-private struct ContactTiles: View {
+/// Contacts-style buttons under the name: Contact (a sheet of every way to reach them), Badge,
+/// Edit and Attend Web. Each only shows when it can do something.
+private struct HeaderActions: View {
     let participant: Participant
+    let canViewPii: Bool
+    let model: ParticipantDetailModel
+    @Binding var editing: Bool
+    @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
+    @State private var contacting = false
 
     private static let hasWhatsApp = URL(string: "whatsapp://").map { UIApplication.shared.canOpenURL($0) } ?? false
 
     var body: some View {
-        let phone = participant.phone?.nonBlank
-        let email = participant.email?.nonBlank
-        if phone != nil || email != nil {
+        let p = participant
+        let options = ContactLinks.options(for: p, canViewPii: canViewPii, hasWhatsApp: Self.hasWhatsApp)
+        let event = model.event(app)
+        let web = ParticipantDetailLogic.webURL(event: event, participantEventId: p.participantEventId)
+        // Only once the full profile is in, so the form starts from what's actually on file.
+        let canEdit = ParticipantActionVisibility(event).edit && model.detailLoaded
+        // Nothing to show (no contact details, NFC, permission or web link): no empty gap either.
+        if !options.isEmpty || BadgeWriter.isAvailable || canEdit || web != nil {
             HStack(spacing: 8) {
-                tile("Call", "phone.fill", phone.flatMap(ContactLinks.call))
-                tile("Message", "message.fill", phone.flatMap(ContactLinks.sms))
-                if Self.hasWhatsApp { tile("WhatsApp", "bubble.left.and.bubble.right.fill", phone.flatMap(ContactLinks.whatsApp)) }
-                tile("FaceTime", "video.fill", phone.flatMap(ContactLinks.faceTime))
-                tile("Mail", "envelope.fill", email.flatMap(ContactLinks.email))
+                if !options.isEmpty {
+                    tile("Contact", "person.crop.circle.fill") { contacting = true }
+                }
+                if BadgeWriter.isAvailable {
+                    tile("Badge", "wave.3.right", enabled: !model.badge.isWorking && model.busy == nil) {
+                        Task { await model.writeBadge(app) }
+                    }
+                }
+                if canEdit {
+                    tile("Edit", "pencil", enabled: model.busy == nil) { editing = true }
+                }
+                if let web {
+                    tile("Web", "safari.fill") { openURL(web) }
+                }
+            }
+            .sheet(isPresented: $contacting) {
+                ContactSheet(name: p.name, options: options)
             }
         }
     }
 
-    private func tile(_ title: String, _ symbol: String, _ url: URL?) -> some View {
+    private func tile(_ title: String, _ symbol: String, enabled: Bool = true, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.tap()
-            if let url { openURL(url) }
+            action()
         } label: {
             VStack(spacing: 5) {
                 Image(systemName: symbol).font(.title3)
@@ -215,8 +257,8 @@ private struct ContactTiles: View {
             .contentShape(.rect(cornerRadius: 14))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(url == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.tint))
-        .disabled(url == nil)
+        .foregroundStyle(enabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+        .disabled(!enabled)
     }
 }
 
@@ -551,12 +593,18 @@ private struct LinkRow<Extra: View>: View {
     let label: String
     let value: String
     let url: URL?
+    /// Opens if nothing handles `url` (Slack not installed → its web profile).
+    var fallback: URL? = nil
     @ViewBuilder var extra: Extra
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Button {
-            if let url { openURL(url) }
+            if let url {
+                openURL(url) { accepted in
+                    if !accepted, let fallback { openURL(fallback) }
+                }
+            }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label).font(.subheadline).foregroundStyle(.secondary)
@@ -575,8 +623,8 @@ private struct LinkRow<Extra: View>: View {
 }
 
 extension LinkRow where Extra == EmptyView {
-    init(label: String, value: String, url: URL?) {
-        self.init(label: label, value: value, url: url) { EmptyView() }
+    init(label: String, value: String, url: URL?, fallback: URL? = nil) {
+        self.init(label: label, value: value, url: url, fallback: fallback) { EmptyView() }
     }
 }
 
@@ -629,8 +677,8 @@ private struct ContactSection: View {
         if phone != nil || email != nil || slack != nil {
             Section("Contact") {
                 if let phone { PhoneRow(label: "Mobile", phone: phone) }
-                if let email { LinkRow(label: "Email", value: email, url: canViewPii ? ContactLinks.email(email) : nil) }
-                if let slack { FieldRow("Slack ID", slack) }
+                if let email { LinkRow(label: "Email", value: email, url: ContactLinks.email(email)) }
+                if let slack { LinkRow(label: "Slack", value: slack, url: ContactLinks.slack(slack), fallback: ContactLinks.slackWeb(slack)) }
             }
         }
     }

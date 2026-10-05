@@ -1,6 +1,17 @@
 package au.ingo.betterattend.screenshots
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performClick
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +35,7 @@ import au.ingo.betterattend.ui.people.NfcWriteState
 import au.ingo.betterattend.ui.people.NoteItem
 import au.ingo.betterattend.ui.people.NotesSection
 import au.ingo.betterattend.ui.people.ParticipantDetailContent
+import au.ingo.betterattend.ui.people.PhotoViewerContent
 import au.ingo.betterattend.ui.people.UndoCheckInCard
 import au.ingo.betterattend.ui.preview.SampleData
 import org.junit.Test
@@ -102,6 +114,26 @@ class ParticipantDetailScreenshots : ScreenshotTest() {
     /** Opened from the People list: the bar shows where you are while you swipe between people. */
     @Test fun browsing() = snap("detail_browsing") {
         ParticipantDetailContent(DetailFixtures.state(DetailFixtures.eventSensitive, DetailFixtures.sensitive), now = now, position = "3 of 42")
+    }
+
+    @Test fun contactSheet() = snap("detail_contact_sheet", screen = true, prepare = {
+        compose.onNode(hasText("Contact") and hasClickAction()).performClick()
+        compose.waitForIdle()
+    }) {
+        ParticipantDetailContent(DetailFixtures.state(DetailFixtures.eventSensitive, DetailFixtures.sensitive), now = now)
+    }
+
+    /** A generated "photo": Coil doesn't load under Robolectric, so the viewer gets the image directly. */
+    @Test fun photoViewer() {
+        val bitmap = Bitmap.createBitmap(600, 800, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).drawPaint(Paint().apply {
+            shader = LinearGradient(0f, 0f, 600f, 800f, 0xFFEC3750.toInt(), 0xFF338EDA.toInt(), Shader.TileMode.CLAMP)
+        })
+        snap("detail_photo_viewer") {
+            PhotoViewerContent("Maya Chen", onDismiss = {}) { modifier ->
+                Image(bitmap.asImageBitmap(), "Photo of Maya Chen", modifier, contentScale = ContentScale.Fit)
+            }
+        }
     }
 
     @Test fun limitedTop() = snap("detail_limited_top") {

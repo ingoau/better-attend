@@ -19,10 +19,12 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,15 +43,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ContactPhone
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.HowToReg
 import androidx.compose.material.icons.outlined.MoreVert
@@ -56,9 +57,10 @@ import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -102,6 +104,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -290,6 +293,12 @@ private fun ParticipantDetailPage(eventId: String, participantEventId: String, n
         sms = { haptics.click(); launch(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(it))), "No messaging app found") },
         whatsApp = { haptics.click(); launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + it.filter(Char::isDigit))), "WhatsApp isn't installed") },
         email = { haptics.click(); launch(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(it))), "No email app found") },
+        slack = {
+            haptics.click()
+            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SlackLinks.app(it)))) } catch (_: ActivityNotFoundException) {
+                launch(Intent(Intent.ACTION_VIEW, Uri.parse(SlackLinks.web(it))), "Slack isn't installed")
+            }
+        },
         openUrl = { haptics.click(); launch(Intent(Intent.ACTION_VIEW, Uri.parse(it)), "No browser found") },
         // The long-press haptic comes from the long-pressed row itself.
         copy = { label, value -> copy(label, value) },
@@ -442,6 +451,8 @@ fun ParticipantDetailContent(
     }
 
     if (p != null) when (dialog) {
+        "contact" -> ContactSheet(p.name, contactOptions(p, state.canViewPii, callbacks.contact), onDismiss = { dialog = null })
+        "photo" -> p.headshotUrl?.let { PhotoViewer(it, p.fullName ?: p.name, onDismiss = { dialog = null }) }
         "undo" -> UndoCheckInDialog(p.name, p.scansByContext, tz, onConfirm = { dialog = null; callbacks.undo(it) }, onDismiss = { dialog = null })
         "withdraw" -> ConfirmDialog(
             "Withdraw ${p.name}?", "They'll be hidden from the list and lose access to their ticket. You can reinstate them later.",
@@ -468,21 +479,9 @@ fun ParticipantDetailContent(
 private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More actions for this person") }
+        // Edit and the web link are in the action row; this keeps the copy and the destructive actions.
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            // Only once the full profile is here: the roster copy has no legal names or birthday.
-            if (state.canEditDetails && state.detailLoaded) {
-                DropdownMenuItem(
-                    text = { Text("Edit details") },
-                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                    onClick = { open = false; callbacks.editDetails() },
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("Open in Attend web") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
-                onClick = { open = false; callbacks.openWeb() },
-            )
             DropdownMenuItem(
                 text = { Text("Copy participant ID") },
                 leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
@@ -542,7 +541,7 @@ private fun DetailBody(
     ) {
         // Sections fill in as the full profile arrives: each one fades in / grows and the rest glide
         // down to make room, rather than the page popping into a new layout.
-        section("header") { Header(p, tz) }
+        section("header") { Header(p, tz, onOpenPhoto = { onDialog("photo") }) }
         if (state.error != null && !state.detailLoaded) {
             section("err") { OfflineBanner("Showing saved details. ${state.error}", onRetry = callbacks.refresh) }
         }
@@ -585,12 +584,15 @@ private fun LazyListScope.section(key: String, content: @Composable () -> Unit) 
 }
 
 @Composable
-private fun Header(p: Participant, tz: String?) {
+private fun Header(p: Participant, tz: String?, onOpenPhoto: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(contentAlignment = Alignment.Center) {
-            Box(Modifier.size(136.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(MaterialTheme.colorScheme.tertiaryContainer))
-            Avatar(p.fullName ?: p.name, p.headshotUrl, size = 108.dp)
-        }
+        // The expressive cookie is the photo's mask, not a frame around a circle.
+        val cookie = MaterialShapes.Cookie9Sided.toShape()
+        Avatar(
+            p.fullName ?: p.name, p.headshotUrl, size = 136.dp, shape = cookie,
+            // Only a real photo opens full screen; initials have nothing more to show.
+            modifier = if (p.headshotUrl != null) Modifier.clip(cookie).clickable(onClickLabel = "View photo", onClick = onOpenPhoto) else Modifier,
+        )
         Spacer(Modifier.height(12.dp))
         Text(p.name, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
         val sub = listOfNotNull(
@@ -632,16 +634,59 @@ private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: Detail
             },
             label = "checkInButtons",
         ) { checkedIn -> CheckInButtons(state, p, checkedIn, callbacks, onDialog) }
-        val phone = p.phone?.takeIf { state.canViewPii && it.isNotBlank() }
-        val email = p.email?.takeIf { state.canViewPii && it.isNotBlank() }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            if (phone != null) {
-                ActionTile(Icons.Outlined.Call, "Call") { callbacks.contact.call(phone) }
-                ActionTile(Icons.Outlined.Sms, "Message") { callbacks.contact.sms(phone) }
-                ActionTile(Icons.AutoMirrored.Outlined.Chat, "WhatsApp") { callbacks.contact.whatsApp(phone) }
-            }
-            if (email != null) ActionTile(Icons.Outlined.Email, "Email") { callbacks.contact.email(email) }
-            ActionTile(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge)
+        // One row; every way to reach them sits behind Contact, in a sheet.
+        val reachable = remember(p, state.canViewPii) { contactOptions(p, state.canViewPii, ContactActions()).isNotEmpty() }
+        val actions = buildList {
+            if (reachable) add(QuickAction(Icons.Outlined.ContactPhone, "Contact") { onDialog("contact") })
+            add(QuickAction(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
+            // Only once the full profile is here: the roster copy has no legal names or birthday.
+            if (state.canEditDetails && state.detailLoaded) add(QuickAction(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
+            if (state.event != null) add(QuickAction(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
+        }
+        QuickActionGroup(actions)
+    }
+}
+
+private class QuickAction(val icon: ImageVector, val label: String, val busy: Boolean = false, val onClick: () -> Unit)
+
+/**
+ * An expressive button group, like Home's quick actions: pill buttons share the row, the pressed one
+ * squares off and pushes its neighbours aside, and any that don't fit move into an overflow menu.
+ */
+@Composable
+private fun QuickActionGroup(actions: List<QuickAction>) {
+    ButtonGroup(
+        overflowIndicator = { menu -> ButtonGroupDefaults.OverflowIndicator(menu) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        actions.forEach { a ->
+            customItem(
+                buttonGroupContent = {
+                    val source = remember { MutableInteractionSource() }
+                    FilledTonalButton(
+                        onClick = a.onClick,
+                        enabled = !a.busy,
+                        shapes = ButtonDefaults.shapes(),
+                        interactionSource = source,
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 12.dp),
+                        modifier = Modifier.weight(1f).animateWidth(source).heightIn(min = 76.dp),
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (a.busy) LoadingIndicator(Modifier.size(26.dp)) else Icon(a.icon, null, Modifier.size(26.dp))
+                            Spacer(Modifier.height(4.dp))
+                            Text(a.label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                },
+                menuContent = { menu ->
+                    DropdownMenuItem(
+                        text = { Text(a.label) },
+                        leadingIcon = { Icon(a.icon, null) },
+                        enabled = !a.busy,
+                        onClick = { menu.dismiss(); a.onClick() },
+                    )
+                },
+            )
         }
     }
 }
@@ -722,15 +767,4 @@ private fun CheckInLabel(busy: Boolean, label: String) {
     else Icon(Icons.Outlined.CheckCircle, null)
     Spacer(Modifier.width(8.dp))
     Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-
-@Composable
-private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, busy: Boolean = false, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(76.dp)) {
-        FilledTonalIconButton(onClick = onClick, enabled = !busy, modifier = Modifier.size(56.dp)) {
-            if (busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(icon, label)
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-    }
 }
