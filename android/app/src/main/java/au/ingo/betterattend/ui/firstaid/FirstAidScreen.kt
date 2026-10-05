@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -88,6 +90,8 @@ fun FirstAidScreen(eventId: String, nav: AppNavigator) {
     val vm: FirstAidViewModel = viewModel(key = "firstaid_$eventId", factory = viewModelFactory { initializer { FirstAidViewModel(container, eventId) } })
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val printer = remember { FirstAidPrint() }
+    DisposableEffect(printer) { onDispose { printer.dispose() } }
     var filter by rememberSaveable { mutableStateOf<FirstAidFilter?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
 
@@ -110,7 +114,7 @@ fun FirstAidScreen(eventId: String, nav: AppNavigator) {
         onPrint = { people, filterLabel ->
             val event = state.event ?: return@FirstAidContent
             val html = FirstAidLogic.html(event.name, people, state.sensitive, event.timezone, filterLabel, Instant.now())
-            if (!FirstAidPrint.print(context, "${event.name} — First-aid sheet", html)) {
+            if (!printer.print(context, "${event.name} — First-aid sheet", html)) {
                 Toast.makeText(context, "Printing isn't available on this device", Toast.LENGTH_SHORT).show()
             }
         },
