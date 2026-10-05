@@ -29,6 +29,7 @@ import au.ingo.betterattend.data.api.AttendJson
 import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.data.model.*
 import au.ingo.betterattend.ui.preview.SampleData
+import au.ingo.betterattend.ui.preview.StaffSamples
 import kotlinx.serialization.KSerializer
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
@@ -96,6 +97,7 @@ class AppSmokeTest {
                         participant = SampleData.participants[0].copy(checkedInAt = now.toString()),
                     ))
                     path == "/events/$eid/scans" -> json(ScansResponse.serializer(), ScansResponse(emptyList(), false, now.toString()))
+                    path == "/events/$eid/staff" && request.method == "GET" -> json(StaffResponse.serializer(), StaffResponse(StaffSamples.staff, StaffSamples.roles))
                     path == "/events/$eid/slack_blasts" -> json(SlackBlastsResponse.serializer(), SlackBlastsResponse(SampleData.blasts))
                     else -> MockResponse.Builder().code(404).body("{\"error\":\"Not found\"}").build()
                 }
@@ -195,6 +197,12 @@ class AppSmokeTest {
             val visible = (0 until accounts.fetchSemanticsNodes().size).first { i -> runCatching { accounts[i].assertIsDisplayed() }.isSuccess }
             accounts[visible].performClick()
             waitForText("Appearance")
+
+            // Settings → Event staff (the sample user is an event admin), then back to Settings.
+            compose.onAllNodesWithText("Event staff").onFirst().performClick()
+            waitForText("Leah Mitchell")
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            waitForText("Appearance")
             compose.mainClock.autoAdvance = true
             compose.waitForIdle()
 
@@ -213,6 +221,7 @@ class AppSmokeTest {
         synchronized(requests) {
             check(requests.any { it == "GET /events" }) { "events never requested: $requests" }
             check(requests.any { it.startsWith("GET /events/${liveEvent.id}/participants") }) { "roster never synced: $requests" }
+            check(requests.any { it == "GET /events/${liveEvent.id}/staff" }) { "staff never loaded: $requests" }
         }
     }
 

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material.icons.outlined.ScreenLockPortrait
+import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -82,6 +83,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.auth.AuthRepository
+import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.store.ThemeMode
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
@@ -129,6 +131,21 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
         ) {
             item { AccountCard(state) }
+
+            // Staff management is admin-only upstream (GET /staff included): hidden for everyone else.
+            if (state.event != null && EventPermissions.canManageStaff(state.event)) {
+                item { GroupTitle("Event") }
+                item {
+                    Segment(0, 1, onClick = actions.onOpenStaff) {
+                        ListItem(
+                            headlineContent = { Text("Event staff") },
+                            supportingContent = { Text("Who works on ${state.event.name}, and their roles") },
+                            leadingContent = { Icon(Icons.Outlined.SupervisorAccount, null) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+                    }
+                }
+            }
 
             item { GroupTitle("Appearance") }
             item {
