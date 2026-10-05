@@ -417,6 +417,7 @@ extension Fixtures {
     @Test func slackLinks() {
         #expect(ContactLinks.slack(" U09K59BPM2M ")?.absoluteString == "slack://user?team=T0266FRGM&id=U09K59BPM2M")
         #expect(ContactLinks.slackWeb("U09K59BPM2M")?.absoluteString == "https://hackclub.slack.com/team/U09K59BPM2M")
+        #expect(ContactLinks.slack("U123\n")?.absoluteString == "slack://user?team=T0266FRGM&id=U123")
         #expect(ContactLinks.slack("  ") == nil)
     }
 }

@@ -51,7 +51,7 @@ class ParticipantEditScreenshots : ScreenshotTest() {
         compose.waitForIdle()
     }
 
-    /** Event admin: Edit details first, Withdraw and the destructive Remove at the bottom. */
+    /** Event admin: Withdraw and the destructive Remove at the bottom (Edit and Web are in the action row). */
     @Test fun overflowMenuAdmin() = snap("detail_menu_admin", screen = true, prepare = ::openMenu) {
         ParticipantDetailContent(DetailFixtures.state(admin, DetailFixtures.sensitive), now = now)
     }

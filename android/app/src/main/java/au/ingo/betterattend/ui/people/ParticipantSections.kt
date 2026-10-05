@@ -231,7 +231,7 @@ private fun FlagChip(label: String) {
 fun ContactSection(p: Participant, canViewPii: Boolean, actions: ContactActions) {
     val phone = p.phone?.takeIf { canViewPii && it.isNotBlank() }
     val email = p.email?.takeIf { it.isNotBlank() }
-    if (phone == null && email == null && p.slackUserId == null) return
+    if (phone == null && email == null && p.slackUserId.isNullOrBlank()) return
     SectionCard("Contact", Icons.Outlined.ContactPhone) {
         phone?.let { LinkRow(Icons.Outlined.Call, "Mobile", it, { actions.call(it) }, "Call", onLongClick = { actions.copy("Phone number", it) }) }
         email?.let {

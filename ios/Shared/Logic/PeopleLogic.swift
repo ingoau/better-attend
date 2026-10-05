@@ -611,7 +611,9 @@ enum ContactLinks {
     }
 
     private static func slackId(_ userId: String) -> String? {
-        nonEmpty(userId.trimmingCharacters(in: .whitespaces).addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")
+        // ASCII letters and digits only, like Android's URLEncoder (`.alphanumerics` would let Unicode letters through).
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+        return nonEmpty(userId.trimmingCharacters(in: .whitespacesAndNewlines).addingPercentEncoding(withAllowedCharacters: allowed) ?? "")
     }
 
     private static func nonEmpty(_ s: String) -> String? { s.isEmpty || s == "+" ? nil : s }
