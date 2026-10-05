@@ -388,10 +388,9 @@ final class RollCallServer: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
-    private let stopped = NSLock()
-    nonisolated(unsafe) private var isStopped = false
+    private let stopped = Locked(false)
 
-    override func stopLoading() { stopped.withLock { isStopped = true } }
+    override func stopLoading() { stopped.set(true) }
 
     override func startLoading() {
         let url = request.url!
@@ -406,7 +405,7 @@ final class RollCallServer: URLProtocol {
         }
         nonisolated(unsafe) let proto = self
         let deliver: @Sendable () -> Void = {
-            guard !proto.stopped.withLock({ proto.isStopped }) else { return }
+            guard !proto.stopped.get() else { return }
             if offline {
                 proto.client?.urlProtocol(proto, didFailWithError: URLError(.notConnectedToInternet))
                 return
@@ -483,6 +482,11 @@ final class RollCallServer: URLProtocol {
         return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 }
+
+#if !canImport(FoundationNetworking)
+// Like the other stub protocols: URLSession hands it between threads. (Linux's URLProtocol can't be Sendable.)
+extension RollCallServer: @unchecked Sendable {}
+#endif
 
 /// Ticks recorded as scans at a scan point, against `RollCallServer`. The rule under test: unticking
 /// never deletes a scan the roll call didn't make (upstream's undo deletes every scan at the point).
