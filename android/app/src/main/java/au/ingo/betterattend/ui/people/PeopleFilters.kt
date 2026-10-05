@@ -80,6 +80,23 @@ sealed interface PeopleListItem {
     data class Person(val participant: Participant) : PeopleListItem { override val key get() = participant.participantEventId }
 }
 
+/**
+ * For each item, its position in the run of rows between headers, as (index, run size), so rows
+ * can be drawn as one segmented group per letter. Null for headers.
+ */
+fun segmentPositions(items: List<PeopleListItem>): List<Pair<Int, Int>?> {
+    val out = arrayOfNulls<Pair<Int, Int>>(items.size)
+    var start = 0
+    while (start < items.size) {
+        if (items[start] is PeopleListItem.Header) { start++; continue }
+        var end = start
+        while (end < items.size && items[end] is PeopleListItem.Person) end++
+        for (i in start until end) out[i] = (i - start) to (end - start)
+        start = end
+    }
+    return out.toList()
+}
+
 data class FilterResult(
     val participants: List<Participant>,
     /** Live counts for each chip, after search and advanced filters (but before the chip itself). */

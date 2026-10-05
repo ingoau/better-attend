@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,6 +44,8 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.FilledTonalIconButton
@@ -208,7 +211,7 @@ fun PeopleContent(
             TopAppBar(
                 title = { EventSwitcherTitle(event?.name, subtitle, onChooseEvent) },
                 actions = {
-                    if (state.canInvite) IconButton(onClick = onInvite) { Icon(Icons.Outlined.PersonAdd, "Invite someone") }
+                    if (state.canInvite) IconButton(onClick = onInvite, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.PersonAdd, "Invite someone") }
                     AccountButton(state.user, onAccount)
                 },
                 scrollBehavior = scroll,
@@ -285,7 +288,7 @@ private fun SearchRow(query: String, onQuery: (String) -> Unit, activeFilters: I
             placeholder = { Text("Search name, email or code") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = if (query.isNotEmpty()) {
-                { IconButton(onClick = { onQuery("") }) { Icon(Icons.Outlined.Close, "Clear search") } }
+                { IconButton(onClick = { onQuery("") }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") } }
             } else null,
             singleLine = true,
             shape = CircleShape,
@@ -304,6 +307,7 @@ private fun SearchRow(query: String, onQuery: (String) -> Unit, activeFilters: I
             FilledTonalIconButton(
                 onClick = onFilters,
                 modifier = Modifier.size(56.dp),
+                shapes = IconButtonDefaults.shapes(),
             ) {
                 Icon(Icons.Outlined.Tune, if (activeFilters > 0) "Filter and sort, $activeFilters active" else "Filter and sort")
             }
@@ -356,7 +360,7 @@ private fun ActiveFiltersLine(count: Int, onClear: () -> Unit) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onClear) { Text("Clear") }
+        TextButton(onClick = onClear, shapes = ButtonDefaults.shapes()) { Text("Clear") }
     }
 }
 
@@ -376,6 +380,7 @@ private fun PeopleList(
     // What detail swipes through: the list exactly as shown.
     val order = remember(result) { result.participants.map { it.participantEventId } }
     val remoteOrder = remember(state.remoteResults) { state.remoteResults.orEmpty().map { it.participantEventId } }
+    val positions = remember(items) { segmentPositions(items) }
     // Every item animates in/out and to its new place, so filtering, sorting and sync updates glide instead of jumping.
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         if (state.syncError != null) {
@@ -393,11 +398,12 @@ private fun PeopleList(
                 }
             }
         }
-        items.forEach { item ->
+        items.forEachIndexed { i, item ->
             when (item) {
                 is PeopleListItem.Header -> stickyHeader(key = item.key, contentType = "header") { LetterHeader(item.letter) }
                 is PeopleListItem.Person -> item(key = item.key, contentType = "row") {
-                    ParticipantRow(item.participant, tz, onClick = { onOpen(item.participant, order) }, modifier = Modifier.animateItem())
+                    val (index, count) = positions[i] ?: (0 to 1)
+                    ParticipantRow(item.participant, tz, onClick = { onOpen(item.participant, order) }, index = index, count = count, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -413,8 +419,8 @@ private fun PeopleList(
                 }
                 remoteRelevant && !state.remoteResults.isNullOrEmpty() -> {
                     item(key = "remote_h") { RemoteHeader(Modifier.animateItem()) }
-                    items(state.remoteResults, key = { "r_" + it.participantEventId }) { p ->
-                        ParticipantRow(p, tz, onClick = { onOpen(p, remoteOrder) }, modifier = Modifier.animateItem())
+                    itemsIndexed(state.remoteResults, key = { _, it -> "r_" + it.participantEventId }) { i, p ->
+                        ParticipantRow(p, tz, onClick = { onOpen(p, remoteOrder) }, index = i, count = state.remoteResults.size, modifier = Modifier.animateItem())
                     }
                 }
                 roster.isEmpty() -> item(key = "empty") {
@@ -471,9 +477,9 @@ private fun LetterHeader(letter: String, modifier: Modifier = Modifier) {
     Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
         Text(
             letter,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMediumEmphasized,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 28.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
+            modifier = Modifier.padding(start = 32.dp, top = 14.dp, bottom = 6.dp).semantics { heading() },
         )
     }
 }
@@ -493,7 +499,7 @@ private fun SummaryCard(roster: List<Participant>, counts: Map<QuickFilter, Int>
                 verticalAlignment = Alignment.Bottom,
                 modifier = Modifier.semantics(mergeDescendants = true) {},
             ) {
-                AnimatedCount(stats.checkedIn, style = MaterialTheme.typography.displayMedium)
+                AnimatedCount(stats.checkedIn, style = MaterialTheme.typography.displayMediumEmphasized)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "of $total here",

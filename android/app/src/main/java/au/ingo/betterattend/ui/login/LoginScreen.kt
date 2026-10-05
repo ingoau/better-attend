@@ -66,10 +66,10 @@ fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
             Text("FOR HACK CLUB ATTEND", style = MaterialTheme.typography.labelLarge, color = cs.primary)
             Text(
                 "BetterAttend",
-                style = MaterialTheme.typography.displayLarge,
+                style = MaterialTheme.typography.displayLargeEmphasized,
                 color = cs.onSurface,
                 maxLines = 1,
-                autoSize = TextAutoSize.StepBased(minFontSize = 32.sp, maxFontSize = MaterialTheme.typography.displayLarge.fontSize),
+                autoSize = TextAutoSize.StepBased(minFontSize = 32.sp, maxFontSize = MaterialTheme.typography.displayLargeEmphasized.fontSize),
             )
             Spacer(Modifier.height(8.dp))
             Text(

@@ -57,6 +57,7 @@ import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroup
@@ -400,7 +401,7 @@ fun ParticipantDetailContent(
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = callbacks.back, enabled = !removing) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = callbacks.back, enabled = !removing, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 actions = { if (p != null) OverflowMenu(state, p, callbacks) { dialog = it } },
                 scrollBehavior = scroll,
             )
@@ -479,7 +480,7 @@ fun ParticipantDetailContent(
 private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More actions for this person") }
+        IconButton(onClick = { open = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.MoreVert, "More actions for this person") }
         // Edit and the web link are in the action row; this keeps the copy and the destructive actions.
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
@@ -754,7 +755,7 @@ private fun CheckInButtons(state: DetailUiState, p: Participant, checkedIn: Bool
         }
         if (p.scansByContext.isNotEmpty()) {
             Spacer(Modifier.width(8.dp))
-            FilledTonalIconButton(onClick = { onDialog("undo") }, enabled = busy == null, modifier = Modifier.size(56.dp)) {
+            FilledTonalIconButton(onClick = { onDialog("undo") }, enabled = busy == null, modifier = Modifier.size(56.dp), shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.AutoMirrored.Outlined.Undo, "Undo scans")
             }
         }

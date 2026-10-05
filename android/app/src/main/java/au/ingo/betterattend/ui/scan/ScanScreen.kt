@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.TabletAndroid
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -358,7 +359,7 @@ private fun ScanTopBar(state: ScanUiState, user: User?, actions: ScanActions) {
         },
         actions = {
             if (state.event != null) {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
+                IconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.MoreVert, "More options") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
                         text = { Text("Kiosk mode") },
@@ -491,7 +492,7 @@ private fun Controls(state: ScanUiState, actions: ScanActions) {
                         if (state.torchOn) "Turn torch off" else "Turn torch on")
                 }
             }
-            IconButton(onClick = actions.onRecent) { Icon(Icons.Outlined.History, "Recent scans") }
+            IconButton(onClick = actions.onRecent, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.History, "Recent scans") }
         }
         ExtendedFloatingActionButton(
             onClick = actions.onFindPerson,

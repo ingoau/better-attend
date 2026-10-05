@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,7 +87,7 @@ fun EmptyState(
         }
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(20.dp))
-            Button(onClick = onAction) { Text(actionLabel) }
+            Button(onClick = onAction, shapes = ButtonDefaults.shapes()) { Text(actionLabel) }
         }
     }
 }
@@ -144,7 +146,7 @@ fun Avatar(name: String, url: String?, modifier: Modifier = Modifier, size: Dp =
 /** Account button for top app bars; opens settings. */
 @Composable
 fun AccountButton(user: User?, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = "Account and settings" }) {
+    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = "Account and settings" }, shapes = IconButtonDefaults.shapes()) {
         Avatar(user?.displayName ?: "?", null, size = 32.dp)
     }
 }

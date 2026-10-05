@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -105,10 +106,10 @@ fun FirstAidContent(
             MediumFlexibleTopAppBar(
                 title = { Text("First-aid sheet") },
                 subtitle = { event?.let { Text(it.name, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 actions = {
                     if (ready) {
-                        IconButton(onClick = { haptics.click(); onPrint(shown, if (query.isBlank()) active.label else "${active.label}, matching “${query.trim()}”") }) {
+                        IconButton(onClick = { haptics.click(); onPrint(shown, if (query.isBlank()) active.label else "${active.label}, matching “${query.trim()}”") }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Outlined.Print, "Print or save as PDF")
                         }
                     }
@@ -271,7 +272,7 @@ fun FirstAidCard(p: Participant, sensitive: Boolean, tz: String?, onOpen: () -> 
                                 (c.phone ?: c.email)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant, maxLines = 1) }
                             }
                             if (c.phone != null) {
-                                FilledTonalIconButton(onClick = { onCall(c.phone) }, modifier = Modifier.semantics { contentDescription = "Call ${c.name}" }) {
+                                FilledTonalIconButton(onClick = { onCall(c.phone) }, modifier = Modifier.semantics { contentDescription = "Call ${c.name}" }, shapes = IconButtonDefaults.shapes()) {
                                     Icon(Icons.Outlined.Call, null)
                                 }
                             }

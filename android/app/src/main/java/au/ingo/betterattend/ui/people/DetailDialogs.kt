@@ -147,7 +147,7 @@ fun UndoCheckInCard(
             }
             Spacer(Modifier.height(20.dp))
             Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                 Button(
                     onClick = onConfirm,
                     shapes = ButtonDefaults.shapes(),
@@ -191,9 +191,10 @@ fun ConfirmDialog(title: String, body: String, confirm: String, destructive: Boo
                 onClick = onConfirm,
                 colors = if (destructive) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)
                 else ButtonDefaults.buttonColors(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text(confirm) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } },
     )
 }
 

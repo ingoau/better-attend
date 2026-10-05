@@ -151,6 +151,20 @@ private val AppTypography: Typography = Typography().let { t ->
         titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Bold),
         titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         labelLarge = t.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        // Expressive emphasized styles for hero numbers and key headings: heavier and tighter than
+        // the regular ones above (the library defaults are lighter than this app's regular styles).
+        displayLargeEmphasized = t.displayLarge.copy(fontWeight = FontWeight.Black, letterSpacing = (-2).sp),
+        displayMediumEmphasized = t.displayMedium.copy(fontWeight = FontWeight.Black, letterSpacing = (-1.5).sp),
+        displaySmallEmphasized = t.displaySmall.copy(fontWeight = FontWeight.Black, letterSpacing = (-1).sp),
+        headlineLargeEmphasized = t.headlineLarge.copy(fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp),
+        headlineMediumEmphasized = t.headlineMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp),
+        headlineSmallEmphasized = t.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+        titleLargeEmphasized = t.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+        titleMediumEmphasized = t.titleMedium.copy(fontWeight = FontWeight.Bold),
+        titleSmallEmphasized = t.titleSmall.copy(fontWeight = FontWeight.Bold),
+        labelLargeEmphasized = t.labelLarge.copy(fontWeight = FontWeight.Bold),
+        labelMediumEmphasized = t.labelMedium.copy(fontWeight = FontWeight.Bold),
+        bodyLargeEmphasized = t.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
     )
 }
 

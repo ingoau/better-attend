@@ -200,8 +200,8 @@ private fun NoteRow(item: NoteItem, now: Instant, onRetry: (String) -> Unit, onD
                 )
                 item.failed -> Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Not saved", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { onDiscard(n.id) }) { Text("Discard") }
-                    TextButton(onClick = { onRetry(n.id) }) { Text("Retry") }
+                    TextButton(onClick = { onDiscard(n.id) }, shapes = ButtonDefaults.shapes()) { Text("Discard") }
+                    TextButton(onClick = { onRetry(n.id) }, shapes = ButtonDefaults.shapes()) { Text("Retry") }
                 }
             }
         }

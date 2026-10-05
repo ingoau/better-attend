@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -45,7 +46,7 @@ fun PillSearchField(query: String, onQuery: (String) -> Unit, placeholder: Strin
         placeholder = { Text(placeholder) },
         leadingIcon = { Icon(Icons.Outlined.Search, null) },
         trailingIcon = if (query.isNotEmpty()) {
-            { IconButton(onClick = { onQuery("") }) { Icon(Icons.Outlined.Close, "Clear search") } }
+            { IconButton(onClick = { onQuery("") }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") } }
         } else null,
         singleLine = true,
         shape = CircleShape,

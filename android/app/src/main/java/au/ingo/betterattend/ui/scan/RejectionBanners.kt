@@ -17,6 +17,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,7 +73,7 @@ fun ScanAlertBanners(
                         )
                     }
                     if (open != null) Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(20.dp))
-                    IconButton(onClick = { onDismiss(a) }) { Icon(Icons.Outlined.Close, "Dismiss alert for ${a.name}") }
+                    IconButton(onClick = { onDismiss(a) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Dismiss alert for ${a.name}") }
                 }
             }
         }
@@ -113,7 +115,7 @@ fun OfflineRejectionsCard(
                     Text(offlineRejectionsTitle(rejections.size), style = MaterialTheme.typography.titleMedium)
                     Text("Scanned while offline, then turned down by Attend.", style = MaterialTheme.typography.bodySmall)
                 }
-                TextButton(onClick = onDismissAll) { Text("Dismiss", color = s.onDangerContainer) }
+                TextButton(onClick = onDismissAll, shapes = ButtonDefaults.shapes()) { Text("Dismiss", color = s.onDangerContainer) }
             }
             rejections.forEach { r ->
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = s.onDangerContainer.copy(alpha = 0.12f))

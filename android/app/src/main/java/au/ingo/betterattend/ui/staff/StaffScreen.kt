@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.SupervisorAccount
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -80,6 +80,7 @@ import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.StaffMember
 import au.ingo.betterattend.data.model.StaffRole
 import au.ingo.betterattend.ui.LocalAppContainer
+import au.ingo.betterattend.ui.components.SegmentedItem
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
@@ -163,7 +164,7 @@ fun StaffContent(
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = actions.back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = actions.back, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 scrollBehavior = scroll,
             )
         },
@@ -280,14 +281,6 @@ private fun StaffList(state: StaffUiState, actions: StaffActions) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StaffRow(member: StaffMember, index: Int, count: Int, self: Boolean, onClick: (() -> Unit)?) {
-    val big = 24.dp
-    val small = 6.dp
-    val shape = RoundedCornerShape(
-        topStart = if (index == 0) big else small, topEnd = if (index == 0) big else small,
-        bottomStart = if (index == count - 1) big else small, bottomEnd = if (index == count - 1) big else small,
-    )
-    val m = Modifier.fillMaxWidth().padding(bottom = if (index == count - 1) 0.dp else 2.dp)
-    val color = MaterialTheme.colorScheme.surfaceContainer
     val content: @Composable () -> Unit = {
         val s = MaterialTheme.status
         val user = member.user
@@ -312,8 +305,7 @@ private fun StaffRow(member: StaffMember, index: Int, count: Int, self: Boolean,
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
     }
-    if (onClick != null) Surface(onClick = onClick, shape = shape, color = color, modifier = m) { content() }
-    else Surface(shape = shape, color = color, modifier = m) { content() }
+    SegmentedItem(index, count, onClick = onClick, content = content)
 }
 
 /**
@@ -387,7 +379,7 @@ fun AddStaffSheetContent(
         RolePicker(roles, state.role, enabled, { onChange(state.copy(role = it, error = null)) }, held)
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onCancel, enabled = enabled) { Text("Cancel") }
+            TextButton(onClick = onCancel, enabled = enabled, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onSend, enabled = enabled && state.email.isNotBlank() && state.role != null && state.role !in held,
@@ -443,7 +435,7 @@ fun MemberSheetContent(
                 Text("Remove")
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onCancel, enabled = enabled) { Text("Cancel") }
+            TextButton(onClick = onCancel, enabled = enabled, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             Spacer(Modifier.width(8.dp))
             Button(onClick = onSave, enabled = enabled && state.role != member.role && state.role !in held, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                 if (state.busy) LoadingIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary) else Text("Save")

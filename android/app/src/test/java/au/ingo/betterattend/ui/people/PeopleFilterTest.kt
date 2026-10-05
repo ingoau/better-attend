@@ -122,6 +122,16 @@ class PeopleFilterTest {
         assertTrue(PeopleFilter.withHeaders(run().participants, SortOrder.Status).none { it is PeopleListItem.Header })
     }
 
+    @Test fun segmentPositionsRestartUnderEachHeader() {
+        val h = { l: String -> PeopleListItem.Header(l) }
+        val r = { id: Int -> PeopleListItem.Person(p(id, "P$id")) }
+        val items = listOf(h("A"), r(1), r(2), r(3), h("B"), r(4))
+        assertEquals(listOf(null, 0 to 3, 1 to 3, 2 to 3, null, 0 to 1), segmentPositions(items))
+        // Without headers (status sort) the whole list is one group.
+        assertEquals(listOf(0 to 2, 1 to 2), segmentPositions(listOf(r(1), r(2))))
+        assertEquals(emptyList<Pair<Int, Int>?>(), segmentPositions(emptyList()))
+    }
+
     @Test fun nonLetterNamesGoUnderHash() {
         assertEquals("#", PeopleFilter.sectionLetter(p(9, "42 Robot")))
         assertEquals("E", PeopleFilter.sectionLetter(p(9, "Élodie Martin")))

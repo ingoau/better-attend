@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -153,7 +154,7 @@ fun BlastsContent(
                 title = { Text("Announcements") },
                 subtitle = { state.event?.let { Text(it.name, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
+                    IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
                 },
                 scrollBehavior = scrollBehavior,
             )
@@ -361,7 +362,7 @@ fun BlastComposer(
         )
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onCancel, enabled = !sending) { Text("Cancel") }
+            TextButton(onClick = onCancel, enabled = !sending, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
             Spacer(Modifier.weight(1f))
             Button(
                 onClick = onReview,
@@ -433,6 +434,6 @@ private fun ConfirmSendDialog(
                 } else Text("Send now")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !sending) { Text("Keep editing") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !sending, shapes = ButtonDefaults.shapes()) { Text("Keep editing") } },
     )
 }

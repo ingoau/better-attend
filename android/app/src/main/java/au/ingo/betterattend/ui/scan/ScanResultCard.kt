@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -208,7 +209,7 @@ fun ScanResultCard(
                         }
                     }
                 }
-                IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, "Dismiss result", tint = onContainer) }
+                IconButton(onClick = onDismiss, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Dismiss result", tint = onContainer) }
             }
 
             if (p != null) {

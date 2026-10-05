@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Train
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilterChip
@@ -81,6 +83,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.TravelEntry
+import au.ingo.betterattend.ui.components.SegmentedItem
+import au.ingo.betterattend.ui.components.MaterialShapesCookie4
+import au.ingo.betterattend.ui.components.MaterialShapesClover
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
@@ -284,8 +289,11 @@ private fun TravelList(
                         // Headers fade in/out as filtering adds or empties a day; no placement animation, which
                         // would fight the sticky positioning.
                         stickyHeader(key = "h_${section.key}") { SectionHeaderRow(section, Modifier.animateItem(placementSpec = null)) }
-                        items(section.entries, key = { it.id }) { entry ->
-                            TravelRow(entry, tz, canOpen, onClick = { haptics.click(); onOpen(entry) }, modifier = Modifier.animateItem())
+                        itemsIndexed(section.entries, key = { _, it -> it.id }) { i, entry ->
+                            TravelRow(
+                                entry, tz, canOpen, onClick = { haptics.click(); onOpen(entry) },
+                                index = i, count = section.entries.size, modifier = Modifier.animateItem(),
+                            )
                         }
                     }
                 }
@@ -303,7 +311,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit, modifier: Mod
         placeholder = { Text("Search name, route or flight") },
         leadingIcon = { Icon(Icons.Outlined.Search, null) },
         trailingIcon = {
-            if (query.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Clear search") }
+            if (query.isNotEmpty()) IconButton(onClick = { onChange("") }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") }
         },
         singleLine = true,
         shape = CircleShape,
@@ -354,7 +362,7 @@ private fun SectionHeaderRow(section: TravelSection, modifier: Modifier = Modifi
             Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp).semantics { heading() },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(section.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(section.title, style = MaterialTheme.typography.titleLargeEmphasized, color = MaterialTheme.colorScheme.primary)
             if (section.subtitle != null) {
                 Spacer(Modifier.width(8.dp))
                 Text(section.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -374,7 +382,16 @@ private fun SectionHeaderRow(section: TravelSection, modifier: Modifier = Modifi
 }
 
 @Composable
-internal fun TravelRow(entry: TravelEntry, tz: String?, clickable: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun TravelRow(
+    entry: TravelEntry,
+    tz: String?,
+    clickable: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Position in its day's segmented group. */
+    index: Int = 0,
+    count: Int = 1,
+) {
     val status = MaterialTheme.status
     val container = if (entry.isUnaccompaniedMinor) status.warningContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerLow
     val inbound = entry.direction == "inbound"
@@ -405,7 +422,7 @@ internal fun TravelRow(entry: TravelEntry, tz: String?, clickable: Boolean, onCl
             Box(
                 Modifier.size(40.dp).background(
                     if (inbound) status.successContainer else status.infoContainer,
-                    CircleShape,
+                    if (inbound) MaterialShapesCookie4 else MaterialShapesClover,
                 ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -445,12 +462,13 @@ internal fun TravelRow(entry: TravelEntry, tz: String?, clickable: Boolean, onCl
             if (clickable) Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    val m = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp).clearAndSetSemantics { contentDescription = description }
-    if (clickable) {
-        Surface(onClick = onClick, shape = MaterialTheme.shapes.medium, color = container, modifier = m, content = content)
-    } else {
-        Surface(shape = MaterialTheme.shapes.medium, color = container, modifier = m, content = content)
-    }
+    SegmentedItem(
+        index, count,
+        modifier.padding(horizontal = 12.dp).clearAndSetSemantics { contentDescription = description },
+        onClick = if (clickable) onClick else null,
+        color = container,
+        content = content,
+    )
 }
 
 @Composable

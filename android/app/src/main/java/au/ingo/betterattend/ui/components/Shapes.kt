@@ -11,3 +11,6 @@ val MaterialShapesSunny: Shape @Composable get() = MaterialShapes.Sunny.toShape(
 val MaterialShapesPill: Shape @Composable get() = MaterialShapes.Pill.toShape()
 val MaterialShapesClover: Shape @Composable get() = MaterialShapes.Clover4Leaf.toShape()
 val MaterialShapesSoftBurst: Shape @Composable get() = MaterialShapes.SoftBurst.toShape()
+val MaterialShapesCookie4: Shape @Composable get() = MaterialShapes.Cookie4Sided.toShape()
+val MaterialShapesGem: Shape @Composable get() = MaterialShapes.Gem.toShape()
+val MaterialShapesFlower: Shape @Composable get() = MaterialShapes.Flower.toShape()

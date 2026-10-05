@@ -90,6 +90,7 @@ fun PhotoViewerContent(name: String, onDismiss: () -> Unit, image: @Composable (
             onClick = onDismiss,
             colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.5f), contentColor = Color.White),
             modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp),
+            shapes = IconButtonDefaults.shapes(),
         ) { Icon(Icons.Outlined.Close, "Close") }
         Text(
             name,
