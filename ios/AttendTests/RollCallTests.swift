@@ -517,6 +517,13 @@ final class RollCallServer: URLProtocol {
     }
 
     private var deletes: [String] { RollCallServer.recorded().filter { $0.hasPrefix("DELETE") } }
+
+    /// Waits (up to 3 s) until Attend has received a scan for someone, i.e. the tick is in flight.
+    private func waitUntilAttendHasAScan(_ id: String) async {
+        for _ in 0..<150 where RollCallServer.count(id, point.id) == 0 {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
     private var posts: [String] { RollCallServer.recorded().filter { $0.hasPrefix("POST") } }
 
     private func entry(_ store: RollCallStore, _ id: String) -> RollCallEntry? {
@@ -646,7 +653,7 @@ final class RollCallServer: URLProtocol {
         let (store, scans, _) = await begin(timeout: .milliseconds(200))
         store.set("e1", zoe, accounted: true)
         // Unticked while the scan is still in flight: the untick waits for it.
-        try? await Task.sleep(for: .milliseconds(50))
+        await waitUntilAttendHasAScan(zoe.id)
         store.set("e1", zoe, accounted: false)
         await store.waitForScans()
         #expect(scans.pending.isEmpty, "the queued copy is dropped, so it can't sync later")
@@ -727,7 +734,7 @@ final class RollCallServer: URLProtocol {
         let (store, _, _) = await begin(timeout: .seconds(2))
         // No screen involved: the store owns the work, so it finishes whatever happens to the UI.
         store.set("e1", zoe, accounted: true)
-        try? await Task.sleep(for: .milliseconds(50))
+        await waitUntilAttendHasAScan(zoe.id)
         store.end("e1")
         await store.waitForScans()
         #expect(RollCallServer.count(zoe.id, point.id) == 1)

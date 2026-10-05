@@ -173,6 +173,8 @@ final class RollCallStore {
     }
 
     private func post(_ eventId: String, _ message: String, error: Bool = false) {
+        // Ended (or signed out) meanwhile: nobody is counting any more.
+        guard sessions[eventId] != nil else { return }
         notice = RollCallNotice(eventId: eventId, message: message, isError: error)
     }
 
