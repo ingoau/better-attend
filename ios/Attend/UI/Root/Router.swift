@@ -33,6 +33,8 @@ enum Route: Hashable {
     case participant(eventId: String, participantEventId: String, browseIds: [String] = [])
     case ticket(id: String)
     case blasts(eventId: String)
+    case rollCall(eventId: String)
+    case firstAid(eventId: String)
 }
 
 enum AppSheet: String, Identifiable {
@@ -83,7 +85,8 @@ final class Router {
     /// Handles attend:// deep links from widgets, controls, quick actions and Spotlight:
     /// `attend://scan|home|people|travel|tickets`, `attend://ticket/<id>`,
     /// `attend://participant/<eventId>/<participantEventId>`, `attend://blasts`, `attend://kiosk`,
-    /// `attend://settings`, `attend://events`. Returns false for links that aren't navigation.
+    /// `attend://settings`, `attend://events`, `attend://rollcall`, `attend://firstaid`. Returns false for links that
+    /// aren't navigation.
     @discardableResult
     func handle(_ url: URL, available tabs: [AppTab], selectedEventId: String?) -> Bool {
         guard url.scheme == DeepLink.scheme, let host = url.host()?.lowercased() else { return false }
@@ -106,6 +109,14 @@ final class Router {
             guard let selectedEventId else { return false }
             go(.home)
             open(.blasts(eventId: selectedEventId))
+        case "rollcall", "roll-call", "muster":
+            guard let selectedEventId else { return false }
+            go(.home)
+            open(.rollCall(eventId: selectedEventId))
+        case "firstaid", "first-aid":
+            guard let selectedEventId else { return false }
+            go(.home)
+            open(.firstAid(eventId: selectedEventId))
         case "kiosk":
             guard let selectedEventId else { return false }
             kiosk = KioskConfig(eventId: selectedEventId, scanContextId: args.first)
