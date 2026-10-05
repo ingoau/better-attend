@@ -156,6 +156,34 @@ class ParticipantRepository(
         upsert(eventId, p.copy(scansByContext = remaining, checkedInAt = checkedInAt))
     }
 
+    /**
+     * Stores the server's copy of someone just edited. Unlike [upsert], a field the edit cleared stays
+     * cleared: the detail payload carries the T-shirt size under `personal`, so a merge would otherwise
+     * resurrect an old top-level size learned from a scan.
+     */
+    suspend fun applyEdit(eventId: String, fresh: Participant): Unit = mutex.withLock {
+        // Under the sync lock so a delta sync that started before the edit can't land on top of it.
+        val roster = load(eventId) ?: return@withLock
+        val merged = roster.byEventId.toMutableMap()
+        val m = mergeKeepingDetail(merged[fresh.participantEventId], fresh)
+        merged[fresh.participantEventId] = if (fresh.personal != null) m.copy(tshirtSize = fresh.personal.tshirtSize) else m
+        val updated = roster.copy(participants = merged.values.sortedBy { it.name.lowercase() })
+        _rosters.update { it + (eventId to updated) }
+        cache.write(key(eventId), Roster.serializer(), updated)
+    }
+
+    /**
+     * Drops a registration that was removed from the event. Delta syncs never report deletions (only the
+     * periodic full sync prunes them), so this is what makes it disappear from lists straight away.
+     */
+    suspend fun remove(eventId: String, participantEventId: String): Unit = mutex.withLock {
+        val roster = load(eventId) ?: return@withLock
+        if (participantEventId !in roster.byEventId) return@withLock
+        val updated = roster.copy(participants = roster.participants.filterNot { it.participantEventId == participantEventId })
+        _rosters.update { it + (eventId to updated) }
+        cache.write(key(eventId), Roster.serializer(), updated)
+    }
+
     suspend fun detail(eventId: String, participantEventId: String): Participant {
         val full = api.participant(eventId, participantEventId)
         upsert(eventId, full)
