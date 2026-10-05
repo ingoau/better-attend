@@ -104,8 +104,9 @@ fun OutcomeBadge(kind: ResultKind, modifier: Modifier = Modifier, size: androidx
     val target = kind.badgePolygon()
     var from by remember { mutableStateOf(MaterialShapes.Circle) }
     var to by remember { mutableStateOf(MaterialShapes.Circle) }
-    val progress = remember { Animatable(1f) }
-    val pop = remember { Animatable(1f) }
+    // Start from the pre-pop state so the first frame doesn't flash the finished badge.
+    val progress = remember { Animatable(if (target === MaterialShapes.Circle) 1f else 0f) }
+    val pop = remember { Animatable(if (target === MaterialShapes.Circle || kind == ResultKind.Checking) 1f else 0.72f) }
     LaunchedEffect(kind) {
         if (target === to) return@LaunchedEffect
         from = to
@@ -122,12 +123,14 @@ fun OutcomeBadge(kind: ResultKind, modifier: Modifier = Modifier, size: androidx
     Box(
         modifier
             .size(size)
+            // All read in the draw phase: the morph animates the layer, not the composition.
             .graphicsLayer {
                 scaleX = pop.value
                 scaleY = pop.value
                 rotationZ = (1f - progress.value) * if (kind == ResultKind.Rejected) 45f else -60f
+                shape = MorphShape(morph, progress.value.coerceIn(0f, 1f))
+                clip = true
             }
-            .clip(MorphShape(morph, progress.value.coerceIn(0f, 1f)))
             .background(c.strong),
         contentAlignment = Alignment.Center,
     ) {

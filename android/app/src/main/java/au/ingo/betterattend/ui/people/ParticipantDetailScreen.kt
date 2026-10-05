@@ -83,7 +83,6 @@ import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -115,6 +114,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -392,7 +392,8 @@ fun ParticipantDetailContent(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        snackbarHost = { SnackbarHost(snackbar) },
+        // Above the floating toolbar, so a snackbar never hides the actions.
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = FloatingToolbarDefaults.ContainerSize + FloatingToolbarDefaults.ScreenOffset)) },
         topBar = {
             TopAppBar(
                 title = {
@@ -448,7 +449,7 @@ fun ParticipantDetailContent(
                             }
                             ActionsToolbar(
                                 state, p, callbacks, { dialog = it }, toolbarScroll,
-                                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().offset(y = -FloatingToolbarDefaults.ScreenOffset),
+                                Modifier.align(Alignment.BottomCenter).offset(y = -FloatingToolbarDefaults.ScreenOffset),
                             )
                         }
                     }
@@ -696,8 +697,14 @@ private fun ActionsToolbar(
         content = {
             actions.forEach { a ->
                 TooltipIconButton(a.label) {
-                    IconButton(onClick = a.onClick, enabled = !a.busy, shapes = IconButtonDefaults.shapes()) {
-                        if (a.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(a.icon, a.label)
+                    IconButton(
+                        onClick = a.onClick,
+                        enabled = !a.busy,
+                        shapes = IconButtonDefaults.shapes(),
+                        // Labelled on the button, so it keeps its name while the icon is swapped for a spinner.
+                        modifier = Modifier.semantics { contentDescription = a.label },
+                    ) {
+                        if (a.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(a.icon, null)
                     }
                 }
             }

@@ -81,6 +81,8 @@ import au.ingo.betterattend.ui.components.EventTitle
 import au.ingo.betterattend.ui.components.ProvideEntranceStagger
 import au.ingo.betterattend.ui.components.animatedFlexWeight
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -267,7 +269,7 @@ fun PeopleContent(
                     body = state.syncError, actionLabel = "Try again", onAction = onRefresh,
                 )
                 else -> CompositionLocalProvider(
-                    LocalCollapseSearch provides { then -> scope.launch { search.snapTo(0f); then() } },
+                    LocalCollapseSearch provides remember(search, scope) { { then: () -> Unit -> scope.launch { search.snapTo(0f); then() } } },
                 ) { Column(Modifier.fillMaxSize()) {
                     val listArgs: @Composable () -> Unit = {
                         PeopleList(state, roster, result, items, now, onOpen, onQuickTick) {
@@ -327,8 +329,22 @@ private fun SearchRow(
     val text = rememberTextFieldState(query)
     val scope = rememberCoroutineScope()
     // Two-way sync with the view model's query ("Search everyone" and friends clear it from outside).
-    LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect { if (it != query) onQuery(it) } }
-    LaunchedEffect(query) { if (text.text.toString() != query) text.setTextAndPlaceCursorAtEnd(query) }
+    // Every edit goes to the view model; its query comes back a frame or more later. Values we sent are
+    // queued, so an echo (even a lagging one, mid-typing) is recognised and never rewrites the field;
+    // anything else came from outside ("Search everyone", a cleared filter) and replaces the text.
+    val latestOnQuery by rememberUpdatedState(onQuery)
+    val sent = remember { ArrayDeque<String>() }
+    LaunchedEffect(text) {
+        snapshotFlow { text.text.toString() }.drop(1).collect { sent.addLast(it); latestOnQuery(it) }
+    }
+    LaunchedEffect(query) {
+        val echo = sent.indexOf(query)
+        if (echo >= 0) repeat(echo + 1) { sent.removeFirst() }
+        else {
+            sent.clear()
+            if (text.text.toString() != query) text.setTextAndPlaceCursorAtEnd(query)
+        }
+    }
 
     val input: @Composable () -> Unit = {
         SearchBarDefaults.InputField(

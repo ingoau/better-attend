@@ -148,10 +148,11 @@ private val AppShapes = Shapes(
 
 /**
  * Roboto Flex, a variable font (weight 100–1000, width 25–151), bundled as a Latin subset. Each weight
- * is an instance of the one file, every 50 units, so animated weights (see [flexWeight]) step smoothly.
+ * is an instance of the one file, every 100 units: few enough to stay in the typeface cache, while
+ * animated weights (see [flexWeight]) still step through the in-betweens.
  */
 private fun flexFamily(width: Float) = FontFamily(
-    (100..1000 step 50).map { w ->
+    (100..1000 step 100).map { w ->
         Font(
             R.font.roboto_flex,
             weight = FontWeight(w),
@@ -164,8 +165,8 @@ val RobotoFlex = flexFamily(100f)
 /** A slightly wider cut for emphasized display and headline type: big numbers read bolder and rounder. */
 val RobotoFlexWide = flexFamily(116f)
 
-/** Snaps an animated weight to the 50-unit steps [RobotoFlex] has instances for. */
-fun flexWeight(weight: Float): FontWeight = FontWeight(((weight / 50f).roundToInt() * 50).coerceIn(100, 1000))
+/** Snaps an animated weight to the 100-unit steps [RobotoFlex] has instances for. */
+fun flexWeight(weight: Float): FontWeight = FontWeight(((weight / 100f).roundToInt() * 100).coerceIn(100, 1000))
 
 private val AppTypography: Typography = Typography().let { base ->
     // Every style on Roboto Flex; emphasized display/headline styles on the wide cut.

@@ -103,7 +103,7 @@ fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
                 contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.LargeContainerHeight),
             ) {
                 if (loading) LoadingIndicator(Modifier.size(40.dp), color = cs.onPrimary)
-                else Text("Sign in with Hack Club", style = ButtonDefaults.textStyleFor(ButtonDefaults.LargeContainerHeight), maxLines = 1)
+                else Text("Sign in with Hack Club", style = ButtonDefaults.textStyleFor(ButtonDefaults.LargeContainerHeight), textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(12.dp))
             Text(

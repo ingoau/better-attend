@@ -706,7 +706,8 @@ private fun ContextsCard(rows: List<ContextProgress>, onShare: (String) -> Unit)
             state = carousel,
             preferredItemWidth = 176.dp,
             itemSpacing = 8.dp,
-            modifier = Modifier.fillMaxWidth().height(156.dp),
+            // Taller with larger text, so the name and progress never clip.
+            modifier = Modifier.fillMaxWidth().height(156.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.8f)),
         ) { i ->
             val row = rows[i]
             ContextTile(row, Modifier.fillMaxSize().maskClip(MaterialTheme.shapes.extraLarge)) { onShare(ShareStats.context(row.context.id)) }

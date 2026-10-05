@@ -45,9 +45,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.platform.InfiniteAnimationPolicy
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.animation.core.tween
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
@@ -262,12 +263,24 @@ fun Modifier.staggeredEntrance(): Modifier {
  */
 @Composable
 fun rememberSlowSpin(periodMillis: Int = 60_000, clockwise: Boolean = true): () -> Float {
-    if (rememberReducedMotion()) return { 0f }
-    val turn = rememberInfiniteTransition(label = "spin").animateFloat(
-        initialValue = 0f,
-        targetValue = if (clockwise) 360f else -360f,
-        animationSpec = infiniteRepeatable(tween(periodMillis, easing = LinearEasing)),
-        label = "spinAngle",
-    )
-    return { turn.value }
+    val angle = remember { Animatable(0f) }
+    val reduced = rememberReducedMotion()
+    // Only turns while the screen is resumed (tab pages off screen are capped at STARTED), so it
+    // never keeps the frame clock busy in the background; it carries on from where it stopped.
+    val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val running = !reduced && resumed.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(running) {
+        if (!running) return@LaunchedEffect
+        val turn = if (clockwise) 360f else -360f
+        val spin: suspend () -> Unit = {
+            while (true) {
+                angle.animateTo(angle.value + turn, tween(periodMillis, easing = LinearEasing))
+                angle.snapTo(angle.value % 360f)
+            }
+        }
+        // Declared as an infinite animation, so tests (and anything else with a policy) know it never settles.
+        val policy = coroutineContext[InfiniteAnimationPolicy]
+        if (policy != null) policy.onInfiniteOperation(spin) else spin()
+    }
+    return { angle.value }
 }
