@@ -54,6 +54,9 @@ final class Router {
     var paths: [AppTab: [Route]] = [:]
     var sheet: AppSheet?
     var kiosk: KioskConfig?
+    /// A confirmation that outlives the screen that raised it (e.g. "Removed Sam" after a
+    /// participant page closes). Shown over the current tab.
+    var toast: Toast?
 
     /// Pushes onto the current tab's stack.
     func open(_ route: Route) {

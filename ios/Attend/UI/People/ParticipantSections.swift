@@ -17,6 +17,9 @@ struct DetailList: View {
         let pii = event?.canViewParticipantPii == true
         let sensitive = event?.canViewSensitiveData == true
         let alerts = Safety.alerts(p, canViewSensitive: sensitive)
+        let can = ParticipantActionVisibility(event)
+        let registrationFooter = "Registration: \(PeopleText.status(p.status))."
+            + (can.remove ? " Removing deletes the registration for good; withdrawing can be undone." : "")
 
         List {
             DetailHeader(participant: p, timezone: tz, canViewPii: pii, model: model)
@@ -74,20 +77,28 @@ struct DetailList: View {
             if !model.notesHidden {
                 NotesSection(model: model, addingNote: $addingNote)
             }
-            if ParticipantDetailLogic.canChangeStatus(event) {
+            if can.showsRegistrationSection {
                 Section {
-                    if p.status == "withdrawn" {
-                        Button { confirm = .reinstate } label: {
-                            BusyLabel("Reinstate Registration", systemImage: "person.fill.checkmark", busy: model.busy == .updatingStatus)
+                    if can.withdraw {
+                        if p.status == "withdrawn" {
+                            Button { confirm = .reinstate } label: {
+                                BusyLabel("Reinstate Registration", systemImage: "person.fill.checkmark", busy: model.busy == .updatingStatus)
+                            }
+                        } else {
+                            Button(role: .destructive) { confirm = .withdraw } label: {
+                                BusyLabel("Withdraw from Event", systemImage: "person.fill.xmark", busy: model.busy == .updatingStatus)
+                            }
+                            .foregroundStyle(Tone.danger.color)
                         }
-                    } else {
-                        Button(role: .destructive) { confirm = .withdraw } label: {
-                            BusyLabel("Withdraw from Event", systemImage: "person.fill.xmark", busy: model.busy == .updatingStatus)
+                    }
+                    if can.remove {
+                        Button(role: .destructive) { confirm = .remove(eventName: event?.name ?? "this event") } label: {
+                            BusyLabel("Remove from Event", systemImage: "trash", busy: model.busy == .removing)
                         }
                         .foregroundStyle(Tone.danger.color)
                     }
                 } footer: {
-                    Text("Registration: \(PeopleText.status(p.status)).")
+                    Text(registrationFooter)
                 }
                 .disabled(model.busy != nil)
             }

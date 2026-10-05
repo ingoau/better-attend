@@ -50,9 +50,12 @@ private struct ParticipantPage: View {
     let position: String?
 
     @Environment(AppModel.self) private var app
+    @Environment(Router.self) private var router
+    @Environment(\.dismiss) private var dismiss
     @State private var model: ParticipantDetailModel
     @State private var confirm: DetailConfirmation?
     @State private var addingNote = false
+    @State private var editing = false
     @State private var headerHidden = false
 
     init(eventId: String, participantEventId: String, position: String?) {
@@ -102,7 +105,7 @@ private struct ParticipantPage: View {
             }
             if let p {
                 ToolbarItem(placement: .topBarTrailing) {
-                    MoreMenu(participant: p, model: model, confirm: $confirm)
+                    MoreMenu(participant: p, model: model, confirm: $confirm, editing: $editing)
                 }
             }
         }
@@ -110,6 +113,11 @@ private struct ParticipantPage: View {
         .sheet(isPresented: $addingNote) {
             AddNoteSheet(name: p?.name ?? "them") { content, type, sensitivity in
                 model.addNote(app, content: content, type: type, sensitivity: sensitivity)
+            }
+        }
+        .sheet(isPresented: $editing) {
+            if let p {
+                ParticipantEditSheet(participant: p, model: model, canEditPII: ParticipantActionVisibility(model.event(app)).editPII)
             }
         }
         .confirmationDialog(confirm?.title(p?.name ?? "them") ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
@@ -138,8 +146,17 @@ private struct ParticipantPage: View {
             case .withdraw: await model.setWithdrawn(app, true)
             case .reinstate: await model.setWithdrawn(app, false)
             case .resetBadge: await model.resetBadge(app)
+            case .remove: await remove()
             }
         }
+    }
+
+    /// Deletes the registration, then closes the page and says so on the screen underneath.
+    private func remove() async {
+        let name = model.participant(app)?.name ?? "them"
+        guard await model.remove(app) else { return }
+        router.toast = Toast(message: "Removed \(name)", systemImage: "person.fill.xmark", tone: .neutral)
+        dismiss()
     }
 }
 
@@ -150,6 +167,8 @@ enum DetailConfirmation: Equatable {
     case withdraw
     case reinstate
     case resetBadge
+    /// Delete the registration outright (`eventName` is for the dialog).
+    case remove(eventName: String)
 
     func title(_ name: String) -> String {
         switch self {
@@ -158,6 +177,7 @@ enum DetailConfirmation: Equatable {
         case .withdraw: "Withdraw \(name)?"
         case .reinstate: "Reinstate \(name)?"
         case .resetBadge: "Reset \(name)'s badge?"
+        case let .remove(eventName): "Remove \(name) from \(eventName)?"
         }
     }
 
@@ -170,6 +190,8 @@ enum DetailConfirmation: Equatable {
         case .withdraw: "They'll be hidden from the list and lose access to their ticket. You can reinstate them later."
         case .reinstate: "Their registration goes back to in progress so they can finish signing up."
         case .resetBadge: "Their current NFC badge will stop working at scanners. Write a new badge afterwards."
+        case .remove:
+            "This deletes their registration, travel, consents and scans for this event. This can't be undone. (Withdrawing is reversible.)"
         }
     }
 
@@ -180,23 +202,31 @@ enum DetailConfirmation: Equatable {
         case .withdraw: "Withdraw"
         case .reinstate: "Reinstate"
         case .resetBadge: "Reset Badge"
+        case .remove: "Remove"
         }
     }
 
     var destructive: Bool { self != .reinstate }
 }
 
-/// The "…" menu: web link, copy id, badge reset, withdraw / reinstate.
+/// The "…" menu: edit, web link, copy id, badge reset, withdraw / reinstate, remove.
 private struct MoreMenu: View {
     let participant: Participant
     let model: ParticipantDetailModel
     @Binding var confirm: DetailConfirmation?
+    @Binding var editing: Bool
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         let event = model.event(app)
+        let can = ParticipantActionVisibility(event)
         Menu {
+            // Only once the full profile is in, so the form starts from what's actually on file.
+            if can.edit && model.detailLoaded {
+                Button("Edit Details", systemImage: "pencil") { editing = true }
+                    .disabled(model.busy != nil)
+            }
             if let url = ParticipantDetailLogic.webURL(event: event, participantEventId: participant.participantEventId) {
                 Button("Open in Attend Web", systemImage: "safari") { openURL(url) }
             }
@@ -211,12 +241,19 @@ private struct MoreMenu: View {
             if participant.nfcBadgeAssigned {
                 Button("Reset NFC Badge…", systemImage: "arrow.counterclockwise") { confirm = .resetBadge }
             }
-            if ParticipantDetailLogic.canChangeStatus(event) {
+            if can.showsRegistrationSection {
                 Divider()
-                if participant.status == "withdrawn" {
-                    Button("Reinstate…", systemImage: "person.fill.checkmark") { confirm = .reinstate }
-                } else {
-                    Button("Withdraw…", systemImage: "person.fill.xmark", role: .destructive) { confirm = .withdraw }
+                if can.withdraw {
+                    if participant.status == "withdrawn" {
+                        Button("Reinstate…", systemImage: "person.fill.checkmark") { confirm = .reinstate }
+                    } else {
+                        Button("Withdraw…", systemImage: "person.fill.xmark", role: .destructive) { confirm = .withdraw }
+                    }
+                }
+                if can.remove {
+                    Button("Remove from Event…", systemImage: "trash", role: .destructive) {
+                        confirm = .remove(eventName: event?.name ?? "this event")
+                    }
                 }
             }
         } label: {

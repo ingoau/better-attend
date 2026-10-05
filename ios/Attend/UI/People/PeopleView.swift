@@ -8,6 +8,9 @@ struct PeopleView: View {
     @State private var model = PeopleModel()
     @State private var showFilters = false
     @State private var now = Date()
+    @State private var inviting = false
+    /// Set by the invite sheet's View button; opened once the sheet has closed.
+    @State private var openAfterInvite: String?
 
     private var event: Event? { app.events.selectedEvent }
 
@@ -17,6 +20,22 @@ struct PeopleView: View {
             // Inline title: the pinned filter bar's scroll-edge blur would sit over a large title.
             .navigationBarTitleDisplayMode(.inline)
             .modifier(UpdatedSubtitle(text: updatedText))
+            .toolbar {
+                // Hidden (not disabled) for roles that can't invite.
+                if let event, ParticipantActionVisibility(event).invite {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Invite", systemImage: "person.badge.plus") {
+                            Haptics.tap()
+                            inviting = true
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $inviting, onDismiss: { openInvited() }) {
+                if let event {
+                    InviteParticipantSheet(event: event) { openAfterInvite = $0 }
+                }
+            }
             .toast($model.toast)
             .onChange(of: event?.id, initial: true) { _, id in model.bind(eventId: id) }
             .task(id: event?.id) {
@@ -35,6 +54,12 @@ struct PeopleView: View {
                     now = Date()
                 }
             }
+    }
+
+    private func openInvited() {
+        guard let id = openAfterInvite, let event else { return }
+        openAfterInvite = nil
+        router.openParticipant(eventId: event.id, participantEventId: id)
     }
 
     private var updatedText: String? {
