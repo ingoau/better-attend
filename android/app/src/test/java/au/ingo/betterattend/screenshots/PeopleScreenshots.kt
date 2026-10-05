@@ -8,6 +8,15 @@ import au.ingo.betterattend.ui.people.QuickFilter
 import au.ingo.betterattend.ui.people.SortOrder
 import au.ingo.betterattend.ui.people.TriState
 import au.ingo.betterattend.ui.preview.SampleData
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -32,6 +41,18 @@ class PeopleScreenshots : ScreenshotTest() {
     @Test fun needsAttention() = snap("people_attention") { PeopleContent(base.copy(quick = QuickFilter.NeedsAttention), now) }
 
     @Test fun search() = snap("people_search") { PeopleContent(base.copy(query = "ma"), now) }
+
+    @Test fun searchExpanded() = snap("people_search_expanded", screen = true, prepare = {
+        // The full-screen search is a dialog with a focused text field, which never lets Compose go idle.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Search name, email or code").performClick()
+        settlePaused()
+        compose.onAllNodes(hasSetTextAction()).onLast().performTextInput("ma")
+        settlePaused()
+    }) {
+        var query by remember { mutableStateOf("") }
+        PeopleContent(base.copy(query = query), now, onQuery = { query = it })
+    }
 
     @Test fun searchNoMatch() = snap("people_search_none") { PeopleContent(base.copy(query = "zzq", remoteResults = emptyList()), now) }
 

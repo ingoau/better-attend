@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -91,8 +92,8 @@ fun EditDetailsDialog(
             onDismissRequest = { confirmDiscard = false },
             title = { Text("Discard changes?") },
             text = { Text("Your edits to ${name.ifBlank { "this person" }}'s details haven't been saved.") },
-            confirmButton = { TextButton(onClick = { confirmDiscard = false; onDismiss() }) { Text("Discard") } },
-            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") } },
+            confirmButton = { TextButton(onClick = { confirmDiscard = false; onDismiss() }, shapes = ButtonDefaults.shapes()) { Text("Discard") } },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }, shapes = ButtonDefaults.shapes()) { Text("Keep editing") } },
         )
     }
 }
@@ -124,7 +125,7 @@ fun EditDetailsContent(
                         if (name.isNotBlank()) Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onClose, enabled = enabled) { Icon(Icons.Outlined.Close, "Close") } },
+                navigationIcon = { IconButton(onClick = onClose, enabled = enabled, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Close") } },
                 actions = {
                     if (session.saving) {
                         LoadingIndicator(Modifier.padding(end = 16.dp).size(36.dp))
@@ -252,9 +253,10 @@ private fun DateOfBirthPicker(current: LocalDate?, onPick: (LocalDate) -> Unit, 
         confirmButton = {
             TextButton(
                 onClick = { state.selectedDateMillis?.let { onPick(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) } ?: onDismiss() },
+                shapes = ButtonDefaults.shapes(),
             ) { Text("OK") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") } },
     ) {
         DatePicker(state, title = { Text("Date of birth", Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)) })
     }

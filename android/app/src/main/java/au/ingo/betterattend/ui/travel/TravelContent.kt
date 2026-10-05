@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Train
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilterChip
@@ -59,7 +61,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +74,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.onClick as semanticsOnClick
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -81,6 +86,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.TravelEntry
+import au.ingo.betterattend.ui.components.SegmentedItem
+import au.ingo.betterattend.ui.components.ProvideEntranceStagger
+import au.ingo.betterattend.ui.components.staggeredEntrance
+import au.ingo.betterattend.ui.components.MaterialShapesCookie4
+import au.ingo.betterattend.ui.components.MaterialShapesClover
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
@@ -109,7 +119,7 @@ fun TravelContent(
     val event = state.event
     val cal = state.calendar
     val tz = cal?.eventTimezone ?: event?.timezone
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -117,7 +127,8 @@ fun TravelContent(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            // A large title that collapses as the list scrolls.
+            LargeFlexibleTopAppBar(
                 title = { Text("Travel") },
                 subtitle = { if (event != null) Text(event.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
@@ -279,16 +290,19 @@ private fun TravelList(
                         )
                     }
                 }
-                ListPhase.Rows -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                ListPhase.Rows -> ProvideEntranceStagger { LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     sections.forEach { section ->
                         // Headers fade in/out as filtering adds or empties a day; no placement animation, which
                         // would fight the sticky positioning.
                         stickyHeader(key = "h_${section.key}") { SectionHeaderRow(section, Modifier.animateItem(placementSpec = null)) }
-                        items(section.entries, key = { it.id }) { entry ->
-                            TravelRow(entry, tz, canOpen, onClick = { haptics.click(); onOpen(entry) }, modifier = Modifier.animateItem())
+                        itemsIndexed(section.entries, key = { _, it -> it.id }) { i, entry ->
+                            TravelRow(
+                                entry, tz, canOpen, onClick = { haptics.click(); onOpen(entry) },
+                                index = i, count = section.entries.size, modifier = Modifier.animateItem(),
+                            )
                         }
                     }
-                }
+                } }
             }
             }
         }
@@ -303,7 +317,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit, modifier: Mod
         placeholder = { Text("Search name, route or flight") },
         leadingIcon = { Icon(Icons.Outlined.Search, null) },
         trailingIcon = {
-            if (query.isNotEmpty()) IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Clear search") }
+            if (query.isNotEmpty()) IconButton(onClick = { onChange("") }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") }
         },
         singleLine = true,
         shape = CircleShape,
@@ -354,7 +368,7 @@ private fun SectionHeaderRow(section: TravelSection, modifier: Modifier = Modifi
             Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp).semantics { heading() },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(section.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(section.title, style = MaterialTheme.typography.titleLargeEmphasized, color = MaterialTheme.colorScheme.primary)
             if (section.subtitle != null) {
                 Spacer(Modifier.width(8.dp))
                 Text(section.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -374,9 +388,18 @@ private fun SectionHeaderRow(section: TravelSection, modifier: Modifier = Modifi
 }
 
 @Composable
-internal fun TravelRow(entry: TravelEntry, tz: String?, clickable: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun TravelRow(
+    entry: TravelEntry,
+    tz: String?,
+    clickable: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Position in its day's segmented group. */
+    index: Int = 0,
+    count: Int = 1,
+) {
     val status = MaterialTheme.status
-    val container = if (entry.isUnaccompaniedMinor) status.warningContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerLow
+    val container = if (entry.isUnaccompaniedMinor) status.warningContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainer
     val inbound = entry.direction == "inbound"
     val time = Time.time(entry.primaryTimeAt, tz)
     val description = buildString {
@@ -405,7 +428,7 @@ internal fun TravelRow(entry: TravelEntry, tz: String?, clickable: Boolean, onCl
             Box(
                 Modifier.size(40.dp).background(
                     if (inbound) status.successContainer else status.infoContainer,
-                    CircleShape,
+                    if (inbound) MaterialShapesCookie4 else MaterialShapesClover,
                 ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -445,12 +468,17 @@ internal fun TravelRow(entry: TravelEntry, tz: String?, clickable: Boolean, onCl
             if (clickable) Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    val m = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp).clearAndSetSemantics { contentDescription = description }
-    if (clickable) {
-        Surface(onClick = onClick, shape = MaterialTheme.shapes.medium, color = container, modifier = m, content = content)
-    } else {
-        Surface(shape = MaterialTheme.shapes.medium, color = container, modifier = m, content = content)
-    }
+    SegmentedItem(
+        index, count,
+        // The row is one TalkBack stop, so its click action is restated here (clearing drops the inner one).
+        modifier.staggeredEntrance().padding(start = 12.dp, end = 12.dp, bottom = if (index == count - 1) 8.dp else 0.dp).clearAndSetSemantics {
+            contentDescription = description
+            if (clickable) { role = Role.Button; semanticsOnClick { onClick(); true } }
+        },
+        onClick = if (clickable) onClick else null,
+        color = container,
+        content = content,
+    )
 }
 
 @Composable

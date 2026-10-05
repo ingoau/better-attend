@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material.icons.outlined.Train
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -312,11 +313,11 @@ private fun TicketDetailScaffold(
         topBar = {
             val title: @Composable () -> Unit = { Text(if (ticket?.confirmed == false) "Registration" else "Your pass", maxLines = 1) }
             val nav: @Composable () -> Unit = {
-                IconButton(onClick = actions.onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
+                IconButton(onClick = actions.onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
             }
             val barActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                 if (ticket?.confirmed == true) {
-                    IconButton(onClick = actions.onShowQr) { Icon(Icons.Outlined.Fullscreen, "Show QR code full screen") }
+                    IconButton(onClick = actions.onShowQr, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Fullscreen, "Show QR code full screen") }
                 }
             }
             val colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -704,7 +705,7 @@ private fun SafetyRow(icon: ImageVector, title: String, sub: String, onClick: ()
 fun FullScreenQr(t: Ticket, onClose: () -> Unit) {
     val ink = Color(0xFF121217)
     Box(Modifier.fillMaxSize().background(Color.White).windowInsetsPadding(WindowInsets.safeDrawing)) {
-        IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+        IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp), shapes = IconButtonDefaults.shapes()) {
             Icon(Icons.Outlined.Close, "Close full-screen QR", tint = ink)
         }
         Column(

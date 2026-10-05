@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
@@ -38,6 +36,7 @@ import androidx.compose.material.icons.outlined.ScreenLockPortrait
 import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,6 +77,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,7 @@ import au.ingo.betterattend.data.auth.AuthRepository
 import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.store.ThemeMode
 import au.ingo.betterattend.ui.components.Avatar
+import au.ingo.betterattend.ui.components.SegmentedItem
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.dashboard.DashboardLogic
@@ -120,7 +122,7 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
         topBar = {
             LargeFlexibleTopAppBar(
                 title = { Text("Settings") },
-                navigationIcon = { IconButton(onClick = actions.onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = actions.onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -266,8 +268,8 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             icon = { Icon(Icons.Outlined.DeleteSweep, null) },
             title = { Text("Clear cached data?") },
             text = { Text("Saved participants, travel and tickets are removed from this phone and downloaded again when needed. The first sync of a big event can take a moment.") },
-            confirmButton = { Button(onClick = { confirmClear = false; actions.onClearCache() }) { Text("Clear") } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+            confirmButton = { Button(onClick = { confirmClear = false; actions.onClearCache() }, shapes = ButtonDefaults.shapes()) { Text("Clear") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } },
         )
     }
 
@@ -295,9 +297,9 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
                 }
             },
             confirmButton = {
-                Button(onClick = { confirmIssueToken = false; actions.onIssueToken(tokenName.ifBlank { state.defaultTokenName }) }) { Text("Sign in") }
+                Button(onClick = { confirmIssueToken = false; actions.onIssueToken(tokenName.ifBlank { state.defaultTokenName }) }, shapes = ButtonDefaults.shapes()) { Text("Sign in") }
             },
-            dismissButton = { TextButton(onClick = { confirmIssueToken = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmIssueToken = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } },
         )
     }
 
@@ -320,9 +322,10 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
                 Button(
                     onClick = { confirmSignOut = false; actions.onSignOut() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                    shapes = ButtonDefaults.shapes(),
                 ) { Text("Sign out") }
             },
-            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmSignOut = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } },
         )
     }
 }
@@ -365,37 +368,23 @@ private fun AccountCard(state: SettingsUiState) {
 private fun GroupTitle(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleMediumEmphasized,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp).semantics { heading() },
+        modifier = Modifier.padding(start = 16.dp, top = 28.dp, bottom = 10.dp).semantics { heading() },
     )
 }
 
-/** One item in an expressive segmented group: big outer corners, small inner ones, 2dp gaps. */
+/** One item in an expressive segmented group; its corners spring rounder while pressed. */
 @Composable
 private fun Segment(
     index: Int,
     count: Int,
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    role: Role = Role.Button,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
-) {
-    val big = 24.dp
-    val small = 6.dp
-    val shape = RoundedCornerShape(
-        topStart = if (index == 0) big else small, topEnd = if (index == 0) big else small,
-        bottomStart = if (index == count - 1) big else small, bottomEnd = if (index == count - 1) big else small,
-    )
-    val m = Modifier.fillMaxWidth().padding(bottom = if (index == count - 1) 0.dp else 2.dp)
-    val color = MaterialTheme.colorScheme.surfaceContainer
-    if (onClick != null) {
-        Surface(onClick = onClick, enabled = enabled, shape = shape, color = color, modifier = m) {
-            content()
-        }
-    } else {
-        Surface(shape = shape, color = color, modifier = m) { content() }
-    }
-}
+) = SegmentedItem(index, count, modifier, onClick = onClick, enabled = enabled, role = role, content = content)
 
 @Composable
 private fun SwitchRow(
@@ -409,14 +398,20 @@ private fun SwitchRow(
     onChange: (Boolean) -> Unit,
 ) {
     val haptics = rememberHaptics()
-    Segment(index, count) {
+    // The whole segment toggles (and morphs on press); the switch is just its indicator.
+    Segment(
+        index, count,
+        onClick = { haptics.toggle(!checked); onChange(!checked) },
+        enabled = enabled,
+        role = Role.Switch,
+        modifier = Modifier.semantics { toggleableState = ToggleableState(checked) },
+    ) {
         ListItem(
             headlineContent = { Text(title) },
             supportingContent = { Text(subtitle) },
             leadingContent = { Icon(icon, null) },
             trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.toggle(it); onChange(it) },
         )
     }
 }

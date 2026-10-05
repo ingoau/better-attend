@@ -69,7 +69,7 @@ fun FilterSheetContent(
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Filter & sort", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = { onOptions(FilterOptions()) }, enabled = options.activeCount > 0) { Text("Clear all") }
+            TextButton(onClick = { onOptions(FilterOptions()) }, enabled = options.activeCount > 0, shapes = ButtonDefaults.shapes()) { Text("Clear all") }
         }
         Column(
             Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),

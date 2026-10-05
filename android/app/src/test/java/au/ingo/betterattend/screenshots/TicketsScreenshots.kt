@@ -25,6 +25,11 @@ class TicketsScreenshots : ScreenshotTest() {
         id = "t3", checkedIn = true,
         event = SampleData.ticketEvent.copy(id = "e3", name = "Counterspell Tuggeranong", startsAt = "2026-06-01T22:00:00Z", endsAt = "2026-06-02T08:00:00Z",
             timezone = "Australia/Canberra", locationCity = "Tuggeranong"),
+    ) + SampleData.ticket.copy(
+        // A second past event, so the past-tickets carousel has something to swipe to.
+        id = "t4", checkedIn = true,
+        event = SampleData.ticketEvent.copy(id = "e4", name = "Scrapyard Sydney", startsAt = "2026-03-15T22:00:00Z", endsAt = "2026-03-16T08:00:00Z",
+            timezone = "Australia/Sydney", locationCity = "Sydney"),
     )
 
     @Test fun ticketsList() = snap("tickets_list") {

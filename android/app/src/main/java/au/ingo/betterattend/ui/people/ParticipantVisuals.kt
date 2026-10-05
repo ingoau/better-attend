@@ -43,6 +43,11 @@ import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
+import au.ingo.betterattend.ui.components.SegmentedItem
+import au.ingo.betterattend.ui.components.staggeredEntrance
+import au.ingo.betterattend.ui.nav.participantAvatarKey
+import au.ingo.betterattend.ui.nav.sharedElement
+import au.ingo.betterattend.ui.components.rememberMorphShape
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
 
@@ -146,15 +151,24 @@ fun ParticipantRow(
     timezone: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Position in its segmented group (rows under one letter). */
+    index: Int = 0,
+    count: Int = 1,
 ) {
     val v = statusVisual(p)
     val secondary = checkInLine(p, timezone) ?: p.email ?: statusLabel(p.status)
-    Surface(onClick = onClick, color = Color.Transparent, modifier = modifier.fillMaxWidth()) {
+    SegmentedItem(index, count, modifier.staggeredEntrance().padding(horizontal = 12.dp), onClick = onClick) {
         Row(
-            Modifier.heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.heightIn(min = 72.dp).padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(p.fullName ?: p.name, p.headshotUrl, size = 44.dp)
+            // Blooms from a circle into a cookie when they check in.
+            // Flies into the detail header when the row is opened.
+            val avatarShape = rememberMorphShape(p.isCheckedIn)
+            Avatar(
+                p.fullName ?: p.name, p.headshotUrl, size = 44.dp, shape = avatarShape,
+                modifier = Modifier.sharedElement(participantAvatarKey(p.participantEventId), avatarShape),
+            )
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

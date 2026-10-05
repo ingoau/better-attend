@@ -147,7 +147,7 @@ fun InviteSheetContent(
             )
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDone, enabled = enabled) { Text("Cancel") }
+                TextButton(onClick = onDone, enabled = enabled, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = onSend, enabled = enabled && state.email.isNotBlank(), shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                     if (state.sending) {

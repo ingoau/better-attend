@@ -1,6 +1,9 @@
 package au.ingo.betterattend.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -94,6 +97,7 @@ fun AttendRoot(container: AppContainer, onSignIn: () -> Unit, onIssueToken: (dev
     } }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (deviceName: String) -> Unit) {
     val nav = rememberNavController()
@@ -155,6 +159,8 @@ private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (devi
         ExternalNavRequests.ticket.value = null
     }
 
+    // One shared-transition scope over every destination, so elements (avatars) can fly between screens.
+    SharedTransitionLayout { CompositionLocalProvider(LocalSharedTransitionScope provides this) {
     NavHost(
         nav,
         startDestination = MainRoute,
@@ -166,7 +172,7 @@ private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (devi
         predictivePopEnterTransition = AppMotion.predictivePopEnter,
         predictivePopExitTransition = AppMotion.predictivePopExit,
     ) {
-        composable<MainRoute> {
+        composable<MainRoute> { CompositionLocalProvider(LocalNavAnimatedScope provides this) {
             UnderlayFrame { MainTabs(tabs, tabRequests) { tab ->
                 when (tab) {
                     Tab.Home -> DashboardScreen(navigator)
@@ -176,8 +182,11 @@ private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (devi
                     Tab.Tickets -> TicketsScreen(navigator, showAccount = tabs.size == 1)
                 }
             } }
+        } }
+        composable<ParticipantRoute> {
+            val r = it.toRoute<ParticipantRoute>()
+            CompositionLocalProvider(LocalNavAnimatedScope provides this) { CardFrame { ParticipantDetailScreen(r.eventId, r.participantEventId, navigator) } }
         }
-        composable<ParticipantRoute> { val r = it.toRoute<ParticipantRoute>(); CardFrame { ParticipantDetailScreen(r.eventId, r.participantEventId, navigator) } }
         composable<TicketRoute> { val id = it.toRoute<TicketRoute>().ticketId; CardFrame { TicketDetailScreen(id, navigator) } }
         composable<SettingsRoute> { CardFrame { SettingsScreen(navigator, onIssueToken) } }
         composable<BlastsRoute> { val id = it.toRoute<BlastsRoute>().eventId; CardFrame { BlastsScreen(id, navigator) } }
@@ -186,6 +195,7 @@ private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (devi
         composable<RollCallRoute> { val id = it.toRoute<RollCallRoute>().eventId; CardFrame { RollCallScreen(id, navigator) } }
         composable<FirstAidRoute> { val id = it.toRoute<FirstAidRoute>().eventId; CardFrame { FirstAidScreen(id, navigator) } }
     }
+    } }
 
     if (pickerOpen) {
         EventPickerSheet(

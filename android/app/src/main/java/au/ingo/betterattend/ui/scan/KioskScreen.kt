@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FlipCameraAndroid
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -216,7 +217,7 @@ fun KioskScreen(eventId: String, scanContextId: String?, nav: AppNavigator) {
     if (event == null) {
         if (eventsLoading) LoadingState(message = "Starting kiosk…")
         else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Button(onClick = nav::back) { Text("This event isn't available. Go back") }
+            Button(onClick = nav::back, shapes = ButtonDefaults.shapes()) { Text("This event isn't available. Go back") }
         }
         return
     }
@@ -301,7 +302,7 @@ fun KioskContent(
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
             // Header: faint exit (staff only) · event + context · camera flip
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onExit, modifier = Modifier.alpha(0.55f)) {
+                IconButton(onClick = onExit, modifier = Modifier.alpha(0.55f), shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Outlined.Lock, "Exit kiosk mode (staff PIN required)", tint = Color.White)
                 }
                 Spacer(Modifier.weight(1f))
@@ -313,7 +314,7 @@ fun KioskContent(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onFlipCamera, enabled = state.camera == CameraAccess.Granted) {
+                IconButton(onClick = onFlipCamera, enabled = state.camera == CameraAccess.Granted, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Outlined.FlipCameraAndroid, if (state.frontCamera) "Switch to rear camera" else "Switch to front camera", tint = Color.White)
                 }
             }
@@ -424,7 +425,7 @@ fun PinPad(entered: Int, error: Boolean, enabled: Boolean, onDigit: (Char) -> Un
                 row.forEach { key ->
                     when (key) {
                         '<' -> Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) {
-                            IconButton(onClick = onBackspace, enabled = enabled && entered > 0, modifier = Modifier.size(64.dp)) {
+                            IconButton(onClick = onBackspace, enabled = enabled && entered > 0, modifier = Modifier.size(64.dp), shapes = IconButtonDefaults.shapes()) {
                                 Icon(Icons.AutoMirrored.Outlined.Backspace, "Delete digit")
                             }
                         }
@@ -476,7 +477,7 @@ fun KioskSetupContent(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth()) {
-                IconButton(onClick = onCancel) { Icon(Icons.Outlined.Close, "Cancel kiosk mode") }
+                IconButton(onClick = onCancel, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Cancel kiosk mode") }
             }
             Spacer(Modifier.weight(0.4f))
             Box(Modifier.size(88.dp).clip(au.ingo.betterattend.ui.components.MaterialShapesCookie).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {

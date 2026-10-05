@@ -32,6 +32,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -255,7 +257,19 @@ fun TicketsContent(
                     }
                     if (past.isNotEmpty()) {
                         item(key = "past_header") { SectionHeader("Past events", Modifier.animateItem()) }
-                        items(past, key = { it.id }) { t -> TicketCard(t, now, featured = false, past = true, onClick = { open(t) }, modifier = Modifier.animateItem()) }
+                        // Past tickets swipe sideways in a carousel instead of stacking up.
+                        item(key = "past") {
+                            val carousel = rememberCarouselState { past.size }
+                            HorizontalUncontainedCarousel(
+                                state = carousel,
+                                itemWidth = 300.dp,
+                                itemSpacing = 12.dp,
+                                modifier = Modifier.animateItem().fillMaxWidth(),
+                            ) { i ->
+                                val t = past[i]
+                                TicketCard(t, now, featured = false, past = true, onClick = { open(t) }, modifier = Modifier.maskClip(MaterialTheme.shapes.extraLarge))
+                            }
+                        }
                     }
                 }
             }

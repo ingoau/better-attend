@@ -96,6 +96,7 @@ import au.ingo.betterattend.data.repo.RollCall
 import au.ingo.betterattend.data.repo.RollCallExpected
 import au.ingo.betterattend.data.repo.Roster
 import au.ingo.betterattend.scan.ScanAdmission
+import au.ingo.betterattend.ui.components.rememberMorphShape
 import au.ingo.betterattend.ui.components.AnimatedNumber
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.CountFilterChips
@@ -180,7 +181,7 @@ private fun RollCallTopBar(
     MediumFlexibleTopAppBar(
         title = { Text(title) },
         subtitle = { if (subtitle != null) Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+        navigationIcon = { IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
         actions = actions,
         scrollBehavior = scrollBehavior,
     )
@@ -426,7 +427,7 @@ fun RollCallRunningContent(
     Scaffold(
         topBar = {
             RollCallTopBar("Roll call", RollCallLogic.subtitle(rc, tz), actions.onBack) {
-                IconButton(onClick = { haptics.click(); adding = true }) { Icon(Icons.Outlined.PersonAdd, "Add someone") }
+                IconButton(onClick = { haptics.click(); adding = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.PersonAdd, "Add someone") }
             }
         },
         floatingActionButton = {
@@ -475,8 +476,8 @@ fun RollCallRunningContent(
                     else "${people(counts.missing)} ${if (counts.missing == 1) "is" else "are"} still missing. You'll see a summary, and can go back to keep ticking.",
                 )
             },
-            confirmButton = { Button(onClick = { haptics.confirm(); confirmFinish = false; actions.onFinish() }) { Text("Finish") } },
-            dismissButton = { TextButton(onClick = { confirmFinish = false }) { Text("Keep counting") } },
+            confirmButton = { Button(onClick = { haptics.confirm(); confirmFinish = false; actions.onFinish() }, shapes = ButtonDefaults.shapes()) { Text("Finish") } },
+            dismissButton = { TextButton(onClick = { confirmFinish = false }, shapes = ButtonDefaults.shapes()) { Text("Keep counting") } },
         )
     }
 }
@@ -496,7 +497,7 @@ private fun CounterCard(counts: RollCallCounts, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.padding(20.dp).animateContentSize()) {
             Row(verticalAlignment = Alignment.Bottom) {
-                AnimatedNumber(counts.accounted, style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold))
+                AnimatedNumber(counts.accounted, style = MaterialTheme.typography.displayMediumEmphasized)
                 Text(
                     " / ${counts.total}",
                     style = MaterialTheme.typography.headlineMedium,
@@ -580,7 +581,8 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
             .semantics { stateDescription = if (row.accounted) "Accounted for" else "Missing" },
     ) {
         Row(Modifier.heightIn(min = 72.dp).padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(p?.fullName ?: row.name, p?.headshotUrl, size = 44.dp)
+            // Blooms into a cookie once they're accounted for.
+            Avatar(p?.fullName ?: row.name, p?.headshotUrl, size = 44.dp, shape = rememberMorphShape(row.accounted))
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -607,6 +609,7 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
             FilledIconToggleButton(
                 checked = row.accounted,
                 onCheckedChange = { onToggle() },
+                shapes = IconButtonDefaults.toggleableShapes(),
                 colors = IconButtonDefaults.filledIconToggleButtonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -692,7 +695,7 @@ fun RollCallSummaryContent(state: RollCallUiState, rc: RollCall, snackbar: Snack
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             RollCallTopBar("Roll call summary", subtitle, actions.onBack, scroll) {
-                TextButton(onClick = { haptics.click(); actions.onResume() }) { Text("Keep counting") }
+                TextButton(onClick = { haptics.click(); actions.onResume() }, shapes = ButtonDefaults.shapes()) { Text("Keep counting") }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -763,8 +766,8 @@ fun RollCallSummaryContent(state: RollCallUiState, rc: RollCall, snackbar: Snack
                         (rc.scanContextName?.let { " Scans recorded at $it stay in Attend." } ?: ""),
                 )
             },
-            confirmButton = { Button(onClick = { haptics.confirm(); confirmEnd = false; actions.onEnd() }) { Text("End") } },
-            dismissButton = { TextButton(onClick = { confirmEnd = false }) { Text("Cancel") } },
+            confirmButton = { Button(onClick = { haptics.confirm(); confirmEnd = false; actions.onEnd() }, shapes = ButtonDefaults.shapes()) { Text("End") } },
+            dismissButton = { TextButton(onClick = { confirmEnd = false }, shapes = ButtonDefaults.shapes()) { Text("Cancel") } },
         )
     }
 }

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -618,7 +619,7 @@ private fun ConsentRow(c: Consent, tz: String?, actions: ContactActions) {
             c.failureReason?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = cs.error) }
         }
         c.documentUrl?.let { url ->
-            IconButton(onClick = { actions.openUrl(url) }) {
+            IconButton(onClick = { actions.openUrl(url) }, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.AutoMirrored.Outlined.OpenInNew, "Open ${consentLabel(c.consentType)} document")
             }
         }

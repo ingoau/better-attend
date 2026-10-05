@@ -57,10 +57,9 @@ import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroup
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -75,11 +74,22 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material3.FloatingToolbarExitDirection
+import androidx.compose.material3.FloatingToolbarScrollBehavior
+import androidx.compose.material3.HorizontalFloatingToolbar
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SplitButtonDefaults
 import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.toShape
@@ -104,6 +114,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -120,6 +131,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.ui.LocalAppContainer
+import au.ingo.betterattend.ui.nav.participantAvatarKey
+import au.ingo.betterattend.ui.nav.sharedElement
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.EmptyState
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
@@ -379,7 +392,8 @@ fun ParticipantDetailContent(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        snackbarHost = { SnackbarHost(snackbar) },
+        // Above the floating toolbar, so a snackbar never hides the actions.
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = FloatingToolbarDefaults.ContainerSize + FloatingToolbarDefaults.ScreenOffset)) },
         topBar = {
             TopAppBar(
                 title = {
@@ -400,7 +414,7 @@ fun ParticipantDetailContent(
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = callbacks.back, enabled = !removing) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = callbacks.back, enabled = !removing, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 actions = { if (p != null) OverflowMenu(state, p, callbacks) { dialog = it } },
                 scrollBehavior = scroll,
             )
@@ -426,8 +440,18 @@ fun ParticipantDetailContent(
                         body = state.error ?: "They may have been removed from this event.",
                         actionLabel = "Try again", onAction = callbacks.refresh,
                     )
-                    else -> HapticPullToRefreshBox(isRefreshing = state.loading && state.detailLoaded, onRefresh = callbacks.refresh) {
-                        DetailBody(state, p, tz, now, list, callbacks) { dialog = it }
+                    else -> {
+                        // The person's actions float at the bottom and tuck away while scrolling down.
+                        val toolbarScroll = FloatingToolbarDefaults.exitAlwaysScrollBehavior(exitDirection = FloatingToolbarExitDirection.Bottom)
+                        Box(Modifier.fillMaxSize().nestedScroll(toolbarScroll)) {
+                            HapticPullToRefreshBox(isRefreshing = state.loading && state.detailLoaded, onRefresh = callbacks.refresh) {
+                                DetailBody(state, p, tz, now, list, callbacks) { dialog = it }
+                            }
+                            ActionsToolbar(
+                                state, p, callbacks, { dialog = it }, toolbarScroll,
+                                Modifier.align(Alignment.BottomCenter).offset(y = -FloatingToolbarDefaults.ScreenOffset),
+                            )
+                        }
                     }
                 }
             }
@@ -479,7 +503,7 @@ fun ParticipantDetailContent(
 private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More actions for this person") }
+        IconButton(onClick = { open = true }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.MoreVert, "More actions for this person") }
         // Edit and the web link are in the action row; this keeps the copy and the destructive actions.
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
@@ -536,7 +560,8 @@ private fun DetailBody(
     LazyColumn(
         state = list,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+        // Room at the bottom for the floating toolbar.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Sections fill in as the full profile arrives: each one fades in / grows and the rest glide
@@ -590,8 +615,10 @@ private fun Header(p: Participant, tz: String?, onOpenPhoto: () -> Unit) {
         val cookie = MaterialShapes.Cookie9Sided.toShape()
         Avatar(
             p.fullName ?: p.name, p.headshotUrl, size = 136.dp, shape = cookie,
-            // Only a real photo opens full screen; initials have nothing more to show.
-            modifier = if (p.headshotUrl != null) Modifier.clip(cookie).clickable(onClickLabel = "View photo", onClick = onOpenPhoto) else Modifier,
+            // Grows out of the avatar tapped in the People list. Only a real photo opens full screen;
+            // initials have nothing more to show.
+            modifier = Modifier.sharedElement(participantAvatarKey(p.participantEventId), cookie)
+                .then(if (p.headshotUrl != null) Modifier.clip(cookie).clickable(onClickLabel = "View photo", onClick = onOpenPhoto) else Modifier),
         )
         Spacer(Modifier.height(12.dp))
         Text(p.name, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
@@ -634,61 +661,78 @@ private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: Detail
             },
             label = "checkInButtons",
         ) { checkedIn -> CheckInButtons(state, p, checkedIn, callbacks, onDialog) }
-        // One row; every way to reach them sits behind Contact, in a sheet.
-        val reachable = remember(p, state.canViewPii) { contactOptions(p, state.canViewPii, ContactActions()).isNotEmpty() }
-        val actions = buildList {
-            if (reachable) add(QuickAction(Icons.Outlined.ContactPhone, "Contact") { onDialog("contact") })
-            add(QuickAction(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
-            // Only once the full profile is here: the roster copy has no legal names or birthday.
-            if (state.canEditDetails && state.detailLoaded) add(QuickAction(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
-            if (state.event != null) add(QuickAction(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
-        }
-        QuickActionGroup(actions)
     }
 }
 
 private class QuickAction(val icon: ImageVector, val label: String, val busy: Boolean = false, val onClick: () -> Unit)
 
 /**
- * An expressive button group, like Home's quick actions: pill buttons share the row, the pressed one
- * squares off and pushes its neighbours aside, and any that don't fit move into an overflow menu.
+ * The person's secondary actions (contact, badge, edit, web) in an Expressive floating toolbar: a
+ * vibrant pill at the bottom of the screen that slides away while scrolling down and returns on the
+ * way back up. Contact, the most used, is the toolbar's filled action; every way to reach them sits
+ * behind it, in a sheet.
  */
 @Composable
-private fun QuickActionGroup(actions: List<QuickAction>) {
-    ButtonGroup(
-        overflowIndicator = { menu -> ButtonGroupDefaults.OverflowIndicator(menu) },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        actions.forEach { a ->
-            customItem(
-                buttonGroupContent = {
-                    val source = remember { MutableInteractionSource() }
-                    FilledTonalButton(
+private fun ActionsToolbar(
+    state: DetailUiState,
+    p: Participant,
+    callbacks: DetailCallbacks,
+    onDialog: (String) -> Unit,
+    scrollBehavior: FloatingToolbarScrollBehavior,
+    modifier: Modifier = Modifier,
+) {
+    val reachable = remember(p, state.canViewPii) { contactOptions(p, state.canViewPii, ContactActions()).isNotEmpty() }
+    val actions = buildList {
+        add(QuickAction(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
+        // Only once the full profile is here: the roster copy has no legal names or birthday.
+        if (state.canEditDetails && state.detailLoaded) add(QuickAction(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
+        if (state.event != null) add(QuickAction(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
+    }
+    val colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors()
+    HorizontalFloatingToolbar(
+        expanded = true,
+        colors = colors,
+        scrollBehavior = scrollBehavior,
+        modifier = modifier,
+        content = {
+            actions.forEach { a ->
+                TooltipIconButton(a.label) {
+                    IconButton(
                         onClick = a.onClick,
                         enabled = !a.busy,
-                        shapes = ButtonDefaults.shapes(),
-                        interactionSource = source,
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 12.dp),
-                        modifier = Modifier.weight(1f).animateWidth(source).heightIn(min = 76.dp),
+                        shapes = IconButtonDefaults.shapes(),
+                        // Labelled on the button, so it keeps its name while the icon is swapped for a spinner.
+                        modifier = Modifier.semantics { contentDescription = a.label },
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            if (a.busy) LoadingIndicator(Modifier.size(26.dp)) else Icon(a.icon, null, Modifier.size(26.dp))
-                            Spacer(Modifier.height(4.dp))
-                            Text(a.label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
+                        if (a.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(a.icon, null)
                     }
-                },
-                menuContent = { menu ->
-                    DropdownMenuItem(
-                        text = { Text(a.label) },
-                        leadingIcon = { Icon(a.icon, null) },
-                        enabled = !a.busy,
-                        onClick = { menu.dismiss(); a.onClick() },
-                    )
-                },
-            )
-        }
-    }
+                }
+            }
+            if (reachable) {
+                Spacer(Modifier.width(4.dp))
+                Button(
+                    onClick = { onDialog("contact") },
+                    shapes = ButtonDefaults.shapes(),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.toolbarContentColor, contentColor = colors.toolbarContainerColor),
+                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                ) {
+                    Icon(Icons.Outlined.ContactPhone, null, Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                    Text("Contact", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+    )
+}
+
+/** An icon button with its label as a long-press tooltip, since the toolbar shows icons only. */
+@Composable
+private fun TooltipIconButton(label: String, content: @Composable () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) { content() }
 }
 
 @Composable
@@ -700,8 +744,8 @@ private fun CheckInButtons(state: DetailUiState, p: Participant, checkedIn: Bool
         FilledTonalButton(
             onClick = { onDialog("undo") },
             enabled = busy == null,
-            shapes = ButtonDefaults.shapes(),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shapes = ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight),
+            modifier = Modifier.fillMaxWidth().height(ButtonDefaults.MediumContainerHeight),
         ) {
             if (busy == DetailBusy.Undoing) LoadingIndicator(Modifier.size(24.dp)) else Icon(Icons.AutoMirrored.Outlined.Undo, null)
             Spacer(Modifier.width(8.dp))
@@ -748,13 +792,13 @@ private fun CheckInButtons(state: DetailUiState, p: Participant, checkedIn: Bool
             Button(
                 onClick = { callbacks.checkIn(default) },
                 enabled = busy == null,
-                shapes = ButtonDefaults.shapes(),
-                modifier = Modifier.weight(1f).height(56.dp),
+                shapes = ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight),
+                modifier = Modifier.weight(1f).height(ButtonDefaults.MediumContainerHeight),
             ) { CheckInLabel(busy == DetailBusy.CheckingIn, label) }
         }
         if (p.scansByContext.isNotEmpty()) {
             Spacer(Modifier.width(8.dp))
-            FilledTonalIconButton(onClick = { onDialog("undo") }, enabled = busy == null, modifier = Modifier.size(56.dp)) {
+            FilledTonalIconButton(onClick = { onDialog("undo") }, enabled = busy == null, modifier = Modifier.size(56.dp), shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.AutoMirrored.Outlined.Undo, "Undo scans")
             }
         }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -79,7 +80,7 @@ fun ContextSelector(
             Spacer(Modifier.width(10.dp))
             Text("Couldn't load checkpoints. Scans still work if the event has just one.", style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            TextButton(onClick = onRetry) { Text("Retry") }
+            TextButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) { Text("Retry") }
         }
         contexts.isEmpty() -> Unit
         contexts.size == 1 -> SingleContext(contexts.first(), timezone, modifier)

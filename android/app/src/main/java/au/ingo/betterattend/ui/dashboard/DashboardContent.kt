@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,13 +65,16 @@ import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
+import androidx.compose.material3.carousel.rememberCarouselState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -86,6 +91,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -116,8 +123,18 @@ import au.ingo.betterattend.ui.components.AnimatedNumber
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.EmptyState
+import au.ingo.betterattend.ui.components.EventTitle
 import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.MaterialShapesCookie
+import au.ingo.betterattend.ui.components.MaterialShapesCookie4
+import au.ingo.betterattend.ui.components.MaterialShapesFlower
+import au.ingo.betterattend.ui.components.MaterialShapesSunny
+import au.ingo.betterattend.ui.components.ExpressiveSurface
+import au.ingo.betterattend.ui.components.SegmentedItem
+import au.ingo.betterattend.ui.components.pressFlexWeight
+import au.ingo.betterattend.ui.components.rememberSlowSpin
+import au.ingo.betterattend.ui.components.ProvideEntranceStagger
+import au.ingo.betterattend.ui.components.staggeredEntrance
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.components.rememberHaptics
@@ -214,21 +231,8 @@ private enum class HomePhase { Loading, NoEvents, PickEvent, Content }
 
 /** A Home card that fades/slides into place when it appears, moves or leaves (e.g. the offline banner). */
 private fun LazyListScope.card(key: String, content: @Composable () -> Unit) {
-    item(key = key) { Box(Modifier.animateItem()) { content() } }
-}
-
-@Composable
-private fun EventTitle(name: String?, onClick: () -> Unit) {
-    Row(
-        Modifier.clip(MaterialTheme.shapes.small)
-            .clickable(onClickLabel = "Switch event", role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = "Event: ${name ?: "none chosen"}" }
-            .padding(end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(name ?: "Choose an event", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        Icon(Icons.Outlined.ExpandMore, null)
-    }
+    // Cards cascade in, one after another, the first time the dashboard fills.
+    item(key = key) { Box(Modifier.animateItem().staggeredEntrance()) { content() } }
 }
 
 @Composable
@@ -299,6 +303,7 @@ private fun DashboardBody(
         }
     }
 
+    ProvideEntranceStagger {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
@@ -359,6 +364,7 @@ private fun DashboardBody(
             }
         }
     }
+    }
 }
 
 // ---------------------------------------------------------------- status
@@ -397,7 +403,18 @@ private fun HeroCard(modifier: Modifier = Modifier, content: @Composable () -> U
         shape = MaterialTheme.shapes.extraLarge,
         modifier = modifier.fillMaxWidth(),
     ) {
-        Box(Modifier.padding(20.dp)) { content() }
+        Box {
+            // A big, soft Expressive shape peeking in from the corner, behind the numbers. matchParentSize +
+            // unbounded wrap so it never makes the card taller than its content.
+            Box(Modifier.matchParentSize().wrapContentSize(Alignment.TopEnd, unbounded = true)) {
+                val spin = rememberSlowSpin(periodMillis = 90_000)
+                Box(
+                    Modifier.offset(x = 56.dp, y = (-64).dp).size(220.dp).graphicsLayer { rotationZ = 12f + spin() }
+                        .clip(MaterialShapesSunny).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.06f)),
+                )
+            }
+            Box(Modifier.padding(20.dp)) { content() }
+        }
     }
 }
 
@@ -439,9 +456,9 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
                     Text(eyebrow, style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
-                        AnimatedNumber(value, style = MaterialTheme.typography.displayLarge)
+                        AnimatedNumber(value, style = MaterialTheme.typography.displayLargeEmphasized)
                         Text(
-                            " / $total", style = MaterialTheme.typography.headlineSmall,
+                            " / $total", style = MaterialTheme.typography.headlineSmallEmphasized,
                             modifier = Modifier.padding(bottom = 8.dp),
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
                         )
@@ -459,7 +476,7 @@ private fun Hero(event: Event, stats: EventStats, phase: Time.Phase, now: Instan
                         stroke = stroke,
                         trackStroke = stroke,
                     )
-                    AnimatedNumber(percent, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, suffix = "%")
+                    AnimatedNumber(percent, style = MaterialTheme.typography.titleLargeEmphasized, fontWeight = FontWeight.Black, suffix = "%")
                 }
             }
             if (chips.isNotEmpty()) {
@@ -535,7 +552,8 @@ private fun QuickActions(showFind: Boolean, onSwitchTab: (Tab) -> Unit, onAnnoun
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(a.icon, null, Modifier.size(26.dp))
                             Spacer(Modifier.height(4.dp))
-                            Text(a.label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                            // Labels thicken while pressed.
+                            Text(a.label, style = MaterialTheme.typography.labelLarge, fontWeight = pressFlexWeight(source, FontWeight.SemiBold, FontWeight.Black), maxLines = 1)
                         }
                     }
                     val padding = PaddingValues(horizontal = 4.dp, vertical = 12.dp)
@@ -565,26 +583,28 @@ private fun SafetyTools(roster: Roster?, sensitive: Boolean, onRollCall: () -> U
     val haptics = rememberHaptics()
     val flagged = remember(roster, sensitive) { roster?.let { FirstAidLogic.people(it.participants, sensitive).size } }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ToolTile("Roll call", "Headcount", Icons.AutoMirrored.Outlined.FactCheck, Modifier.weight(1f)) { haptics.click(); onRollCall() }
+        ToolTile("Roll call", "Headcount", Icons.AutoMirrored.Outlined.FactCheck, MaterialShapesCookie4, Modifier.weight(1f)) { haptics.click(); onRollCall() }
         ToolTile(
             "First aid",
             when (flagged) { null -> "Medical & safety"; 0 -> "No flags"; 1 -> "1 person flagged"; else -> "$flagged people flagged" },
             Icons.Outlined.MedicalServices,
+            MaterialShapesFlower,
             Modifier.weight(1f),
         ) { haptics.click(); onFirstAid() }
     }
 }
 
 @Composable
-private fun ToolTile(label: String, hint: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
-    Surface(
+private fun ToolTile(label: String, hint: String, icon: ImageVector, iconShape: Shape, modifier: Modifier, onClick: () -> Unit) {
+    ExpressiveSurface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.large,
+        top = 28.dp,
+        pressed = 14.dp,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = modifier.semantics { contentDescription = "$label. $hint" },
     ) {
         Row(Modifier.heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(44.dp).clip(iconShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
                 Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
             }
             Spacer(Modifier.width(12.dp))
@@ -617,13 +637,14 @@ private fun StatTiles(stats: EventStats, attention: Int, onOpenPeople: () -> Uni
 
 @Composable
 private fun StatTile(label: String, value: Int, icon: ImageVector, hint: String, modifier: Modifier, onClick: () -> Unit, onShare: () -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
+    ExpressiveSurface(
+        onClick = onClick,
+        onLongClick = onShare,
+        onLongClickLabel = SHARE_LABEL,
+        top = 28.dp,
+        pressed = 14.dp,
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier
-            .clip(MaterialTheme.shapes.large)
-            .combinedClickable(onLongClickLabel = SHARE_LABEL, onLongClick = onShare, onClick = onClick)
-            .semantics { contentDescription = "$label: $value. $hint" },
+        modifier = modifier.semantics { contentDescription = "$label: $value. $hint" },
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -632,7 +653,7 @@ private fun StatTile(label: String, value: Int, icon: ImageVector, hint: String,
                 Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
             Spacer(Modifier.height(6.dp))
-            AnimatedNumber(value, style = MaterialTheme.typography.headlineMedium)
+            AnimatedNumber(value, style = MaterialTheme.typography.headlineMediumEmphasized)
             Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -645,9 +666,10 @@ private fun AttentionTile(stats: EventStats, attention: Int, onClick: () -> Unit
         stats.anaphylaxis.takeIf { it > 0 }?.let { "$it anaphylaxis risk" },
         stats.highSupport.takeIf { it > 0 }?.let { "$it high support" },
     ).joinToString(" · ")
-    Surface(
+    ExpressiveSurface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.large,
+        top = 28.dp,
+        pressed = 14.dp,
         color = s.dangerContainer,
         contentColor = s.onDangerContainer,
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "$attention need attention: $detail. Opens People." },
@@ -658,7 +680,7 @@ private fun AttentionTile(stats: EventStats, attention: Int, onClick: () -> Unit
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
-                Text("$attention need attention", style = MaterialTheme.typography.titleMedium)
+                Text("$attention need attention", style = MaterialTheme.typography.titleMediumEmphasized)
                 Text(detail, style = MaterialTheme.typography.bodyMedium)
             }
             Icon(Icons.Outlined.ChevronRight, null)
@@ -668,39 +690,73 @@ private fun AttentionTile(stats: EventStats, attention: Int, onClick: () -> Unit
 
 // ---------------------------------------------------------------- scan contexts
 
+/**
+ * Scan points as an Expressive multi-browse carousel: big tiles for the ones in view, shrinking
+ * slivers hinting at more, swiped sideways. Long-press a tile to share its number.
+ */
 @Composable
 private fun ContextsCard(rows: List<ContextProgress>, onShare: (String) -> Unit) {
     DashCard(title = "Scan points") {
-        rows.forEachIndexed { i, row ->
-            if (i > 0) Spacer(Modifier.height(14.dp))
-            ContextRow(row) { onShare(ShareStats.context(row.context.id)) }
+        if (rows.size == 1) {
+            ContextTile(rows[0], Modifier.fillMaxWidth()) { onShare(ShareStats.context(rows[0].context.id)) }
+            return@DashCard
+        }
+        val carousel = rememberCarouselState { rows.size }
+        HorizontalMultiBrowseCarousel(
+            state = carousel,
+            preferredItemWidth = 176.dp,
+            itemSpacing = 8.dp,
+            // Taller with larger text, so the name and progress never clip.
+            modifier = Modifier.fillMaxWidth().height(156.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.8f)),
+        ) { i ->
+            val row = rows[i]
+            ContextTile(row, Modifier.fillMaxSize().maskClip(MaterialTheme.shapes.extraLarge)) { onShare(ShareStats.context(row.context.id)) }
         }
     }
 }
 
 @Composable
-private fun ContextRow(row: ContextProgress, onShare: () -> Unit) {
-    Column(Modifier.onLongPress(onShare).clearAndSetSemantics {
-        contentDescription = "${row.context.name}${if (row.active) ", happening now" else ""}: ${row.count} of ${row.total}"
-        onLongClick(SHARE_LABEL) { onShare(); true }
-    }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(contextIcon(row.context), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(10.dp))
-            Text(row.context.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            if (row.active) {
-                Spacer(Modifier.width(8.dp))
-                Pill("Now", MaterialTheme.status.successContainer, MaterialTheme.status.onSuccessContainer)
+private fun ContextTile(row: ContextProgress, modifier: Modifier, onShare: () -> Unit) {
+    val active = row.active
+    val container = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+    val content = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(container)
+            .onLongPress(onShare)
+            .clearAndSetSemantics {
+                contentDescription = "${row.context.name}${if (active) ", happening now" else ""}: ${row.count} of ${row.total}"
+                onLongClick(SHARE_LABEL) { onShare(); true }
             }
-            Spacer(Modifier.weight(1f))
-            Text("${row.count}", style = MaterialTheme.typography.titleMedium)
-            Text(" / ${row.total}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.height(8.dp))
-        if (row.active) {
-            LinearWavyProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth())
-        } else {
-            LinearProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp), strokeCap = StrokeCap.Round)
+            .padding(16.dp),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides content) {
+            Column(Modifier.fillMaxSize()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(36.dp).clip(if (active) MaterialShapesSunny else MaterialShapesCookie4)
+                            .background(if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            contextIcon(row.context), null, Modifier.size(20.dp),
+                            tint = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (active) Pill("Now", MaterialTheme.status.successContainer, MaterialTheme.status.onSuccessContainer)
+                }
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    AnimatedNumber(row.count, style = MaterialTheme.typography.headlineMediumEmphasized)
+                    Text(" / ${row.total}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp), color = content.copy(alpha = 0.7f))
+                }
+                Text(row.context.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(8.dp))
+                if (active) LinearWavyProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth())
+                else LinearProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp), strokeCap = StrokeCap.Round)
+            }
         }
     }
 }
@@ -755,14 +811,18 @@ private fun ArrivalsCard(a: ArrivalsSummary, tz: String?, onShare: (String) -> U
 
 @Composable
 private fun MiniStat(label: String, value: Int, container: Color, content: Color, modifier: Modifier, onClick: () -> Unit, onShare: () -> Unit) {
-    Surface(
+    ExpressiveSurface(
+        onClick = onClick,
+        onLongClick = onShare,
+        onLongClickLabel = SHARE_LABEL,
+        top = 20.dp,
+        pressed = 10.dp,
         color = container,
         contentColor = content,
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier.clip(MaterialTheme.shapes.medium).combinedClickable(onLongClickLabel = SHARE_LABEL, onLongClick = onShare, onClick = onClick),
+        modifier = modifier,
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            AnimatedNumber(value, style = MaterialTheme.typography.headlineSmall)
+            AnimatedNumber(value, style = MaterialTheme.typography.headlineSmallEmphasized)
             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -789,15 +849,13 @@ private fun RecentCheckIns(recent: List<Participant>, now: Instant, onOpen: (Str
                 enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec()),
             ) {
             Column {
-            if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            Surface(
+            SegmentedItem(
+                i, recent.size,
                 onClick = { haptics.click(); onOpen(p.participantEventId) },
-                color = Color.Transparent,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
-                Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(p.name, p.headshotUrl, size = 40.dp)
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(p.name, p.headshotUrl, size = 40.dp, shape = MaterialShapesCookie)
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(p.fullName ?: p.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -862,7 +920,7 @@ private fun ScansHero(scans: List<Scan>?, tz: String?, now: Instant, onShare: ()
         ) {
             Column(Modifier.weight(1f)) {
                 Text("Today", style = MaterialTheme.typography.titleMedium)
-                AnimatedNumber(feed.today, style = MaterialTheme.typography.displayLarge, suffix = if (feed.capped) "+" else "")
+                AnimatedNumber(feed.today, style = MaterialTheme.typography.displayLargeEmphasized, suffix = if (feed.capped) "+" else "")
                 Text("scans", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
                 HeroChip(Icons.Outlined.Groups, "${feed.uniquePeopleToday} people scanned")
@@ -882,10 +940,10 @@ private fun RecentScans(scans: List<Scan>, travel: TravelCalendar?, now: Instant
     val names = remember(travel) { travel?.entries?.mapNotNull { e -> e.participantEventId?.let { it to e.name } }?.toMap().orEmpty() }
     DashCard(title = "Latest scans") {
         scans.forEachIndexed { i, scan ->
-            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             val who = scan.participantEventId?.let(names::get)
                 ?: "Attendee ${(scan.participantId ?: scan.participantEventId)?.substringBefore('-')?.uppercase() ?: ""}".trim()
-            Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            SegmentedItem(i, scans.size, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 val ctx = scan.scanContext
                 Icon(
                     when {
@@ -905,6 +963,7 @@ private fun RecentScans(scans: List<Scan>, travel: TravelCalendar?, now: Instant
                     )
                 }
                 Text(Time.ago(scan.scannedAt, now) ?: "", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             }
         }
     }
@@ -939,10 +998,10 @@ private fun DashCard(
     val body: @Composable () -> Unit = {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
+                Text(title, style = MaterialTheme.typography.titleMediumEmphasized, modifier = Modifier.weight(1f).semantics { heading() })
                 val go = onAction ?: onClick
                 if (action != null && go != null) {
-                    TextButton(onClick = go) {
+                    TextButton(onClick = go, shapes = ButtonDefaults.shapes()) {
                         Text(action)
                         Icon(Icons.Outlined.ChevronRight, null, Modifier.size(18.dp))
                     }
@@ -951,9 +1010,5 @@ private fun DashCard(
             content()
         }
     }
-    if (onClick != null) {
-        Surface(onClick = onClick, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth(), content = body)
-    } else {
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth(), content = body)
-    }
+    ExpressiveSurface(onClick = onClick, top = 28.dp, pressed = 16.dp, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth(), content = body)
 }

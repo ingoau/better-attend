@@ -21,7 +21,13 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
+import au.ingo.betterattend.R
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import au.ingo.betterattend.data.store.ThemeMode
@@ -140,7 +146,38 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(36.dp),
 )
 
-private val AppTypography: Typography = Typography().let { t ->
+/**
+ * Roboto Flex, a variable font (weight 100–1000, width 25–151), bundled as a Latin subset. Each weight
+ * is an instance of the one file, every 100 units: few enough to stay in the typeface cache, while
+ * animated weights (see [flexWeight]) still step through the in-betweens.
+ */
+private fun flexFamily(width: Float) = FontFamily(
+    (100..1000 step 100).map { w ->
+        Font(
+            R.font.roboto_flex,
+            weight = FontWeight(w),
+            variationSettings = FontVariation.Settings(FontVariation.weight(w), FontVariation.width(width)),
+        )
+    },
+)
+
+val RobotoFlex = flexFamily(100f)
+/** A slightly wider cut for emphasized display and headline type: big numbers read bolder and rounder. */
+val RobotoFlexWide = flexFamily(116f)
+
+/** Snaps an animated weight to the 100-unit steps [RobotoFlex] has instances for. */
+fun flexWeight(weight: Float): FontWeight = FontWeight(((weight / 100f).roundToInt() * 100).coerceIn(100, 1000))
+
+private val AppTypography: Typography = Typography().let { base ->
+    // Every style on Roboto Flex; emphasized display/headline styles on the wide cut.
+    fun TextStyle.flex() = copy(fontFamily = RobotoFlex)
+    val t = Typography(
+        displayLarge = base.displayLarge.flex(), displayMedium = base.displayMedium.flex(), displaySmall = base.displaySmall.flex(),
+        headlineLarge = base.headlineLarge.flex(), headlineMedium = base.headlineMedium.flex(), headlineSmall = base.headlineSmall.flex(),
+        titleLarge = base.titleLarge.flex(), titleMedium = base.titleMedium.flex(), titleSmall = base.titleSmall.flex(),
+        bodyLarge = base.bodyLarge.flex(), bodyMedium = base.bodyMedium.flex(), bodySmall = base.bodySmall.flex(),
+        labelLarge = base.labelLarge.flex(), labelMedium = base.labelMedium.flex(), labelSmall = base.labelSmall.flex(),
+    )
     t.copy(
         displayLarge = t.displayLarge.copy(fontWeight = FontWeight.Black, letterSpacing = (-1).sp),
         displayMedium = t.displayMedium.copy(fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp),
@@ -151,6 +188,23 @@ private val AppTypography: Typography = Typography().let { t ->
         titleLarge = t.titleLarge.copy(fontWeight = FontWeight.Bold),
         titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         labelLarge = t.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        // Expressive emphasized styles for hero numbers and key headings: heavier and tighter than
+        // the regular ones above (the library defaults are lighter than this app's regular styles).
+        displayLargeEmphasized = t.displayLarge.copy(fontFamily = RobotoFlexWide, fontWeight = FontWeight.Black, letterSpacing = (-2).sp),
+        displayMediumEmphasized = t.displayMedium.copy(fontFamily = RobotoFlexWide, fontWeight = FontWeight.Black, letterSpacing = (-1.5).sp),
+        displaySmallEmphasized = t.displaySmall.copy(fontFamily = RobotoFlexWide, fontWeight = FontWeight.Black, letterSpacing = (-1).sp),
+        headlineLargeEmphasized = t.headlineLarge.copy(fontFamily = RobotoFlexWide, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp),
+        headlineMediumEmphasized = t.headlineMedium.copy(fontFamily = RobotoFlexWide, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp),
+        headlineSmallEmphasized = t.headlineSmall.copy(fontFamily = RobotoFlexWide, fontWeight = FontWeight.ExtraBold),
+        titleLargeEmphasized = t.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+        titleMediumEmphasized = t.titleMedium.copy(fontWeight = FontWeight.Bold),
+        titleSmallEmphasized = t.titleSmall.copy(fontWeight = FontWeight.Bold),
+        labelLargeEmphasized = t.labelLarge.copy(fontWeight = FontWeight.Bold),
+        labelMediumEmphasized = t.labelMedium.copy(fontWeight = FontWeight.Bold),
+        bodyLargeEmphasized = t.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+        bodyMediumEmphasized = t.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+        bodySmallEmphasized = t.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+        labelSmallEmphasized = t.labelSmall.copy(fontWeight = FontWeight.Bold),
     )
 }
 

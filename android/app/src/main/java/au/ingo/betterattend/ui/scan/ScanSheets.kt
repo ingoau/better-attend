@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -106,7 +107,7 @@ fun FindPersonContent(
             placeholder = { Text("Name, email, ticket code or ID") },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = {
-                if (state.query.isNotEmpty()) IconButton(onClick = { onQuery("") }) { Icon(Icons.Outlined.Close, "Clear search") }
+                if (state.query.isNotEmpty()) IconButton(onClick = { onQuery("") }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") }
             },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
@@ -252,7 +253,7 @@ fun PendingQueueContent(
                     },
                     leadingContent = { Icon(Icons.Outlined.CloudQueue, null, tint = MaterialTheme.status.info) },
                     trailingContent = {
-                        IconButton(onClick = { onDiscard(p) }) { Icon(Icons.Outlined.DeleteOutline, "Discard scan for ${p.displayName()}") }
+                        IconButton(onClick = { onDiscard(p) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.DeleteOutline, "Discard scan for ${p.displayName()}") }
                     },
                     // Synced or discarded rows slide away instead of vanishing.
                     modifier = Modifier.animateItem(),
