@@ -11,6 +11,7 @@ import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.User
+import au.ingo.betterattend.data.repo.ParticipantChange
 import au.ingo.betterattend.data.repo.Roster
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -54,6 +55,21 @@ data class PeopleUiState(
     val canInvite: Boolean get() = event?.canViewParticipants == true && EventPermissions.canInviteParticipants(event)
 }
 
+/** Applies an edit or removal made elsewhere in the app to the server search results (the roster follows by itself). */
+fun PeopleUiState.withChange(change: ParticipantChange): PeopleUiState {
+    val results = remoteResults ?: return this
+    if (change.eventId != event?.id) return this
+    return copy(
+        remoteResults = when (change) {
+            is ParticipantChange.Removed -> results.filterNot { it.participantEventId == change.participantEventId }
+            is ParticipantChange.Edited -> results.map {
+                // The edited copy as a whole: a merge would bring back fields the edit cleared.
+                if (it.participantEventId == change.participant.participantEventId) change.participant else it
+            }
+        },
+    )
+}
+
 /** Chip/filter choices survive tab switches and screen recreation for the app session. */
 private object PeopleSession {
     data class Choice(val quick: QuickFilter, val options: FilterOptions, val sort: SortOrder)
@@ -77,6 +93,10 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
         }
         viewModelScope.launch {
             c.events.selectedEvent.collect { e -> onEvent(e) }
+        }
+        // Server search results are copies outside the roster: keep them in step with edits and removals.
+        viewModelScope.launch {
+            c.participants.changes.collect { change -> _state.update { it.withChange(change) } }
         }
     }
 

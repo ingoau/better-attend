@@ -5,7 +5,10 @@ import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.store.JsonCache
 import au.ingo.betterattend.util.Time
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -80,6 +83,13 @@ data class EventStats(
     }
 }
 
+/** An edit or removal of one registration, for lists that hold copies outside the roster (server search results). */
+sealed interface ParticipantChange {
+    val eventId: String
+    data class Edited(override val eventId: String, val participant: Participant) : ParticipantChange
+    data class Removed(override val eventId: String, val participantEventId: String) : ParticipantChange
+}
+
 class ParticipantRepository(
     private val api: AttendApi,
     private val cache: JsonCache,
@@ -91,6 +101,10 @@ class ParticipantRepository(
     val syncing: StateFlow<Set<String>> = _syncing.asStateFlow()
 
     private val mutex = Mutex()
+
+    private val _changes = MutableSharedFlow<ParticipantChange>(extraBufferCapacity = 16)
+    /** Edits and removals made in the app. */
+    val changes: SharedFlow<ParticipantChange> = _changes.asSharedFlow()
 
     fun roster(eventId: String): Roster? = _rosters.value[eventId]
 
@@ -162,6 +176,7 @@ class ParticipantRepository(
      * resurrect an old top-level size learned from a scan.
      */
     suspend fun applyEdit(eventId: String, fresh: Participant): Unit = mutex.withLock {
+        _changes.tryEmit(ParticipantChange.Edited(eventId, fresh))
         // Under the sync lock so a delta sync that started before the edit can't land on top of it.
         val roster = load(eventId) ?: return@withLock
         val merged = roster.byEventId.toMutableMap()
@@ -177,6 +192,7 @@ class ParticipantRepository(
      * periodic full sync prunes them), so this is what makes it disappear from lists straight away.
      */
     suspend fun remove(eventId: String, participantEventId: String): Unit = mutex.withLock {
+        _changes.tryEmit(ParticipantChange.Removed(eventId, participantEventId))
         val roster = load(eventId) ?: return@withLock
         if (participantEventId !in roster.byEventId) return@withLock
         val updated = roster.copy(participants = roster.participants.filterNot { it.participantEventId == participantEventId })
