@@ -20,6 +20,11 @@ final class DemoBackend: @unchecked Sendable {
     private var seenClientScanIds: Set<String> = []
     private var offline = UserDefaults.standard.bool(forKey: "AttendDemoOffline")
     private var blastCreated: [String: Date] = [:]
+    /// Event staff per event id (only the main event has any).
+    private lazy var staff: [String: [StaffMember]] = [DemoData.mainEventId: DemoData.demoStaff(user: data.user)]
+    /// Profiles edited through PATCH participants, keyed by participant event id. The generated detail
+    /// is derived from the roster copy, so edited legal names and birthdays are kept here.
+    private var profiles: [String: Personal] = [:]
 
     static func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
@@ -95,14 +100,38 @@ final class DemoBackend: @unchecked Sendable {
         }
         if let c = match("GET", "events/*/participants/*") {
             guard let p = participant(c[0], c[1]) else { return notFound() }
-            return ok(ParticipantResponse(participant: data.detail(of: p)))
+            return ok(ParticipantResponse(participant: detailed(p)))
         }
         if let c = match("PATCH", "events/*/participants/*") {
-            guard let status = json["status"], var p = participant(c[0], c[1]) else { return notFound() }
-            p.status = status
+            guard var p = participant(c[0], c[1]) else { return notFound() }
+            guard ["global_admin", "event_admin", "ops", "limited"].contains(role(c[0])) else { return forbidden() }
+            let object = body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let fields = object?["participant"] as? [String: String] ?? [:]
+            let status = json["status"]
+            if fields.isEmpty && status == nil { return error(422, "Nothing to update. Send a participant object and/or a status.") }
+            if !fields.isEmpty, let problem = applyEdit(c[0], &p, fields) { return error(422, problem) }
+            if let status { p.status = status }
             save(c[0], p)
-            return ok(ParticipantResponse(participant: data.detail(of: p)))
+            let saved = participant(c[0], c[1]) ?? p
+            // Like upstream, a profile edit answers with the roster (short) shape.
+            return ok(ParticipantResponse(participant: fields.isEmpty ? detailed(saved) : saved))
         }
+        if let c = match("POST", "events/*/participants") { return invite(c[0], json) }
+        if let c = match("DELETE", "events/*/participants/*") {
+            guard ["global_admin", "event_admin"].contains(role(c[0])) else { return forbidden() }
+            guard participant(c[0], c[1]) != nil else { return notFound() }
+            data.participants[c[0]]?.removeAll { $0.participantEventId == c[1] }
+            profiles[c[1]] = nil
+            data.notes[c[1]] = nil
+            return .success(Reply(status: 204, body: Data()))
+        }
+        if let c = match("GET", "events/*/staff") {
+            guard canManageStaff(c[0]) else { return forbidden() }
+            return ok(StaffResponse(staff: staff[c[0]] ?? [], roles: DemoData.staffRoles))
+        }
+        if let c = match("POST", "events/*/staff") { return addStaff(c[0], json) }
+        if let c = match("PATCH", "events/*/staff/*") { return updateStaff(c[0], c[1], json) }
+        if let c = match("DELETE", "events/*/staff/*") { return removeStaff(c[0], c[1]) }
         if let c = match("GET", "events/*/participants/*/notes") {
             guard participant(c[0], c[1]) != nil else { return notFound() }
             return ok(NotesResponse(notes: data.notes[c[1]] ?? defaultNotes(c[1])))
@@ -150,6 +179,152 @@ final class DemoBackend: @unchecked Sendable {
             return ok(SlackBlastResponse(slackBlast: b), status: 201)
         }
         return notFound()
+    }
+
+    // MARK: Participant edits & invites
+
+    /// The generated detail, with any edited profile fields on top.
+    private func detailed(_ p: Participant) -> Participant {
+        var d = data.detail(of: p)
+        if let profile = profiles[p.participantEventId] { d.personal = profile }
+        return d
+    }
+
+    /// Applies `participant` fields from a PATCH. Returns a validation message, like upstream's 422s.
+    private func applyEdit(_ eventId: String, _ p: inout Participant, _ fields: [String: String]) -> String? {
+        if let raw = fields["email"] {
+            let email = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard ParticipantEditLogic.looksLikeEmail(email) else { return "Email is invalid" }
+            let id = p.participantEventId
+            let taken = (data.participants[eventId] ?? []).contains { $0.participantEventId != id && $0.email?.lowercased() == email }
+            if taken { return "Email has already been taken" }
+            p.email = email
+        }
+        var profile = profiles[p.participantEventId] ?? data.detail(of: p).personal ?? Personal()
+        if let v = fields["legal_first_name"] {
+            if v.isBlank { return "Legal first name can't be blank" }
+            profile.legalFirstName = v
+        }
+        if let v = fields["legal_last_name"] { profile.legalLastName = v.nonBlank }
+        if let v = fields["preferred_name"] { profile.preferredName = v.nonBlank }
+        if let v = fields["tshirt_size"] {
+            profile.tshirtSize = v.nonBlank
+            p.tshirtSize = v.nonBlank
+        }
+        if let v = fields["date_of_birth"] {
+            if v.isBlank {
+                profile.dateOfBirth = nil
+                profile.age = nil
+            } else {
+                guard let day = CalendarDay(iso: v) else { return "Date of birth is invalid" }
+                let today = CalendarDay(Date(), in: Time.zone(DemoData.timezone))
+                let birthdayPassed = today.month > day.month || (today.month == day.month && today.day >= day.day)
+                profile.dateOfBirth = day.description
+                profile.age = today.year - day.year - (birthdayPassed ? 0 : 1)
+            }
+        }
+        if let v = fields["phone"] { p.phone = v.nonBlank }
+        if let v = fields["pronouns"] { p.pronouns = v.nonBlank }
+        profiles[p.participantEventId] = profile
+        let first = profile.legalFirstName?.nonBlank
+        p.fullName = [first, profile.legalLastName?.nonBlank].compactMap { $0 }.joined(separator: " ").nonBlank ?? p.fullName
+        p.displayName = profile.preferredName?.nonBlank ?? first ?? p.displayName
+        return nil
+    }
+
+    /// POST participants, with upstream's checks and messages.
+    private func invite(_ eventId: String, _ body: [String: String]) -> Result<Reply, URLError> {
+        guard let event = data.events.first(where: { $0.id == eventId }) else { return notFound() }
+        guard event.canViewParticipants, ["global_admin", "series_member", "event_admin"].contains(event.role ?? "") else { return forbidden() }
+        let email = (body["email"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if email.isEmpty { return error(422, "Email is required") }
+        guard ParticipantEditLogic.looksLikeEmail(email) else { return error(422, "Invalid email format") }
+        if email.hasSuffix("@banned.example") { return error(422, "This email is banned from events") }
+        let list = data.participants[eventId] ?? []
+        if let existing = list.first(where: { $0.email?.lowercased() == email }) {
+            return error(409, existing.status == "invited" ? "An invitation has already been sent to this email"
+                                                           : "This email is already registered for this event")
+        }
+        let first = body["first_name"]?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
+        let last = body["last_name"]?.trimmingCharacters(in: .whitespacesAndNewlines).nonBlank
+        let p = Participant(
+            participantId: UUID().uuidString.lowercased(),
+            participantEventId: UUID().uuidString.lowercased(),
+            displayName: first,
+            fullName: [first, last].compactMap { $0 }.joined(separator: " ").nonBlank,
+            email: email,
+            status: "invited",
+            updatedAt: Time.nowISO()
+        )
+        data.participants[eventId] = Roster.sortedByName(list + [p])
+        if first != nil || last != nil {
+            profiles[p.participantEventId] = Personal(legalFirstName: first, legalLastName: last)
+        }
+        // The upcoming event holds onboarding invitations, like an event that hasn't opened yet.
+        let held = eventId == DemoData.upcomingEventId
+        let result = InviteResult(success: true, held: held, message: held ? "Invitation held for \(email)" : "Invitation sent to \(email)",
+                                  event: event.name, participantId: p.participantId, participantEventId: p.participantEventId,
+                                  status: p.status)
+        return ok(result, status: 201)
+    }
+
+    // MARK: Staff
+
+    private func addStaff(_ eventId: String, _ body: [String: String]) -> Result<Reply, URLError> {
+        guard canManageStaff(eventId) else { return forbidden() }
+        let email = (body["email"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard ParticipantEditLogic.looksLikeEmail(email) else { return error(422, "A valid email address is required") }
+        let role = body["role"] ?? ""
+        guard DemoData.staffRoles.contains(where: { $0.role == role }) else { return error(422, invalidRole(role)) }
+        if (staff[eventId] ?? []).contains(where: { $0.user.email.lowercased() == email }) {
+            return error(422, "User is already on the staff of this event")
+        }
+        let known = staff.values.joined().first { $0.user.email.lowercased() == email }?.user
+        let localPart = String(email.split(separator: "@").first ?? "")
+        let user = known ?? StaffUser(id: UUID().uuidString.lowercased(), email: email,
+                                      name: localPart.replacingOccurrences(of: ".", with: " ").capitalized)
+        let member = StaffMember(id: UUID().uuidString.lowercased(), role: role, roleLabel: DemoData.staffRoleLabel(role),
+                                 createdAt: Time.nowISO(), user: user)
+        staff[eventId, default: []].append(member)
+        return ok(StaffMemberResponse(staffMember: member, accountCreated: known == nil), status: 201)
+    }
+
+    private func updateStaff(_ eventId: String, _ id: String, _ body: [String: String]) -> Result<Reply, URLError> {
+        guard canManageStaff(eventId) else { return forbidden() }
+        guard var list = staff[eventId], let i = list.firstIndex(where: { $0.id == id }) else { return notFound() }
+        let role = body["role"] ?? ""
+        guard DemoData.staffRoles.contains(where: { $0.role == role }) else { return error(422, invalidRole(role)) }
+        list[i].role = role
+        list[i].roleLabel = DemoData.staffRoleLabel(role)
+        staff[eventId] = list
+        let member = list[i]
+        // Your own role on the event follows your assignment (global admins keep theirs).
+        if member.user.email.lowercased() == data.user.email.lowercased(),
+           let e = data.events.firstIndex(where: { $0.id == eventId }), data.events[e].role != "global_admin" {
+            data.events[e].role = role
+        }
+        return ok(StaffMemberResponse(staffMember: member))
+    }
+
+    private func removeStaff(_ eventId: String, _ id: String) -> Result<Reply, URLError> {
+        guard canManageStaff(eventId) else { return forbidden() }
+        guard let member = staff[eventId]?.first(where: { $0.id == id }) else { return notFound() }
+        if member.inheritedFromSeries {
+            let seriesRole = member.seriesRole ?? "member"
+            return error(409, "This person is a series \(seriesRole) — their access is inherited from the series, "
+                + "so it can't be removed here. Manage them from the series members page.")
+        }
+        staff[eventId]?.removeAll { $0.id == id }
+        // Removing yourself takes the event off your list, like the real server.
+        if member.user.email.lowercased() == data.user.email.lowercased() {
+            data.events.removeAll { $0.id == eventId }
+        }
+        return .success(Reply(status: 204, body: Data()))
+    }
+
+    private func invalidRole(_ role: String) -> String {
+        let valid = DemoData.staffRoles.map(\.role).joined(separator: ", ")
+        return "\(role.isEmpty ? "role" : role) is not a valid role. Valid roles: \(valid)"
     }
 
     // MARK: Scans
@@ -226,6 +401,14 @@ final class DemoBackend: @unchecked Sendable {
     }
 
     // MARK: Helpers
+
+    private func role(_ eventId: String) -> String {
+        data.events.first { $0.id == eventId }?.role ?? ""
+    }
+
+    private func canManageStaff(_ eventId: String) -> Bool {
+        ["global_admin", "series_member", "event_admin"].contains(role(eventId))
+    }
 
     private func canView(_ eventId: String) -> Bool {
         data.events.first { $0.id == eventId }?.canViewParticipants ?? false
