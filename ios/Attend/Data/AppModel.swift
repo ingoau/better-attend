@@ -58,7 +58,7 @@ final class AppModel {
         self.scans = ScanRepository(api: api, cache: cache, participants: participants)
         self.tickets = TicketRepository(api: api, cache: cache)
         self.travel = TravelRepository(api: api, cache: cache)
-        self.rollCalls = RollCallStore(cache: cache)
+        self.rollCalls = RollCallStore(cache: cache, scans: scans, participants: participants)
 
         api.onSessionExpired = { [weak self] in self?.auth.sessionExpired() }
         auth.onSignedOut = { [weak self] in Task { await self?.clearAccountData() } }
@@ -111,12 +111,13 @@ final class AppModel {
     /// Wipes every cached byte of account data (sign-out / session expiry).
     func clearAccountData() async {
         scanRetry?.cancel()
+        // First: stops roll call scan work and waits out its disk writes, so nothing is saved after the wipe.
+        await rollCalls.clear()
         await scans.clear()
         await participants.clear() // also clears the encrypted file cache
         events.clear()
         tickets.clear()
         travel.clear()
-        rollCalls.clear()
         settings.clearAccountData()
         // Participant headshots (minors) may sit in the URL cache.
         URLCache.shared.removeAllCachedResponses()

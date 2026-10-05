@@ -17,7 +17,11 @@ struct RollCallView: View {
             .navigationTitle("Roll Call")
             .navigationBarTitleDisplayMode(.inline)
             .toast($model.toast)
+            // Scan work outlives this screen; what it reports while the screen is open shows here.
+            .onChange(of: app.rollCalls.notice) { _, notice in model.show(notice, eventId: eventId, app: app) }
             .task(id: eventId) {
+                // Anything reported while the screen was closed is already on the rows; don't replay it.
+                app.rollCalls.clearNotice()
                 await app.rollCalls.load(eventId)
                 await app.participants.load(eventId)
                 restored = true
@@ -178,7 +182,7 @@ private struct RollCallSetupView: View {
             Text("Record Ticks")
         } footer: {
             if let selected {
-                Text("Each tick is recorded as a scan at \(selected.name), and waits to sync if you're offline. Unticking someone takes back the scan the roll call made.")
+                Text(RollCallLogic.recordingFooter(selected.name))
             } else if !contexts.isEmpty {
                 Text("To also record ticks in Attend, choose a scan point.")
             }
@@ -489,7 +493,7 @@ private struct RollCallRow: View {
                 }
                 Text(subtitle)
                     .font(.subheadline)
-                    .foregroundStyle(entry.stillRecorded && !entry.accounted ? Tone.warning.color : Color.secondary)
+                    .foregroundStyle((entry.stillRecorded && !entry.accounted) || entry.notRecorded ? Tone.warning.color : Color.secondary)
                     .lineLimit(1)
                     .contentTransition(.opacity)
             }
@@ -511,9 +515,10 @@ private struct RollCallRow: View {
         let added = entry.added ? "Added" : nil
         if entry.accounted {
             let ticked = Time.time(entry.accountedAt, tz: timezone).map { "Ticked \($0)" } ?? "Ticked"
-            return [ticked, added].compactMap { $0 }.joined(separator: " · ")
+            let notRecorded = entry.notRecorded ? scanPointName.map { "Not recorded at \($0)" } : nil
+            return [ticked, added, notRecorded].compactMap { $0 }.joined(separator: " · ")
         }
-        if entry.stillRecorded, let scanPointName { return "Missing · scan still recorded at \(scanPointName)" }
+        if entry.stillRecorded, let scanPointName { return "Missing · still scanned at \(scanPointName)" }
         if !entry.known { return "No longer in the people list" }
         return PeopleFilter.checkInLine(entry.participant, tz: timezone) ?? StatusVisual.of(entry.participant).label
     }
@@ -600,6 +605,7 @@ private struct RollCallSummarySheet: View {
         let counts = RollCallLogic.counts(entries)
         let missing = entries.filter { !$0.accounted }
         let added = entries.filter { $0.added && $0.accounted }
+        let notRecorded = entries.filter(\.notRecorded)
         let shareText = RollCallLogic.missingShareText(eventName: event.name, session: session, entries: entries, tz: event.timezone)
         NavigationStack {
             List {
@@ -633,6 +639,15 @@ private struct RollCallSummarySheet: View {
                         ForEach(added) { e in summaryRow(e) }
                     } header: {
                         Text("Added During Roll Call (\(added.count))")
+                    }
+                }
+                if let point = session.scanPoint, !notRecorded.isEmpty {
+                    Section {
+                        ForEach(notRecorded) { e in summaryRow(e) }
+                    } header: {
+                        Text("Not Recorded at \(point.name) (\(notRecorded.count))")
+                    } footer: {
+                        Text("Ticked here, but Attend has no scan for them from this roll call. Untick and tick them again to retry.")
                     }
                 }
                 Section {
