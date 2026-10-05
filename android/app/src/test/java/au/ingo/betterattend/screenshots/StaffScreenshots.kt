@@ -8,6 +8,7 @@ import au.ingo.betterattend.ui.settings.SettingsContent
 import au.ingo.betterattend.ui.settings.SettingsUiState
 import au.ingo.betterattend.ui.staff.AddStaffSheetContent
 import au.ingo.betterattend.ui.staff.AddStaffState
+import au.ingo.betterattend.ui.staff.StaffLogic
 import au.ingo.betterattend.ui.staff.MemberSheetContent
 import au.ingo.betterattend.ui.staff.MemberSheetState
 import au.ingo.betterattend.ui.staff.StaffContent
@@ -49,6 +50,14 @@ class StaffScreenshots : ScreenshotTest() {
         AddStaffSheetContent(
             AddStaffState(email = "heidi@hackclub.com", role = "limited", error = "User is already on this event's staff"),
             StaffSamples.roles, {}, {}, {},
+        )
+    }
+
+    /** Heidi is already on the staff as Ops: that role can't be picked for her again. */
+    @Test fun addSheetHeldRole() = snap("staff_add_sheet_held") {
+        AddStaffSheetContent(
+            AddStaffState(email = "Heidi@hackclub.com"), StaffSamples.roles, {}, {}, {},
+            held = StaffLogic.heldRoles("Heidi@hackclub.com", StaffSamples.staff),
         )
     }
 

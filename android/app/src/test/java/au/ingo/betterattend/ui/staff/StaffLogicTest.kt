@@ -77,6 +77,41 @@ class StaffLogicTest {
         assertTrue(StaffLogic.addedMessage(m, accountCreated = true, roles).contains("can sign in with Hack Club using this address"))
     }
 
+    @Test fun heldRoles_matchEmailCaseInsensitively_andSkipTheRowBeingChanged() {
+        val heidi = staff.first { it.user.email == "heidi@hackclub.com" }
+        val heidiAlsoLimited = heidi.copy(id = "h2", role = "limited")
+        val list = staff + heidiAlsoLimited
+        assertEquals(setOf("ops", "limited"), StaffLogic.heldRoles(" HEIDI@hackclub.com ", list))
+        // Changing her Ops row: Limited is taken by her other row, Ops is the row itself.
+        assertEquals(setOf("limited"), StaffLogic.heldRoles(heidi.user.email, list, exceptId = heidi.id))
+        assertEquals(emptySet<String>(), StaffLogic.heldRoles("someone.new@example.com", list))
+        assertEquals(emptySet<String>(), StaffLogic.heldRoles("", list))
+        assertEquals("They're already Ops on this event", StaffLogic.validateAdd("heidi@hackclub.com", "ops", roles, setOf("ops")))
+        assertNull(StaffLogic.validateAdd("heidi@hackclub.com", "read_only", roles, setOf("ops")))
+    }
+
+    @Test fun effectiveAccess_followsOwnRemainingRows() {
+        val event = SampleData.event.copy(role = "event_admin", canViewParticipants = true, canViewParticipantPii = true, canViewSensitiveData = false)
+        val ops = StaffLogic.effectiveAccess(event, listOf("ops"))
+        assertEquals("ops", ops.role)
+        assertTrue(ops.canViewParticipants && ops.canViewParticipantPii && !ops.canViewSensitiveData)
+        // Several rows: upstream reports the widest, and the flags come from all of them.
+        val both = StaffLogic.effectiveAccess(event, listOf("limited", "safeguarding_lead"))
+        assertEquals("safeguarding_lead", both.role)
+        assertTrue(both.canViewSensitiveData && both.canViewParticipantPii)
+        val limited = StaffLogic.effectiveAccess(event, listOf("limited"))
+        assertFalse(limited.canViewParticipantPii)
+        val readOnly = StaffLogic.effectiveAccess(event, listOf("read_only"))
+        assertFalse(readOnly.canViewParticipants)
+        // No rows left: no access at all.
+        val none = StaffLogic.effectiveAccess(event, emptyList())
+        assertNull(none.role)
+        assertFalse(none.canViewParticipants || none.canViewParticipantPii || none.canViewSensitiveData)
+        // Global admins and series members don't depend on event rows.
+        assertEquals("global_admin", StaffLogic.effectiveAccess(event.copy(role = "global_admin"), emptyList()).role)
+        assertEquals("series_member", StaffLogic.effectiveAccess(event.copy(role = "series_member"), emptyList()).role)
+    }
+
     @Test fun decodesUpstreamPayloadWithNumericIds() {
         // Upstream serializes assignment and user ids as integers.
         val json = """{"staff":[{"id":12,"role":"ops","role_label":"Ops","inherited_from_series":false,"series_role":null,

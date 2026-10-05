@@ -199,7 +199,10 @@ fun StaffContent(
     state.add?.let { add ->
         val sheet = rememberBottomSheetState(SheetValue.Hidden, setOf(SheetValue.Hidden, SheetValue.Expanded))
         ModalBottomSheet(onDismissRequest = actions.closeAdd, sheetState = sheet) {
-            AddStaffSheetContent(add, state.roles, actions.updateAdd, actions.sendAdd, actions.closeAdd)
+            AddStaffSheetContent(
+                add, state.roles, actions.updateAdd, actions.sendAdd, actions.closeAdd,
+                held = StaffLogic.heldRoles(add.email, state.staff.orEmpty()),
+            )
         }
     }
 
@@ -217,6 +220,7 @@ fun StaffContent(
                 },
                 onRemove = { confirm = "remove" },
                 onCancel = actions.closeMember,
+                held = StaffLogic.heldRoles(member.user.email, state.staff.orEmpty(), exceptId = member.id),
             )
         }
         val lose = StaffLogic.losesStaffAccess(member, if (confirm == "demote") sel.role else null, state.me, state.staff.orEmpty())
@@ -312,24 +316,34 @@ private fun StaffRow(member: StaffMember, index: Int, count: Int, self: Boolean,
     else Surface(shape = shape, color = color, modifier = m) { content() }
 }
 
-/** Radio list of the server's role catalogue, each with its summary. */
+/**
+ * Radio list of the server's role catalogue, each with its summary. [held]: roles the person already
+ * has in another row here; upstream allows each role once per person, so those can't be picked.
+ */
 @Composable
-fun RolePicker(roles: List<StaffRole>, selected: String?, enabled: Boolean, onSelect: (String) -> Unit) {
+fun RolePicker(roles: List<StaffRole>, selected: String?, enabled: Boolean, onSelect: (String) -> Unit, held: Set<String> = emptySet()) {
     Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         roles.forEach { r ->
             val on = r.role == selected
+            val taken = r.role in held
+            val rowEnabled = enabled && !taken
             Surface(
-                color = if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                color = if (on && !taken) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
                 shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth().selectable(selected = on, enabled = enabled, role = Role.RadioButton) { onSelect(r.role) },
+                modifier = Modifier.fillMaxWidth().selectable(selected = on, enabled = rowEnabled, role = Role.RadioButton) { onSelect(r.role) },
             ) {
                 Row(Modifier.padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = on, onClick = null, enabled = enabled)
+                    RadioButton(selected = on, onClick = null, enabled = rowEnabled)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(r.label, style = MaterialTheme.typography.bodyLarge)
-                        r.summary?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val dim = if (taken) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else Color.Unspecified
+                        Text(r.label, style = MaterialTheme.typography.bodyLarge, color = dim)
+                        if (taken) {
+                            Text("Already ${r.label}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            r.summary?.takeIf { it.isNotBlank() }?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
@@ -346,6 +360,8 @@ fun AddStaffSheetContent(
     onSend: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Roles the typed email already holds here (they're on the list). */
+    held: Set<String> = emptySet(),
 ) {
     val enabled = !state.sending
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
@@ -368,13 +384,13 @@ fun AddStaffSheetContent(
             modifier = Modifier.fillMaxWidth(),
         )
         SheetLabel("Role")
-        RolePicker(roles, state.role, enabled) { onChange(state.copy(role = it, error = null)) }
+        RolePicker(roles, state.role, enabled, { onChange(state.copy(role = it, error = null)) }, held)
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel, enabled = enabled) { Text("Cancel") }
             Spacer(Modifier.width(8.dp))
             Button(
-                onClick = onSend, enabled = enabled && state.email.isNotBlank() && state.role != null,
+                onClick = onSend, enabled = enabled && state.email.isNotBlank() && state.role != null && state.role !in held,
                 shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 if (state.sending) {
@@ -398,6 +414,8 @@ fun MemberSheetContent(
     onRemove: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Roles this person already holds in their other rows here. */
+    held: Set<String> = emptySet(),
 ) {
     val enabled = !state.busy
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
@@ -412,7 +430,7 @@ fun MemberSheetContent(
         Spacer(Modifier.height(12.dp))
         state.error?.let { ErrorBanner(it); Spacer(Modifier.height(4.dp)) }
         SheetLabel("Role")
-        RolePicker(roles, state.role, enabled, onPick)
+        RolePicker(roles, state.role, enabled, onPick, held)
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(
@@ -427,7 +445,7 @@ fun MemberSheetContent(
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onCancel, enabled = enabled) { Text("Cancel") }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onSave, enabled = enabled && state.role != member.role, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
+            Button(onClick = onSave, enabled = enabled && state.role != member.role && state.role !in held, shapes = ButtonDefaults.shapes(), modifier = Modifier.heightIn(min = 48.dp)) {
                 if (state.busy) LoadingIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary) else Text("Save")
             }
         }
