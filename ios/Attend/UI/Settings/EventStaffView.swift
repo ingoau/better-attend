@@ -52,11 +52,6 @@ struct EventStaffView: View {
             } message: { member in
                 Text(StaffText.removeMessage(member, user: app.user, event: event))
             }
-            .alert("Added to Attend", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(model.notice ?? "")
-            }
             .task(id: canManage) {
                 if canManage { await model.load(app) }
             }
@@ -340,6 +335,12 @@ private struct AddStaffSheet: View {
             .onChange(of: email) {
                 if emailProblem != nil { emailProblem = StaffLogic.emailProblem(email) }
             }
+            // Shown here rather than on the list so it isn't lost while this sheet closes.
+            .alert("New to Attend", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
+                Button("OK", role: .cancel) { dismiss() }
+            } message: {
+                Text(model.notice ?? "")
+            }
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(!email.isBlank || saving)
@@ -361,7 +362,7 @@ private struct AddStaffSheet: View {
             saving = false
             if let failure {
                 withAnimation { serverError = failure }
-            } else {
+            } else if model.notice == nil {
                 dismiss()
             }
         }

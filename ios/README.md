@@ -17,8 +17,10 @@ xcodebuild -project Attend.xcodeproj -scheme Attend \
 Launch with `-AttendDemo YES` (also a disabled launch argument in the Attend scheme) to run the
 real app against `DemoBackend`, an in-process, stateful fake of the Attend API: a live event with
 143 registrations, travel, announcements and tickets. Scans check people in, undo works, notes
-and announcements are stored. It starts fresh on every launch. `-AttendDemoOffline YES` simulates
-no network (scans queue up).
+and announcements are stored. Profile edits, invites (an `@banned.example` address is refused),
+removals and event staff changes are stored too; the staff list includes a global admin and a
+series-inherited admin that can't be removed. It starts fresh on every launch.
+`-AttendDemoOffline YES` simulates no network (scans queue up).
 
 `-AttendOpenURL <deep link>` opens a screen at launch, so any screen can be screenshotted:
 
