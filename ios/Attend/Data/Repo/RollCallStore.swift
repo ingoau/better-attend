@@ -60,6 +60,11 @@ final class RollCallStore {
         loaded = []
     }
 
+    /// Waits for pending disk writes (tests).
+    func waitForWrites() async {
+        await lastWrite?.value
+    }
+
     private func persist(_ eventId: String) {
         let key = RollCallLogic.cacheKey(eventId)
         let snapshot = sessions[eventId]
