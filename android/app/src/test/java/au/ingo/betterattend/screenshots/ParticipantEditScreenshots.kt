@@ -43,7 +43,7 @@ class ParticipantEditScreenshots : ScreenshotTest() {
     /** A `limited` staffer: phone and date of birth aren't offered (they can't read them). Non-standard size kept. */
     @Test fun editFormWithoutPii() = snap("edit_details_limited") {
         val o = ParticipantEditLogic.formFrom(DetailFixtures.limited).copy(tshirtSize = "Youth L")
-        EditDetailsContent(EditSession(o, saving = true), name = "Maya", canEditPii = false, onChange = {}, onSave = {}, onClose = {})
+        EditDetailsContent(EditSession(o), name = "Maya", canEditPii = false, onChange = {}, onSave = {}, onClose = {})
     }
 
     private fun openMenu() {

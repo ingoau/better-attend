@@ -81,6 +81,18 @@ They show up as **BetterAttend** and install **alongside** the official app (`au
 - **Travel** — arrivals/departures by day in the event timezone, pickup states, UM flags.
 - **Announcements** — send Slack blasts with confirmation and live delivery progress.
 - **Kiosk mode** — self check-in on a spare phone/tablet: front camera, pinned screen, PIN to exit.
+- **Edit details** — fix a name, email, phone, pronouns, T-shirt size or date of birth from the
+  participant page; **Remove from event** for admins (withdrawing stays the reversible option).
+- **Invite walk-ins** — add someone by email from People: they're put on the roster as invited and
+  emailed a link to finish registering.
+- **Event staff** — add volunteers by email, change roles or remove them, from Settings.
+- **Roll call** — a muster headcount from the cached roster that works offline: freeze who should be
+  here, tick people off, see who's missing, share the list. Optionally record ticks as scans at a
+  scan point you pick.
+- **First-aid sheet** — everyone with medical or safety flags, with allergies, medications and
+  emergency contacts for safeguarding leads and admins; works offline and prints or saves as PDF.
+- **Role-aware** — actions only appear for roles Attend allows (e.g. only event admins see
+  Invite, Event staff and Remove), so nobody hits a "Forbidden" error.
 
 **For participants**
 - **My tickets** — works offline at the door; pass with a high-contrast QR that **boosts screen
