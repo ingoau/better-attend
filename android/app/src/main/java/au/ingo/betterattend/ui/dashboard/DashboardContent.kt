@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -64,7 +65,6 @@ import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
@@ -126,7 +126,6 @@ import au.ingo.betterattend.ui.components.MaterialShapesFlower
 import au.ingo.betterattend.ui.components.MaterialShapesSunny
 import au.ingo.betterattend.ui.components.ExpressiveSurface
 import au.ingo.betterattend.ui.components.SegmentedItem
-import au.ingo.betterattend.ui.components.rememberMorphShape
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.components.rememberHaptics
@@ -407,11 +406,14 @@ private fun HeroCard(modifier: Modifier = Modifier, content: @Composable () -> U
         modifier = modifier.fillMaxWidth(),
     ) {
         Box {
-            // A big, soft Expressive shape peeking in from the corner, behind the numbers.
-            Box(
-                Modifier.align(Alignment.TopEnd).offset(x = 56.dp, y = (-64).dp).size(220.dp).rotate(12f)
-                    .clip(MaterialShapesSunny).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.06f)),
-            )
+            // A big, soft Expressive shape peeking in from the corner, behind the numbers. matchParentSize +
+            // unbounded wrap so it never makes the card taller than its content.
+            Box(Modifier.matchParentSize().wrapContentSize(Alignment.TopEnd, unbounded = true)) {
+                Box(
+                    Modifier.offset(x = 56.dp, y = (-64).dp).size(220.dp).rotate(12f)
+                        .clip(MaterialShapesSunny).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.06f)),
+                )
+            }
             Box(Modifier.padding(20.dp)) { content() }
         }
     }
@@ -819,7 +821,7 @@ private fun RecentCheckIns(recent: List<Participant>, now: Instant, onOpen: (Str
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(p.name, p.headshotUrl, size = 40.dp, shape = rememberMorphShape(p.isCheckedIn))
+                    Avatar(p.name, p.headshotUrl, size = 40.dp, shape = MaterialShapesCookie)
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(p.fullName ?: p.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -904,10 +906,10 @@ private fun RecentScans(scans: List<Scan>, travel: TravelCalendar?, now: Instant
     val names = remember(travel) { travel?.entries?.mapNotNull { e -> e.participantEventId?.let { it to e.name } }?.toMap().orEmpty() }
     DashCard(title = "Latest scans") {
         scans.forEachIndexed { i, scan ->
-            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             val who = scan.participantEventId?.let(names::get)
                 ?: "Attendee ${(scan.participantId ?: scan.participantEventId)?.substringBefore('-')?.uppercase() ?: ""}".trim()
-            Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            SegmentedItem(i, scans.size, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 val ctx = scan.scanContext
                 Icon(
                     when {
@@ -927,6 +929,7 @@ private fun RecentScans(scans: List<Scan>, travel: TravelCalendar?, now: Instant
                     )
                 }
                 Text(Time.ago(scan.scannedAt, now) ?: "", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             }
         }
     }

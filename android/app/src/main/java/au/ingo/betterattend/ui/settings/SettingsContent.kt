@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -78,6 +77,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -380,8 +381,10 @@ private fun Segment(
     count: Int,
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    role: Role = Role.Button,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
-) = SegmentedItem(index, count, onClick = onClick, enabled = enabled, content = content)
+) = SegmentedItem(index, count, modifier, onClick = onClick, enabled = enabled, role = role, content = content)
 
 @Composable
 private fun SwitchRow(
@@ -395,14 +398,20 @@ private fun SwitchRow(
     onChange: (Boolean) -> Unit,
 ) {
     val haptics = rememberHaptics()
-    Segment(index, count) {
+    // The whole segment toggles (and morphs on press); the switch is just its indicator.
+    Segment(
+        index, count,
+        onClick = { haptics.toggle(!checked); onChange(!checked) },
+        enabled = enabled,
+        role = Role.Switch,
+        modifier = Modifier.semantics { toggleableState = ToggleableState(checked) },
+    ) {
         ListItem(
             headlineContent = { Text(title) },
             supportingContent = { Text(subtitle) },
             leadingContent = { Icon(icon, null) },
             trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch) { haptics.toggle(it); onChange(it) },
         )
     }
 }

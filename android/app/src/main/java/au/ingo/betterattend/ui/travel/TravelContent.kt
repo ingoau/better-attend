@@ -74,6 +74,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.onClick as semanticsOnClick
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -393,7 +396,7 @@ internal fun TravelRow(
     count: Int = 1,
 ) {
     val status = MaterialTheme.status
-    val container = if (entry.isUnaccompaniedMinor) status.warningContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainerLow
+    val container = if (entry.isUnaccompaniedMinor) status.warningContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surfaceContainer
     val inbound = entry.direction == "inbound"
     val time = Time.time(entry.primaryTimeAt, tz)
     val description = buildString {
@@ -464,7 +467,11 @@ internal fun TravelRow(
     }
     SegmentedItem(
         index, count,
-        modifier.padding(horizontal = 12.dp).clearAndSetSemantics { contentDescription = description },
+        // The row is one TalkBack stop, so its click action is restated here (clearing drops the inner one).
+        modifier.padding(start = 12.dp, end = 12.dp, bottom = if (index == count - 1) 8.dp else 0.dp).clearAndSetSemantics {
+            contentDescription = description
+            if (clickable) { role = Role.Button; semanticsOnClick { onClick(); true } }
+        },
         onClick = if (clickable) onClick else null,
         color = container,
         content = content,

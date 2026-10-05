@@ -154,7 +154,7 @@ fun ParticipantRow(
 ) {
     val v = statusVisual(p)
     val secondary = checkInLine(p, timezone) ?: p.email ?: statusLabel(p.status)
-    SegmentedItem(index, count, modifier.padding(horizontal = 12.dp), onClick = onClick, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+    SegmentedItem(index, count, modifier.padding(horizontal = 12.dp), onClick = onClick) {
         Row(
             Modifier.heightIn(min = 72.dp).padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,

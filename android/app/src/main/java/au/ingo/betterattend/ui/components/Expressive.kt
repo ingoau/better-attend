@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.contentColorFor
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -81,6 +82,7 @@ fun ExpressiveSurface(
     color: Color = MaterialTheme.colorScheme.surfaceContainer,
     contentColor: Color = contentColorFor(color),
     enabled: Boolean = true,
+    role: Role = Role.Button,
     onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
     onLongClickLabel: String? = null,
@@ -88,19 +90,23 @@ fun ExpressiveSurface(
 ) {
     val source = remember { MutableInteractionSource() }
     val shape = rememberPressMorphShape(source, top, bottom, pressed)
-    val m = if (onClick == null) modifier else modifier
+    val interactive = onClick != null || onLongClick != null
+    val m = if (!interactive) modifier else modifier
+        .minimumInteractiveComponentSize()
         .clip(shape)
         .combinedClickable(
             interactionSource = source,
             indication = ripple(),
             enabled = enabled,
             onClickLabel = onClickLabel,
-            role = Role.Button,
+            role = role,
             onLongClickLabel = onLongClickLabel,
             onLongClick = onLongClick,
-            onClick = onClick,
+            onClick = onClick ?: {},
         )
-    Surface(shape = shape, color = color, contentColor = contentColor, modifier = m, content = content)
+    // Disabled rows dim their content so they don't read as tappable.
+    val fg = if (interactive && !enabled) contentColor.copy(alpha = 0.38f) else contentColor
+    Surface(shape = shape, color = color, contentColor = fg, modifier = m, content = content)
 }
 
 /** One row of a [Segmented] group. */
@@ -111,6 +117,7 @@ fun SegmentedItem(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    role: Role = Role.Button,
     color: Color = MaterialTheme.colorScheme.surfaceContainer,
     contentColor: Color = contentColorFor(color),
     onLongClick: (() -> Unit)? = null,
@@ -126,6 +133,7 @@ fun SegmentedItem(
         color = color,
         contentColor = contentColor,
         enabled = enabled,
+        role = role,
         onLongClick = onLongClick,
         onLongClickLabel = onLongClickLabel,
         content = content,

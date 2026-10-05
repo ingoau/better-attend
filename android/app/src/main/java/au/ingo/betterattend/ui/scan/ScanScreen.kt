@@ -487,7 +487,7 @@ private fun Controls(state: ScanUiState, actions: ScanActions) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalFloatingToolbar(expanded = true, colors = FloatingToolbarDefaults.standardFloatingToolbarColors()) {
             if (state.camera == CameraAccess.Granted) {
-                IconToggleButton(checked = state.torchOn, onCheckedChange = { actions.onToggleTorch() }, enabled = state.torchAvailable) {
+                IconToggleButton(checked = state.torchOn, onCheckedChange = { actions.onToggleTorch() }, enabled = state.torchAvailable, shapes = IconButtonDefaults.toggleableShapes()) {
                     Icon(if (state.torchOn) Icons.Outlined.FlashlightOn else Icons.Outlined.FlashlightOff,
                         if (state.torchOn) "Turn torch off" else "Turn torch on")
                 }
