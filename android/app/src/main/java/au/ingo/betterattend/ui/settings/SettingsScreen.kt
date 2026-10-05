@@ -60,6 +60,7 @@ data class SettingsActions(
     val onIssueToken: (deviceName: String) -> Unit = {},
     val onOpenUrl: (String) -> Unit = {},
     val onMessageShown: () -> Unit = {},
+    val onOpenStaff: () -> Unit = {},
 )
 
 @Composable
@@ -156,6 +157,7 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit
         onIssueToken = { haptics.click(); onIssueToken(it) },
         onOpenUrl = { haptics.click(); runCatching { uri.openUri(it) }.onFailure { haptics.reject() } },
         onMessageShown = { message = null },
+        onOpenStaff = { event?.let { haptics.click(); nav.openStaff(it.id) } },
     )
 
     SettingsContent(state, actions)

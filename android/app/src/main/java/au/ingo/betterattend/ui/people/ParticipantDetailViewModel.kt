@@ -44,7 +44,19 @@ sealed interface NfcWriteState {
 /** A note plus its optimistic-send state. */
 data class NoteItem(val note: Note, val pending: Boolean = false, val failed: Boolean = false)
 
-enum class DetailBusy { CheckingIn, Undoing, UpdatingStatus, ResettingBadge }
+enum class DetailBusy { CheckingIn, Undoing, UpdatingStatus, ResettingBadge, Removing }
+
+/** An open "Edit details" form: what it started from, what's typed, and how saving went. */
+data class EditSession(
+    val original: EditForm,
+    val form: EditForm = original,
+    val saving: Boolean = false,
+    /** The server's (or network's) reason the last save failed, shown at the top of the form. */
+    val error: String? = null,
+    val fieldErrors: Map<EditField, String> = emptyMap(),
+) {
+    val changed: Boolean get() = form != original
+}
 
 /** Haptic cues for results of actions on the detail screen (played by the screen, which knows the Haptics setting). */
 enum class DetailCue { Confirm, Reject, Click }
@@ -63,11 +75,16 @@ data class DetailUiState(
     val contexts: List<ScanContext> = emptyList(),
     val busy: DetailBusy? = null,
     val nfc: NfcWriteState = NfcWriteState.Idle,
+    val edit: EditSession? = null,
 ) {
     val canViewPii get() = event?.canViewParticipantPii == true
     val canViewSensitive get() = event?.canViewSensitiveData == true
     /** PATCH participants is limited to direct edit roles (safeguarding leads and series-only members get 403). */
     val canChangeStatus get() = EventPermissions.canEditParticipant(event)
+    val canEditDetails get() = EventPermissions.canEditParticipant(event)
+    /** Phone and date of birth: only offered to roles that can read them. */
+    val canEditPii get() = EventPermissions.canEditPii(event)
+    val canRemove get() = EventPermissions.canRemoveParticipants(event)
     val checkInContexts: List<ScanContext> get() = contexts.filter { it.checksIn }.ifEmpty { contexts }
     val defaultCheckInContext: ScanContext? get() = EventRepository.defaultContext(checkInContexts)
 }
@@ -101,6 +118,10 @@ class ParticipantDetailViewModel(
     /** One-off haptic cues: confirm / reject when an action's result arrives, click when a badge is detected. */
     val cues = _cues.receiveAsFlow()
     private fun cue(ok: Boolean) { _cues.trySend(if (ok) DetailCue.Confirm else DetailCue.Reject) }
+
+    private val _removed = Channel<String>(Channel.BUFFERED)
+    /** Emits the person's name once their registration has been removed; the screen then leaves. */
+    val removed = _removed.receiveAsFlow()
 
     init {
         viewModelScope.launch {
@@ -218,6 +239,106 @@ class ParticipantDetailViewModel(
             } finally {
                 _state.update { it.copy(busy = null) }
             }
+        }
+    }
+
+    // ---------------- edit details ----------------
+
+    fun startEdit() {
+        val s = _state.value
+        val p = s.participant ?: return
+        if (!s.canEditDetails || s.edit != null) return
+        if (!s.detailLoaded) {
+            // The roster copy has no legal names or birthday: editing it would look like blanking them.
+            viewModelScope.launch { _messages.send("Their full profile hasn't loaded yet. Check your connection and try again.") }
+            refresh()
+            return
+        }
+        _state.update { it.copy(edit = EditSession(ParticipantEditLogic.formFrom(p))) }
+    }
+
+    fun updateEdit(form: EditForm) {
+        _state.update { s ->
+            val e = s.edit ?: return@update s
+            if (e.saving) return@update s
+            // A field's error goes away as soon as it's edited.
+            val errors = e.fieldErrors.filterKeys { ParticipantEditLogic.valueOf(e.form, it) == ParticipantEditLogic.valueOf(form, it) }
+            s.copy(edit = e.copy(form = form, fieldErrors = errors))
+        }
+    }
+
+    fun cancelEdit() { _state.update { if (it.edit?.saving == true) it else it.copy(edit = null) } }
+
+    /** Validates, sends only the changed fields, then re-fetches the full profile (PATCH answers with the short shape). */
+    fun saveEdit() {
+        val s = _state.value
+        val e = s.edit ?: return
+        if (e.saving) return
+        val errors = ParticipantEditLogic.validate(e.original, e.form)
+        if (errors.isNotEmpty()) {
+            _state.update { it.copy(edit = e.copy(fieldErrors = errors, error = null)) }
+            cue(false)
+            return
+        }
+        val patch = ParticipantEditLogic.diff(e.original, e.form, includePii = s.canEditPii)
+        if (patch.isEmpty) { _state.update { it.copy(edit = null) }; return }
+        _state.update { it.copy(edit = e.copy(saving = true, error = null, fieldErrors = emptyMap())) }
+        viewModelScope.launch {
+            val short = try {
+                c.api.updateParticipant(eventId, participantEventId, patch)
+            } catch (ex: Exception) {
+                if (ex is CancellationException) throw ex
+                val msg = ex.friendlyMessage
+                val field = ParticipantEditLogic.fieldForServerError((ex as? ApiException)?.message)
+                _state.update { st -> st.copy(edit = st.edit?.copy(saving = false, error = msg, fieldErrors = field?.let { mapOf(it to msg) }.orEmpty())) }
+                cue(false)
+                return@launch
+            }
+            val fresh = try {
+                c.api.participant(eventId, participantEventId)
+            } catch (ex: Exception) {
+                if (ex is CancellationException) throw ex
+                null
+            }
+            // Saved either way; without the fresh profile, apply the edit to our copy ourselves.
+            val updated = fresh ?: ParticipantEditLogic.applyLocally(_state.value.participant ?: short, patch)
+            c.participants.applyEdit(eventId, updated)
+            _state.update {
+                it.copy(
+                    participant = c.participants.roster(eventId)?.byEventId?.get(participantEventId) ?: updated,
+                    edit = null,
+                )
+            }
+            cue(true)
+            _messages.send("Saved")
+        }
+    }
+
+    // ---------------- remove ----------------
+
+    /** Deletes this registration (and its travel, consents and scans) for the event. */
+    fun remove() {
+        val s = _state.value
+        if (s.busy != null || !s.canRemove) return
+        val name = s.participant?.name ?: "them"
+        viewModelScope.launch {
+            _state.update { it.copy(busy = DetailBusy.Removing) }
+            try {
+                c.api.deleteParticipant(eventId, participantEventId)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // Already gone (removed elsewhere): the outcome the user wanted.
+                if ((e as? ApiException)?.isNotFound != true) {
+                    _state.update { it.copy(busy = null) }
+                    cue(false)
+                    _messages.send("Couldn't remove $name: ${e.friendlyMessage}")
+                    return@launch
+                }
+            }
+            c.participants.remove(eventId, participantEventId)
+            _state.update { it.copy(busy = null) }
+            cue(true)
+            _removed.send(name)
         }
     }
 
