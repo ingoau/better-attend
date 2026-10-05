@@ -20,8 +20,11 @@ final class DemoBackend: @unchecked Sendable {
     private var seenClientScanIds: Set<String> = []
     private var offline = UserDefaults.standard.bool(forKey: "AttendDemoOffline")
     private var blastCreated: [String: Date] = [:]
-    /// Event staff per event id (only the main event has any).
-    private lazy var staff: [String: [StaffMember]] = [DemoData.mainEventId: DemoData.demoStaff(user: data.user)]
+    /// Event staff per event id: the main event's full team, and just the organizer on the upcoming one.
+    private lazy var staff: [String: [StaffMember]] = [
+        DemoData.mainEventId: DemoData.demoStaff(user: data.user),
+        DemoData.upcomingEventId: DemoData.upcomingStaff(user: data.user),
+    ]
     /// Profiles edited through PATCH participants, keyed by participant event id. The generated detail
     /// is derived from the roster copy, so edited legal names and birthdays are kept here.
     private var profiles: [String: Personal] = [:]
@@ -260,7 +263,8 @@ final class DemoBackend: @unchecked Sendable {
         if first != nil || last != nil {
             profiles[p.participantEventId] = Personal(legalFirstName: first, legalLastName: last)
         }
-        // The upcoming event holds onboarding invitations, like an event that hasn't opened yet.
+        // The upcoming event (where the organizer is also an event admin) holds onboarding invitations,
+        // like an event that hasn't opened yet, so the "held" message can be seen in demo mode.
         let held = eventId == DemoData.upcomingEventId
         let result = InviteResult(success: true, held: held, message: held ? "Invitation held for \(email)" : "Invitation sent to \(email)",
                                   event: event.name, participantId: p.participantId, participantEventId: p.participantEventId,
@@ -276,8 +280,9 @@ final class DemoBackend: @unchecked Sendable {
         guard ParticipantEditLogic.looksLikeEmail(email) else { return error(422, "A valid email address is required") }
         let role = body["role"] ?? ""
         guard DemoData.staffRoles.contains(where: { $0.role == role }) else { return error(422, invalidRole(role)) }
-        if (staff[eventId] ?? []).contains(where: { $0.user.email.lowercased() == email }) {
-            return error(422, "User is already on the staff of this event")
+        // Like upstream, someone can hold several roles, but each role only once.
+        if (staff[eventId] ?? []).contains(where: { $0.user.email.lowercased() == email && $0.role == role }) {
+            return error(422, "Role has already been taken")
         }
         let known = staff.values.joined().first { $0.user.email.lowercased() == email }?.user
         let localPart = String(email.split(separator: "@").first ?? "")
@@ -286,6 +291,7 @@ final class DemoBackend: @unchecked Sendable {
         let member = StaffMember(id: UUID().uuidString.lowercased(), role: role, roleLabel: DemoData.staffRoleLabel(role),
                                  createdAt: Time.nowISO(), user: user)
         staff[eventId, default: []].append(member)
+        if email == data.user.email.lowercased() { syncOwnRole(eventId) }
         return ok(StaffMemberResponse(staffMember: member, accountCreated: known == nil), status: 201)
     }
 
@@ -294,15 +300,15 @@ final class DemoBackend: @unchecked Sendable {
         guard var list = staff[eventId], let i = list.firstIndex(where: { $0.id == id }) else { return notFound() }
         let role = body["role"] ?? ""
         guard DemoData.staffRoles.contains(where: { $0.role == role }) else { return error(422, invalidRole(role)) }
+        let email = list[i].user.email.lowercased()
+        if list.contains(where: { $0.id != id && $0.user.email.lowercased() == email && $0.role == role }) {
+            return error(422, "Role has already been taken")
+        }
         list[i].role = role
         list[i].roleLabel = DemoData.staffRoleLabel(role)
         staff[eventId] = list
         let member = list[i]
-        // Your own role on the event follows your assignment (global admins keep theirs).
-        if member.user.email.lowercased() == data.user.email.lowercased(),
-           let e = data.events.firstIndex(where: { $0.id == eventId }), data.events[e].role != "global_admin" {
-            data.events[e].role = role
-        }
+        if email == data.user.email.lowercased() { syncOwnRole(eventId) }
         return ok(StaffMemberResponse(staffMember: member))
     }
 
@@ -315,11 +321,20 @@ final class DemoBackend: @unchecked Sendable {
                 + "so it can't be removed here. Manage them from the series members page.")
         }
         staff[eventId]?.removeAll { $0.id == id }
-        // Removing yourself takes the event off your list, like the real server.
-        if member.user.email.lowercased() == data.user.email.lowercased() {
-            data.events.removeAll { $0.id == eventId }
-        }
+        if member.user.email.lowercased() == data.user.email.lowercased() { syncOwnRole(eventId) }
         return .success(Reply(status: 204, body: Data()))
+    }
+
+    /// Your standing on the event follows your remaining assignments, like the real server's event
+    /// list (global admins and series members keep theirs). With none left, the event leaves your list.
+    private func syncOwnRole(_ eventId: String) {
+        guard let i = data.events.firstIndex(where: { $0.id == eventId }),
+              let updated = StaffLogic.ownAccess(after: staff[eventId] ?? [], user: data.user, event: data.events[i]) else { return }
+        if updated.role == nil {
+            data.events.remove(at: i)
+        } else {
+            data.events[i] = updated
+        }
     }
 
     private func invalidRole(_ role: String) -> String {
