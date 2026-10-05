@@ -34,6 +34,19 @@ import Testing
         #expect(EventPermissions.canViewParticipants(event("safeguarding_lead")))
     }
 
+    @Test func rosterAccessIsJudgedOnTheRightEvent() {
+        // e.g. Home's offline-rejection rows, which can belong to any of the user's events.
+        var here = event("event_admin")
+        here.id = "here"
+        var other = event("read_only")
+        other.id = "other"
+        let events = [here, other]
+        #expect(EventPermissions.canViewParticipants(eventId: "here", in: events))
+        #expect(!EventPermissions.canViewParticipants(eventId: "other", in: events))
+        #expect(!EventPermissions.canViewParticipants(eventId: "gone", in: events), "unknown events never open")
+        #expect(!EventPermissions.canViewParticipants(eventId: "here", in: nil))
+    }
+
     @Test func piiEditNeedsPiiAccess() {
         #expect(!EventPermissions.canEditPII(event("limited", pii: false)))
         #expect(EventPermissions.canEditPII(event("ops")))

@@ -15,6 +15,12 @@ enum EventPermissions {
         return event.canViewParticipants && participantAPIRoles.contains(event.role ?? "")
     }
 
+    /// Roster access on the event with this id, looked up in `events`. False when the event isn't
+    /// known (e.g. an offline scan rejected for an event that's since left the list).
+    static func canViewParticipants(eventId: String, in events: [Event]?) -> Bool {
+        canViewParticipants(events?.first { $0.id == eventId })
+    }
+
     /// PATCH a participant: profile fields and withdraw/reinstate (ParticipantEventPolicy#can_edit?).
     /// Direct event roles only: series members and safeguarding leads get 403.
     static func canEditParticipant(_ event: Event?) -> Bool {
