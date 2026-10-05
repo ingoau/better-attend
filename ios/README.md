@@ -56,7 +56,7 @@ right target automatically. Never hand-edit `project.pbxproj` for new files.
 - **Concurrency**: Swift 6 language mode. Models in `Shared/` are plain `Sendable` structs. App-side
   state holders are `@MainActor @Observable final class`; views read them directly.
 - **Dependencies** come from the environment: `@Environment(AppModel.self) var app` (repositories:
-  `app.events`, `app.participants`, `app.scans`, `app.tickets`, `app.travel`, `app.settings`,
+  `app.events`, `app.participants`, `app.scans`, `app.tickets`, `app.travel`, `app.rollCalls`, `app.settings`,
   `app.auth`, `app.api`) and `@Environment(Router.self) var router` (navigation).
 - **Navigation**: `TabView` + one `NavigationStack` per tab. Push with `router.open(.participant(…))`
   etc. Settings and the event picker are sheets (`router.sheet`), kiosk is a full-screen cover

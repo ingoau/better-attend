@@ -297,15 +297,15 @@ private struct RollCallActiveView: View {
                 ForEach(shown) { e in
                     row(e)
                 }
+                if shown.isEmpty {
+                    emptyState(searching: !model.query.isBlank)
+                        .padding(.vertical, 24)
+                        .listRowSeparator(.hidden)
+                }
             }
         }
         .listStyle(.plain)
         .animation(.smooth, value: shown.map(\.id))
-        .overlay {
-            if shown.isEmpty {
-                emptyState(searching: !model.query.isBlank)
-            }
-        }
         .searchable(text: $model.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Name or ticket code")
         .topBar {
             Picker("Show", selection: $model.filter) {
@@ -370,7 +370,7 @@ private struct RollCallActiveView: View {
                     Label("Here", systemImage: "checkmark.circle")
                 }
             }
-            .tint(e.accounted ? .orange : Tone.success.color)
+            .tint(e.accounted ? Color.orange : Tone.success.color)
         }
         .contextMenu {
             Button(e.accounted ? "Mark Missing" : "Mark Accounted For", systemImage: e.accounted ? "circle" : "checkmark.circle") {
