@@ -90,7 +90,7 @@ They show up as **BetterAttend** and install **alongside** the official app (`au
   here, tick people off, see who's missing, share the list. Optionally record ticks as scans at a
   scan point you pick.
 - **First-aid sheet** — everyone with medical or safety flags, with allergies, medications and
-  emergency contacts for safeguarding leads and admins; works offline and prints or saves as PDF.
+  emergency contacts for safeguarding leads and global admins; works offline and prints or saves as PDF.
 - **Role-aware** — actions only appear for roles Attend allows (e.g. only event admins see
   Invite, Event staff and Remove), so nobody hits a "Forbidden" error.
 
