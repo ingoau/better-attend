@@ -59,6 +59,9 @@ object ScanAdmission {
      * @param contextId the selected checkpoint; null skips the "already checked in" check.
      * @param pending scans already queued, so the same ticket scanned twice offline isn't queued twice.
      * @param otherRosters cached rosters of the user's other events, by event name, for "wrong event".
+     * @param enforceAdmission false when staff have deliberately admitted the person (check-in from their
+     *   page, a roll call tick): the server would accept the scan, so only checks it would fail on (not
+     *   registered, wrong event) and the duplicate check remain, exactly as online.
      */
     fun precheck(
         input: ScanInput,
@@ -67,6 +70,7 @@ object ScanAdmission {
         checksIn: Boolean,
         pending: List<PendingScan> = emptyList(),
         otherRosters: Map<String, Roster> = emptyMap(),
+        enforceAdmission: Boolean = true,
     ): Precheck {
         val code = input.badgeToken ?: input.participantId ?: return Precheck.Pass(null)
         // A roster that's never had a full sync is partial: it can't prove someone isn't registered.
@@ -80,7 +84,7 @@ object ScanAdmission {
             }
             return Precheck.Block(RejectReason.NotRegistered, null)
         }
-        problem(p, checksIn)?.let { return Precheck.Block(it, p) }
+        if (enforceAdmission) problem(p, checksIn)?.let { return Precheck.Block(it, p) }
         if (contextId != null) {
             p.scansByContext.firstOrNull { it.scanContextId == contextId }?.let {
                 return Precheck.Block(RejectReason.AlreadyCheckedIn, p, it.firstScannedAt)
