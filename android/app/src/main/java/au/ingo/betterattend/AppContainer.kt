@@ -67,12 +67,13 @@ class AppContainer(context: Context) {
     /** Wipes every cached byte of account data (sign-out / session expiry). */
     suspend fun clearAccountData() {
         // Each step independently: a failing disk shouldn't leave the rest of the data behind.
+        // Roll calls first: that stops their recording work, so nothing rewrites a file once the cache is wiped.
+        runCatching { rollCalls.clear() }
         runCatching { scans.clear() }
         runCatching { participants.clear() } // also clears the encrypted file cache
         runCatching { events.clear() }
         runCatching { tickets.clear() }
         runCatching { travel.clear() }
-        runCatching { rollCalls.clear() }
         runCatching { settings.clearAccountData() }
         // Participant headshots (minors) live in Coil's caches.
         runCatching {

@@ -3,6 +3,7 @@ package au.ingo.betterattend.ui.rollcall
 import au.ingo.betterattend.data.api.AttendJson
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
+import au.ingo.betterattend.data.repo.RecordedScan
 import au.ingo.betterattend.data.repo.RollCall
 import au.ingo.betterattend.data.repo.RollCallExpected
 import au.ingo.betterattend.data.repo.Roster
@@ -112,6 +113,25 @@ class RollCallLogicTest {
         assertFalse(rc.toggle("pe1", "t").stillRecorded.contains("pe1"))
     }
 
+    @Test fun notRecorded_showsOnlyWhileTicked_andClearsOnUntick() {
+        val rc = start(recording = TickRecording.AtScanPoint("c2")).toggle("pe1", "t").copy(notRecorded = setOf("pe1"))
+        assertTrue(RollCallLogic.allRows(rc, roster).first { it.id == "pe1" }.notRecorded)
+        val unticked = rc.toggle("pe1", "t2")
+        assertFalse(unticked.notRecorded.contains("pe1"))
+        assertFalse(RollCallLogic.allRows(unticked, roster).first { it.id == "pe1" }.notRecorded)
+    }
+
+    @Test fun untick_leavesWhatWasRecordedForTheRecordingWork() {
+        val rc = start(recording = TickRecording.AtScanPoint("c2")).toggle("pe1", "t")
+            .copy(recorded = mapOf("pe1" to RecordedScan("client-1", "t")), queued = mapOf("pe2" to "client-2"), preExisting = setOf("pe2"))
+        val unticked = rc.toggle("pe1", "t2")
+        // The untick's job reads these when it runs, after the tick's job has finished.
+        assertEquals(rc.recorded, unticked.recorded)
+        assertEquals(rc.queued, unticked.queued)
+        val settled = unticked.settled("pe1").settled("pe2")
+        assertTrue(settled.recorded.isEmpty() && settled.queued.isEmpty() && settled.preExisting.isEmpty())
+    }
+
     @Test fun filters_andChipCounts() {
         val rc = start(RollCallExpected.Registered).toggle("pe1", "t").toggle("pe3", "t")
         assertEquals(listOf("Kai Tanaka", "Leo Nguyen"), RollCallLogic.rows(rc, roster, RollCallFilter.Missing, "").map { it.name })
@@ -164,7 +184,7 @@ class RollCallLogicTest {
 
     @Test fun session_survivesJsonRoundTrip() {
         val rc = start(recording = TickRecording.AtScanPoint("c1")).add("pe3", "Ava", "t1").toggle("pe1", "t2")
-            .copy(stillRecorded = setOf("pe2"), queued = mapOf("pe1" to "client-1"))
+            .copy(stillRecorded = setOf("pe2"), queued = mapOf("pe1" to "client-1"), recorded = mapOf("pe3" to RecordedScan("c", "t")), notRecorded = setOf("pe1"))
         val json = AttendJson.encodeToString(RollCall.serializer(), rc)
         assertTrue(json.contains("\"checked_in\""))
         val back = AttendJson.decodeFromString(RollCall.serializer(), json)

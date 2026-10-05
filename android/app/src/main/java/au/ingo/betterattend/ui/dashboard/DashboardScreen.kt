@@ -221,7 +221,9 @@ fun DashboardScreen(nav: AppNavigator) {
         onOpenParticipant = { pe -> event?.let { nav.openParticipant(it.id, pe) } },
         onAnnounce = { event?.let { nav.openBlasts(it.id) } },
         onKiosk = { event?.let { nav.openKiosk(it.id, null) } },
-        onOpenRejection = { r -> r.participantEventId?.let { nav.openParticipant(r.eventId, it) } },
+        onOpenRejection = { r ->
+            if (DashboardLogic.canOpenRejection(r, state.events)) r.participantEventId?.let { nav.openParticipant(r.eventId, it) }
+        },
         onDismissRejections = vm::dismissRejections,
         onRollCall = { event?.let { nav.openRollCall(it.id) } },
         onFirstAid = { event?.let { nav.openFirstAid(it.id) } },

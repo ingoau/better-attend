@@ -66,7 +66,10 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -361,6 +364,9 @@ fun ParticipantDetailContent(
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     val motion = MaterialTheme.motionScheme
+    // Removing finishes even if the screen goes, but stay put until it has so the outcome is seen.
+    val removing = state.busy == DetailBusy.Removing
+    BackHandler(enabled = removing) {}
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -385,7 +391,7 @@ fun ParticipantDetailContent(
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = callbacks.back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = callbacks.back, enabled = !removing) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 actions = { if (p != null) OverflowMenu(state, p, callbacks) { dialog = it } },
                 scrollBehavior = scroll,
             )
@@ -419,6 +425,22 @@ fun ParticipantDetailContent(
         }
     }
 
+    if (removing) {
+        AlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            confirmButton = {},
+            title = { Text("Removing ${p?.name ?: "them"}…") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LoadingIndicator(Modifier.size(36.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Deleting their registration from ${state.event?.name ?: "this event"}.")
+                }
+            },
+        )
+    }
+
     if (p != null) when (dialog) {
         "undo" -> UndoCheckInDialog(p.name, p.scansByContext, tz, onConfirm = { dialog = null; callbacks.undo(it) }, onDismiss = { dialog = null })
         "withdraw" -> ConfirmDialog(
@@ -448,7 +470,8 @@ private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: Detail
     Box {
         IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            if (state.canEditDetails) {
+            // Only once the full profile is here: the roster copy has no legal names or birthday.
+            if (state.canEditDetails && state.detailLoaded) {
                 DropdownMenuItem(
                     text = { Text("Edit details") },
                     leadingIcon = { Icon(Icons.Outlined.Edit, null) },

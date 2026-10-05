@@ -1,12 +1,14 @@
 package au.ingo.betterattend.ui.dashboard
 
 import au.ingo.betterattend.data.model.Event
+import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.Scan
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.model.TravelEntry
 import au.ingo.betterattend.data.repo.EventStats
+import au.ingo.betterattend.data.repo.ScanRejection
 import au.ingo.betterattend.util.Time
 import java.time.Duration
 import java.time.Instant
@@ -36,6 +38,13 @@ data class ScanFeedSummary(
 )
 
 object DashboardLogic {
+    /**
+     * Whether a rejected offline check-in can open the person's page: rejections can belong to any of
+     * the user's events, so it's that event's access that counts (an unknown event: no).
+     */
+    fun canOpenRejection(r: ScanRejection, events: List<Event>?): Boolean =
+        r.participantEventId != null && EventPermissions.canViewParticipants(events?.firstOrNull { it.id == r.eventId })
+
     /** The API returns at most this many scans without `since`. */
     const val SCAN_FEED_CAP = 100
 

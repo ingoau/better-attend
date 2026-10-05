@@ -83,6 +83,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -388,6 +389,11 @@ private fun RecordingChoices(contexts: List<ScanContext>?, recording: TickRecord
                         onClick = { onChoose(TickRecording.AtScanPoint(ctx.id)) },
                     )
                 }
+                Text(
+                    "Unticking takes back a scan only when the roll call made the only scan there. Earlier scans are never removed.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp),
+                )
             }
         }
     }
@@ -559,8 +565,10 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
     val p = row.participant
     val s = MaterialTheme.status
     val secondary: Pair<String, Color?> = when {
+        row.accounted && row.notRecorded ->
+            listOfNotNull(Time.time(row.tickedAt, tz)?.let { "Ticked $it" } ?: "Ticked", "Not recorded at ${contextName ?: "the scan point"}").joinToString(" · ") to s.warning
         row.accounted -> listOfNotNull(Time.time(row.tickedAt, tz)?.let { "Ticked $it" } ?: "Ticked", if (row.added) "Added" else null).joinToString(" · ") to null
-        row.stillRecorded -> "Offline untick · still scanned at ${contextName ?: "the scan point"}" to s.warning
+        row.stillRecorded -> "Unticked · still scanned at ${contextName ?: "the scan point"}" to s.warning
         p == null -> "No longer on the roster" to null
         else -> (checkInLine(p, tz) ?: statusLabel(p.status).let { if (p.isActive) "Not checked in · $it" else it }) to null
     }
@@ -590,7 +598,8 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
                     secondary.first,
                     style = MaterialTheme.typography.bodyMedium,
                     color = secondary.second ?: MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    // A warning (not recorded / still scanned) names the scan point: let it wrap rather than cut it off.
+                    maxLines = if (secondary.second != null) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -604,7 +613,8 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
                     checkedContainerColor = s.success,
                     checkedContentColor = s.onSuccess,
                 ),
-                modifier = Modifier.size(48.dp).semantics { contentDescription = if (row.accounted) "Accounted for ${row.name}" else "Mark ${row.name} accounted for" },
+                // The row is the one TalkBack target (tap toggles, long press opens): the button adds no second stop.
+                modifier = Modifier.size(48.dp).clearAndSetSemantics {},
             ) {
                 Icon(Icons.Outlined.Check, null)
             }
@@ -674,6 +684,7 @@ fun RollCallSummaryContent(state: RollCallUiState, rc: RollCall, snackbar: Snack
     val rows = remember(rc, state.roster) { RollCallLogic.allRows(rc, state.roster) }
     val missing = rows.filter { !it.accounted }
     val added = rows.filter { it.added && it.accounted }
+    val notRecorded = rows.filter { it.notRecorded }
     var confirmEnd by rememberSaveable { mutableStateOf(false) }
     val subtitle = listOfNotNull(Time.time(rc.finishedAt, tz)?.let { "Finished $it" }, RollCallLogic.duration(rc, now).takeIf { it.isNotEmpty() }).joinToString(" · ")
 
@@ -719,7 +730,10 @@ fun RollCallSummaryContent(state: RollCallUiState, rc: RollCall, snackbar: Snack
             }
             item(key = "recording") {
                 Text(
-                    rc.scanContextName?.let { "Ticks were recorded as scans at $it." } ?: "Ticks were kept on this phone; nothing was sent.",
+                    rc.scanContextName?.let { name ->
+                        "Ticks were recorded as scans at $name." +
+                            if (notRecorded.isEmpty()) "" else " Ticks for ${people(notRecorded.size)} couldn't be recorded there."
+                    } ?: "Ticks were kept on this phone; nothing was sent.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                 )
@@ -731,6 +745,10 @@ fun RollCallSummaryContent(state: RollCallUiState, rc: RollCall, snackbar: Snack
             if (added.isNotEmpty()) {
                 item(key = "h_added") { SectionHeader("Added · ${added.size}") }
                 summaryRows(added, tz, actions.onOpenParticipant)
+            }
+            if (notRecorded.isNotEmpty()) {
+                item(key = "h_not_recorded") { SectionHeader("Not recorded at ${rc.scanContextName ?: "the scan point"} · ${notRecorded.size}") }
+                summaryRows(notRecorded, tz, actions.onOpenParticipant, keyPrefix = "n_")
             }
         }
     }
@@ -794,8 +812,8 @@ private fun SummaryStat(label: String, value: String, modifier: Modifier) {
     }
 }
 
-private fun LazyListScope.summaryRows(rows: List<RollCallRow>, tz: String?, onOpen: (String) -> Unit) {
-    items(rows, key = { "s_" + it.id }) { row ->
+private fun LazyListScope.summaryRows(rows: List<RollCallRow>, tz: String?, onOpen: (String) -> Unit, keyPrefix: String = "s_") {
+    items(rows, key = { keyPrefix + it.id }) { row ->
         val p = row.participant
         Surface(
             onClick = { if (p != null) onOpen(row.id) },

@@ -66,13 +66,18 @@ private data class Local(val loaded: Boolean = false, val syncing: Boolean = fal
 class RollCallViewModel(private val c: AppContainer, private val eventId: String) : ViewModel() {
     private val local = MutableStateFlow(Local())
 
-    private val repos = combine(c.events.events, c.participants.rosters, c.events.contexts, c.rollCalls.sessions) { events, rosters, contexts, sessions ->
+    /** The roll call being ended: shown until the screen has gone. */
+    private val ending = MutableStateFlow<RollCall?>(null)
+
+    private val sessions = combine(c.rollCalls.sessions, ending) { sessions, ending -> ending ?: sessions[eventId] }
+
+    private val repos = combine(c.events.events, c.participants.rosters, c.events.contexts, sessions) { events, rosters, contexts, rollCall ->
         RollCallUiState(
             eventsLoaded = events != null,
             event = events?.firstOrNull { it.id == eventId },
             roster = rosters[eventId],
             contexts = contexts[eventId],
-            rollCall = sessions[eventId],
+            rollCall = rollCall,
         )
     }
 
@@ -112,19 +117,27 @@ class RollCallViewModel(private val c: AppContainer, private val eventId: String
         if (!s.canView || s.rollCall != null) return
         // Only a scan point the user picked from this event's list; never a fallback.
         if (recording is TickRecording.AtScanPoint && s.contexts.orEmpty().none { it.id == recording.contextId }) return
-        val rc = RollCallLogic.start(eventId, roster.participants, mode, recording, s.contexts.orEmpty())
-        viewModelScope.launch { c.rollCalls.start(rc) }
+        c.rollCalls.start(RollCallLogic.start(eventId, roster.participants, mode, recording, s.contexts.orEmpty()))
     }
 
-    fun toggle(participantEventId: String) { viewModelScope.launch { c.rollCalls.toggle(eventId, participantEventId) } }
+    // These hand straight to the repository, which runs them on the app scope: leaving the screen
+    // right after a tap never drops the tick, its scan, or an untick's undo.
 
-    fun add(participantEventId: String, name: String) { viewModelScope.launch { c.rollCalls.add(eventId, participantEventId, name) } }
+    fun toggle(participantEventId: String) { c.rollCalls.toggle(eventId, participantEventId) }
 
-    fun finish() { viewModelScope.launch { c.rollCalls.finish(eventId) } }
+    fun add(participantEventId: String, name: String) { c.rollCalls.add(eventId, participantEventId, name) }
 
-    fun resume() { viewModelScope.launch { c.rollCalls.resume(eventId) } }
+    fun finish() { c.rollCalls.finish(eventId) }
 
-    fun end(then: () -> Unit) { viewModelScope.launch { c.rollCalls.end(eventId); then() } }
+    fun resume() { c.rollCalls.resume(eventId) }
+
+    /** Leaves first, still showing the summary, so the setup screen never flashes up on the way out. */
+    fun end(leave: () -> Unit) {
+        if (ending.value != null) return
+        ending.value = state.value.rollCall ?: return
+        leave()
+        c.rollCalls.end(eventId)
+    }
 }
 
 @Composable

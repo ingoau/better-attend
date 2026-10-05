@@ -20,6 +20,7 @@ import au.ingo.betterattend.data.repo.ScanOutcome
 import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -321,22 +322,34 @@ class ParticipantDetailViewModel(
         val s = _state.value
         if (s.busy != null || !s.canRemove) return
         val name = s.participant?.name ?: "them"
-        viewModelScope.launch {
-            _state.update { it.copy(busy = DetailBusy.Removing) }
+        _state.update { it.copy(busy = DetailBusy.Removing) }
+        // The delete and dropping them from the cached roster run on the app scope: leaving the screen
+        // mid-way must not leave someone Attend has deleted showing in the lists.
+        val work = c.scope.async {
             try {
                 c.api.deleteParticipant(eventId, participantEventId)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 // Already gone (removed elsewhere): the outcome the user wanted.
-                if ((e as? ApiException)?.isNotFound != true) {
-                    _state.update { it.copy(busy = null) }
-                    cue(false)
-                    _messages.send("Couldn't remove $name: ${e.friendlyMessage}")
-                    return@launch
-                }
+                if ((e as? ApiException)?.isNotFound != true) return@async e
             }
             c.participants.remove(eventId, participantEventId)
+            null
+        }
+        viewModelScope.launch {
+            val failure = try {
+                work.await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e
+            }
             _state.update { it.copy(busy = null) }
+            if (failure != null) {
+                cue(false)
+                _messages.send("Couldn't remove $name: ${failure.friendlyMessage}")
+                return@launch
+            }
             cue(true)
             _removed.send(name)
         }

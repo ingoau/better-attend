@@ -311,8 +311,9 @@ private fun DashboardBody(
                 OfflineRejectionsCard(
                     rejections = state.rejections,
                     timezone = event.timezone,
-                    onOpen = if (state.canViewParticipants) onOpenRejection else null,
+                    onOpen = onOpenRejection,
                     onDismissAll = onDismissRejections,
+                    canOpen = { DashboardLogic.canOpenRejection(it, state.events) },
                 )
             }
         }

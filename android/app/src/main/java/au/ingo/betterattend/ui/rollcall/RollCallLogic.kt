@@ -40,8 +40,10 @@ data class RollCallRow(
     val added: Boolean,
     /** Ticked at (ISO). */
     val tickedAt: String?,
-    /** Unticked offline: their scan at the roll call's scan point stays recorded. */
+    /** Unticked, but a scan at the roll call's scan point stays recorded for them. */
     val stillRecorded: Boolean,
+    /** Ticked, but recording the tick as a scan failed or was refused. */
+    val notRecorded: Boolean = false,
 )
 
 /** Pure roll call rules (kept out of Compose so they're unit-tested). */
@@ -99,6 +101,7 @@ object RollCallLogic {
                 added = !rc.isExpected(id),
                 tickedAt = rc.accounted[id],
                 stillRecorded = id in rc.stillRecorded && id !in rc.accounted,
+                notRecorded = id in rc.notRecorded && id in rc.accounted,
             )
         }.sortedBy { it.name.lowercase() }
     }

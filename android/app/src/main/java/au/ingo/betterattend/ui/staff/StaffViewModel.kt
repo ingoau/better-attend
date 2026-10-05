@@ -108,7 +108,7 @@ class StaffViewModel(private val c: AppContainer, private val eventId: String) :
         val s = _state.value
         val form = s.add ?: return
         if (form.sending || !s.canManage) return
-        StaffLogic.validateAdd(form.email, form.role, s.roles)?.let { err -> _state.update { it.copy(add = form.copy(error = err)) }; return }
+        StaffLogic.validateAdd(form.email, form.role, s.roles, StaffLogic.heldRoles(form.email, s.staff.orEmpty()))?.let { err -> _state.update { it.copy(add = form.copy(error = err)) }; return }
         _state.update { it.copy(add = form.copy(sending = true, error = null)) }
         viewModelScope.launch {
             try {
@@ -145,16 +145,17 @@ class StaffViewModel(private val c: AppContainer, private val eventId: String) :
         val sel = s.selected ?: return
         val member = s.selectedMember ?: return
         if (sel.busy || sel.role == member.role) return
+        // Upstream allows each role once per person: they already hold this one in another row.
+        if (sel.role in StaffLogic.heldRoles(member.user.email, s.staff.orEmpty(), exceptId = member.id)) return
         val self = StaffLogic.isSelf(member, s.me)
         _state.update { it.copy(selected = sel.copy(busy = true, error = null)) }
         viewModelScope.launch {
             try {
                 val updated = c.api.updateStaffRole(eventId, member.id, sel.role)
                 _state.update { st -> st.copy(selected = null, staff = st.staff?.map { if (it.id == updated.id) updated else it }) }
+                if (self) followOwnRoleChange()
                 _cues.send(true)
                 _messages.send("${if (self) "You're" else member.user.displayName + " is"} now ${StaffLogic.roleLabel(updated, _state.value.roles)}")
-                // Our own role changed: refresh events so the whole app (this screen included) follows.
-                if (self) c.events.refresh()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _state.update { it.copy(selected = it.selected?.copy(busy = false, error = e.friendlyMessage)) }
@@ -183,9 +184,24 @@ class StaffViewModel(private val c: AppContainer, private val eventId: String) :
                 }
             }
             _state.update { st -> st.copy(selected = null, staff = st.staff?.filterNot { it.id == member.id }) }
+            if (self) followOwnRoleChange()
             _cues.send(true)
             _messages.send(if (self) "You've left the event staff" else "Removed ${member.user.displayName} from the event staff")
-            if (self) c.events.refresh()
+        }
+    }
+
+    /**
+     * Our own role changed: work out what we're left with from our remaining rows and apply it to the
+     * cached event now, so the whole app (this screen included) follows even if the refresh fails.
+     * The refresh then confirms it in the background.
+     */
+    private fun followOwnRoleChange() {
+        val st = _state.value
+        val mine = st.staff.orEmpty().filter { StaffLogic.isSelf(it, st.me) }.map { it.role }
+        // On the app scope: leaving the screen straight away mustn't skip it.
+        c.scope.launch {
+            c.events.updateCached(eventId) { StaffLogic.effectiveAccess(it, mine) }
+            c.events.refresh()
         }
     }
 

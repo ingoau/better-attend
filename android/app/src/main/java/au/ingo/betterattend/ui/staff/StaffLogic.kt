@@ -1,5 +1,6 @@
 package au.ingo.betterattend.ui.staff
 
+import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.StaffMember
 import au.ingo.betterattend.data.model.StaffRole
 import au.ingo.betterattend.data.model.User
@@ -40,11 +41,42 @@ object StaffLogic {
         return !keepsAnother
     }
 
-    /** An error to show, or null when the add form can be sent. */
-    fun validateAdd(email: String, role: String?, roles: List<StaffRole>): String? = when {
+    /**
+     * Roles the person with [email] already holds on this event, in rows other than [exceptId]. Upstream
+     * lets someone hold several roles but each only once, so these can't be picked again.
+     */
+    fun heldRoles(email: String, staff: List<StaffMember>, exceptId: String? = null): Set<String> {
+        val e = email.trim()
+        if (e.isEmpty()) return emptySet()
+        return staff.filter { it.id != exceptId && it.user.email.equals(e, ignoreCase = true) }.map { it.role }.toSet()
+    }
+
+    /** Upstream's order for reporting someone's role on an event when they hold several (most access first). */
+    private val ROLE_PRECEDENCE = listOf("event_admin", "safeguarding_lead", "ops", "limited", "read_only")
+    private val PARTICIPANT_API_ROLES = setOf("event_admin", "ops", "limited", "safeguarding_lead")
+
+    /**
+     * [event] as Attend will report it once the signed-in user's own rows here hold [myRoles], so the app
+     * follows a change to your own role straight away (mirrors the events endpoint). Global admins and
+     * series members aren't affected by event rows; with no rows left there's no access at all.
+     */
+    fun effectiveAccess(event: Event, myRoles: Collection<String>): Event {
+        if (event.role == "global_admin" || event.role == "series_member") return event
+        val roles = myRoles.toSet()
+        return event.copy(
+            role = ROLE_PRECEDENCE.firstOrNull { it in roles } ?: roles.firstOrNull(),
+            canViewParticipantPii = roles.any { it != "limited" },
+            canViewParticipants = roles.any { it in PARTICIPANT_API_ROLES },
+            canViewSensitiveData = "safeguarding_lead" in roles,
+        )
+    }
+
+    /** An error to show, or null when the add form can be sent. [held]: roles that email already has here. */
+    fun validateAdd(email: String, role: String?, roles: List<StaffRole>, held: Set<String> = emptySet()): String? = when {
         email.isBlank() -> "Enter their email address"
         !Validation.looksLikeEmail(email) -> "Enter a valid email address"
         role == null || roles.none { it.role == role } -> "Choose a role"
+        role in held -> "They're already ${roleLabel(role, roles)} on this event"
         else -> null
     }
 

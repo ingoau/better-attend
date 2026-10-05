@@ -196,7 +196,7 @@ object FirstAidLogic {
         }
     }
 
-    const val NO_SENSITIVE_NOTICE = "Medical details are visible to safeguarding leads and admins."
+    const val NO_SENSITIVE_NOTICE = "Medical details are visible to safeguarding leads and global admins."
     private val TRIVIAL_DIETS = setOf("omnivore", "none", "no_restrictions", "no restrictions", "standard")
 
     const val EMPTY = "No one has medical or safety flags."

@@ -58,6 +58,19 @@ class ScanAdmissionTest {
         assertEquals(Precheck.Pass(noWaiver), check(qr(noWaiver), contextId = "lunch", checksIn = false))
     }
 
+    @Test fun deliberateAdmission_skipsTheAdmissionRules_butNotWhatAttendWouldRefuse() {
+        fun admit(input: ScanInput, contextId: String = "desk") =
+            ScanAdmission.precheck(input, roster, contextId, true, emptyList(), mapOf("Campfire Sydney" to otherEvent), enforceAdmission = false)
+        // As online with enforceAdmission = false: Attend records these, so staff's call stands.
+        assertEquals(Precheck.Pass(withdrawn), admit(qr(withdrawn)))
+        assertEquals(Precheck.Pass(rejected), admit(qr(rejected)))
+        assertEquals(Precheck.Pass(noWaiver), admit(qr(noWaiver)))
+        // Attend would 404 these, and a duplicate is still a duplicate.
+        assertEquals(RejectReason.NotRegistered, (admit(ScanInput(participantId = "cccccccc-0000-4000-8000-000000000000")) as Precheck.Block).reason)
+        assertEquals(RejectReason.WrongEvent, (admit(qr(person(9))) as Precheck.Block).reason)
+        assertEquals(RejectReason.AlreadyCheckedIn, (admit(qr(inAlready)) as Precheck.Block).reason)
+    }
+
     @Test fun blocks_alreadyCheckedIn_atThisCheckpoint() {
         assertEquals(Precheck.Block(RejectReason.AlreadyCheckedIn, inAlready, "2026-10-04T00:10:00Z"), check(qr(inAlready)))
         assertEquals(Precheck.Pass(inAlready), check(qr(inAlready), contextId = "lunch", checksIn = false))
