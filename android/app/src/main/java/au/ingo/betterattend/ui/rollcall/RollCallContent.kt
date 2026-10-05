@@ -381,7 +381,6 @@ private fun RecordingChoices(contexts: List<ScanContext>?, recording: TickRecord
                         body = listOfNotNull(
                             when {
                                 ctx.checksIn -> "Ticking also checks people in"
-                                ctx.isTravelPickup -> "Airport pickup"
                                 else -> null
                             },
                             if (ctx.isLive()) "Happening now" else ctx.windowLabel(tz),
@@ -454,7 +453,7 @@ fun RollCallRunningContent(
     if (adding) {
         AddSomeoneSheet(
             rc = rc, roster = roster, tz = tz,
-            onAdd = { p -> haptics.confirm(); actions.onAdd(p.participantEventId, p.name); adding = false },
+            onAdd = { p -> haptics.confirm(); actions.onAdd(p.participantEventId, p.fullName?.takeIf { it.isNotBlank() } ?: p.name); adding = false },
             onDismiss = { adding = false },
         )
     }
@@ -561,7 +560,7 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
     val s = MaterialTheme.status
     val secondary: Pair<String, Color?> = when {
         row.accounted -> listOfNotNull(Time.time(row.tickedAt, tz)?.let { "Ticked $it" } ?: "Ticked", if (row.added) "Added" else null).joinToString(" · ") to null
-        row.stillRecorded -> "Unticked · scan still recorded at ${contextName ?: "the scan point"}" to s.warning
+        row.stillRecorded -> "Offline untick · still scanned at ${contextName ?: "the scan point"}" to s.warning
         p == null -> "No longer on the roster" to null
         else -> (checkInLine(p, tz) ?: statusLabel(p.status).let { if (p.isActive) "Not checked in · $it" else it }) to null
     }
@@ -650,7 +649,7 @@ fun AddSomeoneBody(query: String, onQuery: (String) -> Unit, candidates: List<Pa
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            Text(p.fullName?.takeIf { it.isNotBlank() } ?: p.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             Spacer(Modifier.width(6.dp))
                             AlertIcons(p)
                         }

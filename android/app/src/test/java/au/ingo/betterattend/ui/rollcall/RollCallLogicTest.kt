@@ -114,8 +114,8 @@ class RollCallLogicTest {
 
     @Test fun filters_andChipCounts() {
         val rc = start(RollCallExpected.Registered).toggle("pe1", "t").toggle("pe3", "t")
-        assertEquals(listOf("Kai", "Leo"), RollCallLogic.rows(rc, roster, RollCallFilter.Missing, "").map { it.name })
-        assertEquals(listOf("Ava", "Mia"), RollCallLogic.rows(rc, roster, RollCallFilter.Accounted, "").map { it.name })
+        assertEquals(listOf("Kai Tanaka", "Leo Nguyen"), RollCallLogic.rows(rc, roster, RollCallFilter.Missing, "").map { it.name })
+        assertEquals(listOf("Ava Brown", "Mia Chen"), RollCallLogic.rows(rc, roster, RollCallFilter.Accounted, "").map { it.name })
         assertEquals(4, RollCallLogic.rows(rc, roster, RollCallFilter.All, "").size)
         assertEquals(mapOf(RollCallFilter.Missing to 2, RollCallFilter.Accounted to 2, RollCallFilter.All to 4), RollCallLogic.filterCounts(rc))
     }
@@ -129,7 +129,7 @@ class RollCallLogicTest {
     @Test fun rows_personWhoLeftTheRoster_keepsTheirFrozenName() {
         val rc = start()
         val row = RollCallLogic.allRows(rc, roster.copy(participants = listOf(mia))).first { it.id == "pe2" }
-        assertEquals("Leo", row.name)
+        assertEquals("Leo Nguyen", row.name)
         assertNull(row.participant)
     }
 

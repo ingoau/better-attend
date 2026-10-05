@@ -68,7 +68,7 @@ object RollCallLogic {
             startedAt = now.toString(),
             expected = mode,
             expectedIds = people.map { it.participantEventId },
-            names = people.associate { it.participantEventId to it.name },
+            names = people.associate { it.participantEventId to (it.fullName?.takeIf { n -> n.isNotBlank() } ?: it.name) },
             scanContextId = ctx?.id,
             scanContextName = ctx?.name,
             scanContextChecksIn = ctx?.checksIn ?: false,
@@ -92,7 +92,8 @@ object RollCallLogic {
             val p = byId[id]
             RollCallRow(
                 id = id,
-                name = p?.name ?: rc.names[id] ?: "Unknown",
+                // Full names: a headcount has to tell the three Aishas apart.
+                name = p?.fullName?.takeIf { it.isNotBlank() } ?: p?.name ?: rc.names[id] ?: "Unknown",
                 participant = p,
                 accounted = id in rc.accounted,
                 added = !rc.isExpected(id),
