@@ -36,7 +36,7 @@ struct DemoData: Sendable {
                   timezone: Self.timezone, locationCity: "Sydney", role: "event_admin", canViewParticipantPii: true,
                   canViewParticipants: true, canViewSensitiveData: true, travelEnabled: true),
             Event(id: Self.upcomingEventId, name: "Scrapyard Melbourne", slug: "scrapyard-melbourne", startsAt: iso(60 * 24 * 12),
-                  endsAt: iso(60 * 24 * 12 + 60 * 34), timezone: "Australia/Melbourne", locationCity: "Melbourne", role: "ops",
+                  endsAt: iso(60 * 24 * 12 + 60 * 34), timezone: "Australia/Melbourne", locationCity: "Melbourne", role: "event_admin",
                   canViewParticipantPii: true, canViewParticipants: true),
             Event(id: Self.pastEventId, name: "Counterspell Brisbane", slug: "counterspell-brisbane", startsAt: iso(-60 * 24 * 40),
                   endsAt: iso(-60 * 24 * 39), timezone: "Australia/Brisbane", locationCity: "Brisbane", role: "read_only",
@@ -114,6 +114,7 @@ struct DemoData: Sendable {
             }
             return p
         }
+        main = main.enumerated().map { i, p in Self.withFirstAidDetails(p, index: i) }
         // The signed-in organizer is also registered, so scanning their own ticket works.
         main.append(Participant(
             participantId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", participantEventId: "3b1f9a2c-8d7e-4f60-9a1b-2c3d4e5f6a7b",
@@ -220,6 +221,40 @@ struct DemoData: Sendable {
             checkedIn: entries.count(where: { $0.pickupState == "checked_in" }),
             pickupNotNeeded: entries.count(where: { $0.pickupState == "pickup_not_needed" })
         )
+    }
+
+    /// The sensitive fields the list endpoint includes for safeguarding leads and global admins, so the
+    /// first-aid sheet has realistic medical needs and contacts to show. Safety flags (and so the
+    /// "Need attention" count) are left as they are.
+    static func withFirstAidDetails(_ p: Participant, index i: Int) -> Participant {
+        var p = p
+        switch i {
+        case 3: p.lifeThreateningAllergies = "Peanuts, tree nuts"
+        case 57: p.lifeThreateningAllergies = "Shellfish"
+        case 101: p.lifeThreateningAllergies = "Bee and wasp stings"
+        case 23, 65:
+            p.crossContaminationRisk = true
+            p.allergies = p.allergies ?? "Coeliac disease (gluten)"
+        case 46:
+            p.medicalConditions = "Type 1 diabetes"
+            p.medications = "Insulin pump, glucose tablets in backpack"
+        case 8: p.medicalConditions = "Anxiety; may need a quiet space"
+        default: break
+        }
+        let needsFirstAid = p.hasAnaphylaxisRisk || p.requiresRefrigeration || p.crossContaminationRisk || p.highSupportFlag
+            || [p.lifeThreateningAllergies, p.allergies, p.medicalConditions, p.medications].contains { $0 != nil }
+        guard needsFirstAid else { return p }
+        let last = p.fullName?.split(separator: " ").last.map(String.init) ?? "Lee"
+        p.emergencyContacts = [
+            EmergencyContact(name: "Jordan \(last)", phone: String(format: "+61411%06d", 100_000 + i * 37), relationship: "Parent", priority: 1),
+            EmergencyContact(name: "Sam \(last)", phone: String(format: "+61422%06d", 200_000 + i * 41), relationship: "Aunt", priority: 2),
+        ]
+        if i % 2 == 1 {
+            p.parentGuardianName = "Alex \(last)"
+            p.parentGuardianPhone = String(format: "+61433%06d", 300_000 + i * 43)
+            p.parentGuardianEmail = "alex.\(last.lowercased())@example.com"
+        }
+        return p
     }
 
     /// The detail-only blocks the list endpoint leaves out.

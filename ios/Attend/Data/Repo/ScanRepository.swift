@@ -14,6 +14,9 @@ struct PendingScan: Codable, Hashable, Sendable, Identifiable {
     /// The checkpoint checks people in (a missing waiver only blocks there), for the verdict on sync.
     /// Defaulted when decoding, so queues saved by older versions still load.
     @Default<True> var checksIn: Bool = true
+    /// False for a deliberate check-in (someone's page, a roll call tick): like online, the admission
+    /// rules don't second-guess staff when it syncs.
+    @Default<True> var enforceAdmission: Bool = true
 
     var id: String { clientScanId }
     var displayName: String { knownName ?? (input.badgeToken != nil ? "NFC badge" : "Unknown attendee") }
@@ -145,6 +148,8 @@ final class ScanRepository {
     @ObservationIgnored let scanTimeout: Duration
 
     static let defaultScanTimeout: Duration = .seconds(5)
+    /// Why a scan was queued when the request may have reached Attend anyway (it timed out).
+    static let timeoutReason = "Attend took too long to respond."
     private static let queueKey = "scan_queue"
     private static let rejectionsKey = "scan_rejections"
     private static let undosKey = "scan_undos"
@@ -194,13 +199,14 @@ final class ScanRepository {
                                     scanContextId: scanContextId, checksIn: checksIn, enforceAdmission: enforceAdmission)
         } catch is ScanTimeout {
             outcome = await offline(eventId: eventId, clientScanId: clientScanId, input: input, scanContextId: scanContextId,
-                                    scanContextName: scanContextName, checksIn: checksIn, scannedAt: scannedAt, roster: roster,
-                                    known: known, reason: "Attend took too long to respond.", timedOut: true)
+                                    scanContextName: scanContextName, checksIn: checksIn, enforceAdmission: enforceAdmission,
+                                    scannedAt: scannedAt, roster: roster, known: known, reason: Self.timeoutReason,
+                                    timedOut: true)
         } catch {
             if error.isTransient {
                 outcome = await offline(eventId: eventId, clientScanId: clientScanId, input: input, scanContextId: scanContextId,
-                                        scanContextName: scanContextName, checksIn: checksIn, scannedAt: scannedAt, roster: roster,
-                                        known: known, reason: error.friendlyMessage)
+                                        scanContextName: scanContextName, checksIn: checksIn, enforceAdmission: enforceAdmission,
+                                        scannedAt: scannedAt, roster: roster, known: known, reason: error.friendlyMessage)
             } else {
                 let api = error as? APIError
                 let notFound = api?.isNotFound == true
@@ -272,10 +278,12 @@ final class ScanRepository {
         }
     }
 
-    /// The offline path: pre-check against the cached roster, then queue only what passes.
+    /// The offline path: pre-check against the cached roster, then queue only what passes. Without
+    /// `enforceAdmission` only what Attend itself would refuse (not registered, wrong event) or a
+    /// duplicate blocks it, matching the online path.
     private func offline(eventId: String, clientScanId: String, input: ScanInput, scanContextId: String?, scanContextName: String?,
-                         checksIn: Bool, scannedAt: String, roster: Roster?, known: Participant?, reason: String,
-                         timedOut: Bool = false) async -> ScanOutcome {
+                         checksIn: Bool, enforceAdmission: Bool, scannedAt: String, roster: Roster?, known: Participant?,
+                         reason: String, timedOut: Bool = false) async -> ScanOutcome {
         await loadQueue()
         let code = input.badgeToken ?? input.participantId
         var others: [String: Roster] = [:]
@@ -283,18 +291,21 @@ final class ScanRepository {
             others = await otherRosters(eventId)
         }
         let rosterAt = ScanAdmission.rosterTime(roster)
-        switch ScanAdmission.precheck(input, roster: roster, contextId: scanContextId, checksIn: checksIn, pending: pending, otherRosters: others) {
+        switch ScanAdmission.precheck(input, roster: roster, contextId: scanContextId, checksIn: checksIn, pending: pending,
+                                      otherRosters: others, enforceAdmission: enforceAdmission) {
         case let .block(blocked, p, detail):
             // The request that timed out may still have been recorded: make sure it doesn't stand.
             if timedOut, Self.recordedAnyway.contains(blocked) {
                 await enqueueUndo(PendingScan(clientScanId: clientScanId, eventId: eventId, scanContextId: scanContextId,
                                               scanContextName: scanContextName, input: input, scannedAt: scannedAt, attempts: 1,
-                                              lastError: reason, knownName: known?.name, checksIn: checksIn))
+                                              lastError: reason, knownName: known?.name, checksIn: checksIn,
+                                              enforceAdmission: enforceAdmission))
             }
             return .rejected(clientScanId: clientScanId, reason: blocked, participant: p, detail: detail, offline: true, rosterAt: rosterAt)
         case .pass:
             let item = PendingScan(clientScanId: clientScanId, eventId: eventId, scanContextId: scanContextId, scanContextName: scanContextName,
-                                   input: input, scannedAt: scannedAt, attempts: 1, lastError: reason, knownName: known?.name, checksIn: checksIn)
+                                   input: input, scannedAt: scannedAt, attempts: 1, lastError: reason, knownName: known?.name, checksIn: checksIn,
+                                   enforceAdmission: enforceAdmission)
             await enqueue(item)
             return .queued(clientScanId: clientScanId, pending: item, participant: known, reason: reason, rosterAt: rosterAt)
         }
@@ -379,8 +390,10 @@ final class ScanRepository {
                         scannedAt: p.scannedAt
                     )
                     if let participant = result.participant { await participants.upsert(p.eventId, participant) }
-                    // Accepted, but the server's record says they shouldn't have been let in (e.g. withdrawn since the roster synced).
-                    if let who = result.participant, let problem = ScanAdmission.problem(who, checksIn: result.scanContext?.checksIn ?? p.checksIn) {
+                    // Accepted, but the server's record says they shouldn't have been let in (e.g. withdrawn since the roster
+                    // synced). A deliberate check-in isn't second-guessed, as online.
+                    if p.enforceAdmission, let who = result.participant,
+                       let problem = ScanAdmission.problem(who, checksIn: result.scanContext?.checksIn ?? p.checksIn) {
                         let undo = await revert(eventId: p.eventId, result: result, participantEventId: who.participantEventId, scanContextId: contextId)
                         var rejection = p.rejection(who, reason: problem.short)
                         rejection.stillRecorded = undo == .failed
@@ -423,10 +436,17 @@ final class ScanRepository {
         }
     }
 
-    func discardPending(_ clientScanId: String) async {
-        await queueMutex.withLock {
+    /// Drops a queued scan before it syncs. Returns true if it was still queued (so none of it reached
+    /// Attend), false if it had already been sent or was never queued. Waits for a flush in progress,
+    /// so the answer is final.
+    @discardableResult
+    func discardPending(_ clientScanId: String) async -> Bool {
+        await loadQueue()
+        return await queueMutex.withLock {
+            guard pending.contains(where: { $0.clientScanId == clientScanId }) else { return false }
             pending.removeAll { $0.clientScanId == clientScanId }
             await cache.write(Self.queueKey, pending)
+            return true
         }
     }
 

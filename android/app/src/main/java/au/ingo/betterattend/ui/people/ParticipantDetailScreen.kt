@@ -47,12 +47,14 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.HowToReg
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.PersonOff
+import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material3.Button
@@ -64,7 +66,10 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -135,6 +140,8 @@ data class DetailCallbacks(
     val writeBadge: () -> Unit = {},
     val resetBadge: () -> Unit = {},
     val setWithdrawn: (Boolean) -> Unit = {},
+    val editDetails: () -> Unit = {},
+    val remove: () -> Unit = {},
     val openWeb: () -> Unit = {},
     val copyId: () -> Unit = {},
     val addNote: (String, String, String) -> Boolean = { _, _, _ -> true },
@@ -229,6 +236,13 @@ private fun ParticipantDetailPage(eventId: String, participantEventId: String, n
     val snackbar = remember { SnackbarHostState() }
     val haptics = rememberHaptics()
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // Removed: this screen has nothing left to show, so leave and confirm on the way out.
+    LaunchedEffect(vm) {
+        vm.removed.collect { name ->
+            android.widget.Toast.makeText(context, "Removed $name", android.widget.Toast.LENGTH_SHORT).show()
+            nav.back()
+        }
+    }
     LaunchedEffect(vm) {
         vm.cues.collect { cue ->
             when (cue) {
@@ -293,6 +307,8 @@ private fun ParticipantDetailPage(eventId: String, participantEventId: String, n
             writeBadge = { vm.startNfcWrite(NfcBadgeWriter.availability(context)) },
             resetBadge = vm::resetBadge,
             setWithdrawn = vm::setWithdrawn,
+            editDetails = vm::startEdit,
+            remove = vm::remove,
             openWeb = {
                 state.event?.let { e -> contact.openUrl("https://attend.hackclub.com/admin/events/${e.slug}/participants/$participantEventId") }
             },
@@ -303,6 +319,17 @@ private fun ParticipantDetailPage(eventId: String, participantEventId: String, n
             contact = contact,
         ),
     )
+
+    state.edit?.let { edit ->
+        EditDetailsDialog(
+            session = edit,
+            name = state.participant?.name ?: "",
+            canEditPii = state.canEditPii,
+            onChange = vm::updateEdit,
+            onSave = vm::saveEdit,
+            onDismiss = vm::cancelEdit,
+        )
+    }
 
     if (state.nfc !is NfcWriteState.Idle) {
         NfcWriteSheet(
@@ -337,6 +364,9 @@ fun ParticipantDetailContent(
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     val motion = MaterialTheme.motionScheme
+    // Removing finishes even if the screen goes, but stay put until it has so the outcome is seen.
+    val removing = state.busy == DetailBusy.Removing
+    BackHandler(enabled = removing) {}
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -361,7 +391,7 @@ fun ParticipantDetailContent(
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = callbacks.back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = callbacks.back, enabled = !removing) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 actions = { if (p != null) OverflowMenu(state, p, callbacks) { dialog = it } },
                 scrollBehavior = scroll,
             )
@@ -395,6 +425,22 @@ fun ParticipantDetailContent(
         }
     }
 
+    if (removing) {
+        AlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            confirmButton = {},
+            title = { Text("Removing ${p?.name ?: "them"}…") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LoadingIndicator(Modifier.size(36.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Deleting their registration from ${state.event?.name ?: "this event"}.")
+                }
+            },
+        )
+    }
+
     if (p != null) when (dialog) {
         "undo" -> UndoCheckInDialog(p.name, p.scansByContext, tz, onConfirm = { dialog = null; callbacks.undo(it) }, onDismiss = { dialog = null })
         "withdraw" -> ConfirmDialog(
@@ -409,6 +455,12 @@ fun ParticipantDetailContent(
             "Reset ${p.name}'s badge?", "Their current NFC badge will stop working at scanners. Write a new badge afterwards.",
             "Reset badge", destructive = true, onConfirm = { dialog = null; callbacks.resetBadge() }, onDismiss = { dialog = null },
         )
+        "remove" -> ConfirmDialog(
+            "Remove ${p.name} from ${state.event?.name ?: "this event"}?",
+            "This deletes their registration, travel, consents and scans for this event. This can't be undone.\n\n" +
+                "If they're just not coming, withdraw them instead: withdrawing is reversible.",
+            "Remove", destructive = true, onConfirm = { dialog = null; callbacks.remove() }, onDismiss = { dialog = null },
+        )
     }
 }
 
@@ -418,6 +470,14 @@ private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: Detail
     Box {
         IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // Only once the full profile is here: the roster copy has no legal names or birthday.
+            if (state.canEditDetails && state.detailLoaded) {
+                DropdownMenuItem(
+                    text = { Text("Edit details") },
+                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                    onClick = { open = false; callbacks.editDetails() },
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Open in Attend web") },
                 leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
@@ -435,8 +495,8 @@ private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: Detail
                     onClick = { open = false; onDialog("reset_badge") },
                 )
             }
+            if (state.canChangeStatus || state.canRemove) HorizontalDivider()
             if (state.canChangeStatus) {
-                HorizontalDivider()
                 if (p.status == "withdrawn") {
                     DropdownMenuItem(
                         text = { Text("Reinstate") },
@@ -450,6 +510,14 @@ private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: Detail
                         onClick = { open = false; onDialog("withdraw") },
                     )
                 }
+            }
+            if (state.canRemove) {
+                DropdownMenuItem(
+                    text = { Text("Remove from event", color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Outlined.PersonRemove, null, tint = MaterialTheme.colorScheme.error) },
+                    enabled = state.busy == null,
+                    onClick = { open = false; onDialog("remove") },
+                )
             }
         }
     }

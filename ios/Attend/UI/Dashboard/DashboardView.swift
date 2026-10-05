@@ -152,7 +152,9 @@ private struct DashboardBody: View {
                     OfflineRejectionsCard(
                         rejections: app.scans.rejections,
                         timezone: event.timezone,
-                        onOpen: event.canViewParticipants ? { r in openRejection(r) } : nil,
+                        onOpen: { r in openRejection(r) },
+                        // Rows can be from other events: each opens only with access to its own event.
+                        canOpen: { r in EventPermissions.canViewParticipants(eventId: r.eventId, in: app.events.events) },
                         onDismissAll: { Task { await app.scans.dismissRejections() } }
                     )
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -186,7 +188,7 @@ private struct DashboardBody: View {
     private func onShare(_ id: String) { share = ShareRequest(startId: id) }
 
     private func openRejection(_ r: ScanRejection) {
-        guard let peid = r.participantEventId else { return }
+        guard let peid = r.participantEventId, EventPermissions.canViewParticipants(eventId: r.eventId, in: app.events.events) else { return }
         Haptics.tap()
         router.openParticipant(eventId: r.eventId, participantEventId: peid)
     }

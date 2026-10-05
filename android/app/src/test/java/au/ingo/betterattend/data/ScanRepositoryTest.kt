@@ -241,6 +241,29 @@ class ScanRepositoryTest {
         assertTrue(requests.none { it.first.startsWith("DELETE") })
     }
 
+    @Test fun checkInFromTheirPage_offline_queuesDespiteTheCache_andIsntRevertedOnSync() = runBlocking {
+        seedRoster(mia.copy(waiverSigned = false))
+        offline()
+        val scans = repo()
+        val outcome = scans.submit("e1", ScanInput(participantId = mia.participantEventId, source = "manual"), "desk", "Desk", enforceAdmission = false)
+        assertTrue(outcome is ScanOutcome.Queued)
+        api.baseUrl = server.url("/").toString().trimEnd('/')
+        scanResponse = { ok(scanned(mia.copy(waiverSigned = false))) }
+        assertEquals(0, scans.flush())
+        assertTrue(requests.none { it.first.startsWith("DELETE") })
+        assertTrue(scans.rejections.value.isEmpty())
+    }
+
+    @Test fun discardPending_saysWhetherItWasStillQueued() = runBlocking {
+        seedRoster(mia)
+        offline()
+        val scans = repo()
+        val queued = scans.submit("e1", qrMia, "desk", "Desk") as ScanOutcome.Queued
+        assertTrue(scans.discardPending(queued.clientScanId))
+        assertFalse(scans.discardPending(queued.clientScanId))
+        assertTrue(scans.pending.value.isEmpty())
+    }
+
     @Test fun verdictUsesTheServersRecordNeverTheCache() = runBlocking {
         // Reinstated on Attend; the cache still says withdrawn; the response carries no participant.
         seedRoster(mia.copy(status = "withdrawn"))

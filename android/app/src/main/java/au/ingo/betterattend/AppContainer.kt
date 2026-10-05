@@ -6,6 +6,7 @@ import au.ingo.betterattend.data.auth.AuthRepository
 import au.ingo.betterattend.data.auth.SecureTokenStore
 import au.ingo.betterattend.data.repo.EventRepository
 import au.ingo.betterattend.data.repo.ParticipantRepository
+import au.ingo.betterattend.data.repo.RollCallRepository
 import au.ingo.betterattend.data.repo.ScanRepository
 import au.ingo.betterattend.data.repo.TicketRepository
 import au.ingo.betterattend.data.repo.TravelRepository
@@ -38,6 +39,7 @@ class AppContainer(context: Context) {
     val scans = ScanRepository(api, cache, participants, scope)
     val tickets = TicketRepository(api, cache, scope)
     val travel = TravelRepository(api, cache)
+    val rollCalls = RollCallRepository(cache, scans, participants, scope)
 
     init {
         scans.fallbackContext = { eventId ->
@@ -65,6 +67,8 @@ class AppContainer(context: Context) {
     /** Wipes every cached byte of account data (sign-out / session expiry). */
     suspend fun clearAccountData() {
         // Each step independently: a failing disk shouldn't leave the rest of the data behind.
+        // Roll calls first: that stops their recording work, so nothing rewrites a file once the cache is wiped.
+        runCatching { rollCalls.clear() }
         runCatching { scans.clear() }
         runCatching { participants.clear() } // also clears the encrypted file cache
         runCatching { events.clear() }

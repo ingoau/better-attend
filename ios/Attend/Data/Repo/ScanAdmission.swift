@@ -37,8 +37,11 @@ enum ScanAdmission {
     ///   - contextId: the selected checkpoint; nil skips the "already checked in" check.
     ///   - pending: scans already queued, so the same ticket scanned twice offline isn't queued twice.
     ///   - otherRosters: cached rosters of the user's other events, by event name, for "wrong event".
+    ///   - enforceAdmission: false for a deliberate check-in (someone's page, a roll call tick): the
+    ///     admission rules (withdrawn, waiver…) are skipped, as online; only what Attend itself would
+    ///     refuse (not registered, wrong event) and duplicates still block.
     static func precheck(_ input: ScanInput, roster: Roster?, contextId: String?, checksIn: Bool,
-                         pending: [PendingScan] = [], otherRosters: [String: Roster] = [:]) -> Precheck {
+                         pending: [PendingScan] = [], otherRosters: [String: Roster] = [:], enforceAdmission: Bool = true) -> Precheck {
         guard let code = input.badgeToken ?? input.participantId else { return .pass(nil) }
         // A roster that's never had a full sync is partial: it can't prove someone isn't registered.
         guard let roster, roster.syncedAt != nil else { return .pass(roster?.find(code)) }
@@ -50,7 +53,7 @@ enum ScanAdmission {
             }
             return .block(.notRegistered, nil)
         }
-        if let problem = problem(p, checksIn: checksIn) { return .block(problem, p) }
+        if enforceAdmission, let problem = problem(p, checksIn: checksIn) { return .block(problem, p) }
         if let contextId {
             if let here = p.scansByContext.first(where: { $0.scanContextId == contextId }) {
                 return .block(.alreadyCheckedIn, p, detail: here.firstScannedAt)

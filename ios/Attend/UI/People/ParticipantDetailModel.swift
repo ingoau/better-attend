@@ -23,6 +23,8 @@ enum DetailBusy: Equatable {
     case undoing(String?)
     case updatingStatus
     case resettingBadge
+    case savingEdits
+    case removing
 }
 
 /// State and actions for one person's detail page. The person itself is read live from the roster
@@ -170,6 +172,59 @@ final class ParticipantDetailModel {
             Haptics.reject()
             toast = .error(error.friendlyMessage)
         }
+    }
+
+    // MARK: Edit details
+
+    /// Saves profile edits (only the changed fields). Returns why it failed, for the form to show
+    /// inline while it stays open, or nil once saved. Needs a connection: edits are never queued.
+    func saveEdits(_ app: AppModel, _ edit: ParticipantEdit) async -> String? {
+        guard !edit.isEmpty else { return nil }
+        guard busy == nil else { return "Another change is still being saved. Try again in a moment." }
+        guard app.isOnline else { return "You're offline. Editing details needs a connection." }
+        busy = .savingEdits
+        defer { busy = nil }
+        do {
+            let updated = try await app.api.updateParticipant(eventId: eventId, participantEventId: participantEventId, edit: edit)
+            await app.participants.upsert(eventId, updated)
+            // The PATCH answers with the short (roster) shape: show the edit on the old profile straight
+            // away (without bringing back anything it cleared), then fetch the full profile. If that
+            // fails, the edited copy stands until the next refresh.
+            detail = ParticipantDetailLogic.applying(edit, live: updated, to: detail)
+            if let full = try? await app.participants.detail(eventId, participantEventId: participantEventId) {
+                detail = full
+                detailLoaded = true
+            }
+            Haptics.confirm()
+            toast = Toast(message: "Saved")
+            return nil
+        } catch {
+            guard !error.isCancellation else { return "Not saved." }
+            Haptics.reject()
+            return error.friendlyMessage
+        }
+    }
+
+    // MARK: Remove
+
+    /// Deletes this registration. True once it's gone, so the page can close.
+    func remove(_ app: AppModel) async -> Bool {
+        guard busy == nil else { return false }
+        busy = .removing
+        defer { busy = nil }
+        do {
+            try await app.api.deleteParticipant(eventId: eventId, participantEventId: participantEventId)
+        } catch let api as APIError where api.isNotFound {
+            // Already removed (elsewhere, or a retried request): same outcome.
+        } catch {
+            guard !error.isCancellation else { return false }
+            Haptics.reject()
+            toast = .error("Couldn't remove: \(error.friendlyMessage)")
+            return false
+        }
+        await app.participants.remove(eventId, participantEventId: participantEventId)
+        Haptics.confirm()
+        return true
     }
 
     // MARK: Notes

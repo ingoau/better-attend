@@ -7,9 +7,11 @@ import au.ingo.betterattend.AppContainer
 import au.ingo.betterattend.data.api.friendlyMessage
 import au.ingo.betterattend.data.auth.AuthState
 import au.ingo.betterattend.data.model.Event
+import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.User
+import au.ingo.betterattend.data.repo.ParticipantChange
 import au.ingo.betterattend.data.repo.Roster
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -46,7 +48,27 @@ data class PeopleUiState(
     val remoteResults: List<Participant>? = null,
     val remoteSearching: Boolean = false,
     val remoteError: String? = null,
-)
+    /** The "Invite someone" sheet, while open. */
+    val invite: InviteState? = null,
+) {
+    /** Inviting is admin-only upstream (event admins, series members, global admins). */
+    val canInvite: Boolean get() = event?.canViewParticipants == true && EventPermissions.canInviteParticipants(event)
+}
+
+/** Applies an edit or removal made elsewhere in the app to the server search results (the roster follows by itself). */
+fun PeopleUiState.withChange(change: ParticipantChange): PeopleUiState {
+    val results = remoteResults ?: return this
+    if (change.eventId != event?.id) return this
+    return copy(
+        remoteResults = when (change) {
+            is ParticipantChange.Removed -> results.filterNot { it.participantEventId == change.participantEventId }
+            is ParticipantChange.Edited -> results.map {
+                // The edited copy as a whole: a merge would bring back fields the edit cleared.
+                if (it.participantEventId == change.participant.participantEventId) change.participant else it
+            }
+        },
+    )
+}
 
 /** Chip/filter choices survive tab switches and screen recreation for the app session. */
 private object PeopleSession {
@@ -71,6 +93,10 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
         }
         viewModelScope.launch {
             c.events.selectedEvent.collect { e -> onEvent(e) }
+        }
+        // Server search results are copies outside the roster: keep them in step with edits and removals.
+        viewModelScope.launch {
+            c.participants.changes.collect { change -> _state.update { it.withChange(change) } }
         }
     }
 
@@ -176,6 +202,43 @@ class PeopleViewModel(private val c: AppContainer) : ViewModel() {
                 throw e
             } catch (e: Exception) {
                 _state.update { if (it.event?.id == event.id) it.copy(remoteSearching = false, remoteError = e.friendlyMessage) else it }
+            }
+        }
+    }
+
+    // ---------------- invite ----------------
+
+    fun openInvite() { _state.update { if (it.canInvite && it.invite == null) it.copy(invite = InviteState()) else it } }
+
+    fun updateInvite(form: InviteState) { _state.update { s -> if (s.invite == null || s.invite.sending) s else s.copy(invite = form) } }
+
+    fun closeInvite() { _state.update { if (it.invite?.sending == true) it else it.copy(invite = null) } }
+
+    /** Sends the invitation, then delta-syncs so the new (invited) person shows up in the list. */
+    fun sendInvite() {
+        val s = _state.value
+        val event = s.event ?: return
+        val form = s.invite ?: return
+        if (!s.canInvite || form.sending) return
+        InviteLogic.validate(form.email)?.let { err -> _state.update { it.copy(invite = form.copy(error = err)) }; return }
+        _state.update { it.copy(invite = form.copy(sending = true, error = null)) }
+        viewModelScope.launch {
+            try {
+                val result = c.api.inviteParticipant(
+                    event.id, form.email.trim().lowercase(), form.firstName.trim().ifBlank { null }, form.lastName.trim().ifBlank { null },
+                )
+                _state.update { it.copy(invite = it.invite?.copy(sending = false, result = result)) }
+                // The repository serializes syncs, so this runs after any sync already in flight.
+                try {
+                    c.participants.sync(event.id)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 409 (already invited / registered) and 422 (bad or banned email) carry a readable message.
+                _state.update { it.copy(invite = it.invite?.copy(sending = false, error = e.friendlyMessage)) }
             }
         }
     }

@@ -45,11 +45,14 @@ import au.ingo.betterattend.ui.components.ProvideAppHaptics
 import au.ingo.betterattend.ui.dashboard.DashboardScreen
 import au.ingo.betterattend.ui.login.LoginScreen
 import au.ingo.betterattend.ui.nav.*
+import au.ingo.betterattend.ui.firstaid.FirstAidScreen
 import au.ingo.betterattend.ui.people.ParticipantDetailScreen
+import au.ingo.betterattend.ui.rollcall.RollCallScreen
 import au.ingo.betterattend.ui.people.PeopleScreen
 import au.ingo.betterattend.ui.scan.KioskScreen
 import au.ingo.betterattend.ui.scan.ScanScreen
 import au.ingo.betterattend.ui.settings.SettingsScreen
+import au.ingo.betterattend.ui.staff.StaffScreen
 import au.ingo.betterattend.ui.theme.AttendTheme
 import au.ingo.betterattend.ui.tickets.TicketDetailScreen
 import au.ingo.betterattend.ui.tickets.TicketsScreen
@@ -129,8 +132,11 @@ private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (devi
             override fun openSettings() = nav.navigate(SettingsRoute) { launchSingleTop = true }
             override fun openBlasts(eventId: String) = nav.navigate(BlastsRoute(eventId)) { launchSingleTop = true }
             override fun openKiosk(eventId: String, scanContextId: String?) = nav.navigate(KioskRoute(eventId, scanContextId)) { launchSingleTop = true }
+            override fun openStaff(eventId: String) = nav.navigate(StaffRoute(eventId)) { launchSingleTop = true }
             override fun openEventPicker() { pickerOpen = true }
             override fun back() { nav.popBackStack() }
+            override fun openRollCall(eventId: String) = nav.navigate(RollCallRoute(eventId)) { launchSingleTop = true }
+            override fun openFirstAid(eventId: String) = nav.navigate(FirstAidRoute(eventId)) { launchSingleTop = true }
         }
     }
 
@@ -175,7 +181,10 @@ private fun SignedInApp(container: AppContainer, user: User, onIssueToken: (devi
         composable<TicketRoute> { val id = it.toRoute<TicketRoute>().ticketId; CardFrame { TicketDetailScreen(id, navigator) } }
         composable<SettingsRoute> { CardFrame { SettingsScreen(navigator, onIssueToken) } }
         composable<BlastsRoute> { val id = it.toRoute<BlastsRoute>().eventId; CardFrame { BlastsScreen(id, navigator) } }
+        composable<StaffRoute> { val id = it.toRoute<StaffRoute>().eventId; CardFrame { StaffScreen(id, navigator) } }
         composable<KioskRoute> { val r = it.toRoute<KioskRoute>(); CardFrame { KioskScreen(r.eventId, r.scanContextId, navigator) } }
+        composable<RollCallRoute> { val id = it.toRoute<RollCallRoute>().eventId; CardFrame { RollCallScreen(id, navigator) } }
+        composable<FirstAidRoute> { val id = it.toRoute<FirstAidRoute>().eventId; CardFrame { FirstAidScreen(id, navigator) } }
     }
 
     if (pickerOpen) {

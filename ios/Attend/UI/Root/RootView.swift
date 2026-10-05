@@ -113,8 +113,13 @@ struct TabRoot: View {
                     TicketDetailView(ticketId: id)
                 case let .blasts(eventId):
                     BlastsView(eventId: eventId)
+                case let .rollCall(eventId):
+                    RollCallView(eventId: eventId)
+                case let .firstAid(eventId):
+                    FirstAidView(eventId: eventId)
                 }
             }
         }
+        .toast(Binding(get: { router.tab == tab ? router.toast : nil }, set: { router.toast = $0 }))
     }
 }

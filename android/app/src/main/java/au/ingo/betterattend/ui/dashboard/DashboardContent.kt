@@ -38,11 +38,13 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material.icons.outlined.FlightLand
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.HourglassTop
 import androidx.compose.material.icons.outlined.HowToReg
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -101,11 +103,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.Event
+import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.Scan
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.repo.EventStats
+import au.ingo.betterattend.data.repo.Roster
+import au.ingo.betterattend.ui.firstaid.FirstAidLogic
 import au.ingo.betterattend.ui.components.AccountButton
 import au.ingo.betterattend.ui.components.AnimatedNumber
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
@@ -141,6 +146,9 @@ fun DashboardContent(
     now: Instant = Instant.now(),
     onOpenRejection: (ScanRejection) -> Unit = {},
     onDismissRejections: () -> Unit = {},
+    /** Roll call / first-aid entry points; hidden when null or when the role can't see participants. */
+    onRollCall: (() -> Unit)? = null,
+    onFirstAid: (() -> Unit)? = null,
 ) {
     val event = state.event
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -193,7 +201,7 @@ fun DashboardContent(
                     actionLabel = "Choose event", onAction = onPickEvent,
                 )
                 else -> HapticPullToRefreshBox(isRefreshing = state.userRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-                    DashboardBody(state, event, now, onRefresh, onSwitchTab, onOpenParticipant, onAnnounce, onKiosk, onOpenRejection, onDismissRejections)
+                    DashboardBody(state, event, now, onRefresh, onSwitchTab, onOpenParticipant, onAnnounce, onKiosk, onOpenRejection, onDismissRejections, onRollCall, onFirstAid)
                 }
             }
             }
@@ -258,6 +266,8 @@ private fun DashboardBody(
     onKiosk: () -> Unit,
     onOpenRejection: (ScanRejection) -> Unit,
     onDismissRejections: () -> Unit,
+    onRollCall: (() -> Unit)? = null,
+    onFirstAid: (() -> Unit)? = null,
 ) {
     // A roster without `syncedAt` is partial (e.g. a few people learned from scans before the first full sync):
     // counting it would say "3 of 3 checked in", so treat it as not loaded yet.
@@ -301,8 +311,9 @@ private fun DashboardBody(
                 OfflineRejectionsCard(
                     rejections = state.rejections,
                     timezone = event.timezone,
-                    onOpen = if (state.canViewParticipants) onOpenRejection else null,
+                    onOpen = onOpenRejection,
                     onDismissAll = onDismissRejections,
+                    canOpen = { DashboardLogic.canOpenRejection(it, state.events) },
                 )
             }
         }
@@ -322,6 +333,9 @@ private fun DashboardBody(
                 card(key = "hero") { Hero(event, stats, phase, now, onShare = { onShare(ShareStats.heroId(event, now)) }) }
             }
             card(key = "actions") { QuickActions(showFind = true, onSwitchTab, onAnnounce, onKiosk) }
+            if (EventPermissions.canViewParticipants(event) && onRollCall != null && onFirstAid != null) {
+                card(key = "safety_tools") { SafetyTools(roster, EventPermissions.canViewSensitiveData(event), onRollCall, onFirstAid) }
+            }
             if (stats != null) {
                 card(key = "tiles") {
                     StatTiles(stats, DashboardLogic.needsAttention(roster!!.participants), onOpenPeople = { onSwitchTab(Tab.People) }, onShare = onShare)
@@ -539,6 +553,45 @@ private fun QuickActions(showFind: Boolean, onSwitchTab: (Tab) -> Unit, onAnnoun
                     )
                 },
             )
+        }
+    }
+}
+
+// ---------------------------------------------------------------- safety tools
+
+/** Roll call and first-aid sheet: both work from the cached roster, offline. */
+@Composable
+private fun SafetyTools(roster: Roster?, sensitive: Boolean, onRollCall: () -> Unit, onFirstAid: () -> Unit) {
+    val haptics = rememberHaptics()
+    val flagged = remember(roster, sensitive) { roster?.let { FirstAidLogic.people(it.participants, sensitive).size } }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ToolTile("Roll call", "Headcount", Icons.AutoMirrored.Outlined.FactCheck, Modifier.weight(1f)) { haptics.click(); onRollCall() }
+        ToolTile(
+            "First aid",
+            when (flagged) { null -> "Medical & safety"; 0 -> "No flags"; 1 -> "1 person flagged"; else -> "$flagged people flagged" },
+            Icons.Outlined.MedicalServices,
+            Modifier.weight(1f),
+        ) { haptics.click(); onFirstAid() }
+    }
+}
+
+@Composable
+private fun ToolTile(label: String, hint: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier.semantics { contentDescription = "$label. $hint" },
+    ) {
+        Row(Modifier.heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

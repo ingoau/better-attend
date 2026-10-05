@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
@@ -29,6 +30,7 @@ import au.ingo.betterattend.data.api.AttendJson
 import au.ingo.betterattend.data.store.SecureBox
 import au.ingo.betterattend.data.model.*
 import au.ingo.betterattend.ui.preview.SampleData
+import au.ingo.betterattend.ui.preview.StaffSamples
 import kotlinx.serialization.KSerializer
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
@@ -96,6 +98,7 @@ class AppSmokeTest {
                         participant = SampleData.participants[0].copy(checkedInAt = now.toString()),
                     ))
                     path == "/events/$eid/scans" -> json(ScansResponse.serializer(), ScansResponse(emptyList(), false, now.toString()))
+                    path == "/events/$eid/staff" && request.method == "GET" -> json(StaffResponse.serializer(), StaffResponse(StaffSamples.staff, StaffSamples.roles))
                     path == "/events/$eid/slack_blasts" -> json(SlackBlastsResponse.serializer(), SlackBlastsResponse(SampleData.blasts))
                     else -> MockResponse.Builder().code(404).body("{\"error\":\"Not found\"}").build()
                 }
@@ -175,6 +178,29 @@ class AppSmokeTest {
             waitForText("checked in")
             assertSelected("Home")
 
+            // Roll call from Home: start (ticks stay on this phone by default), tick someone, leave.
+            val scanPosts = synchronized(requests) { requests.count { it == "POST /events/${liveEvent.id}/scans" } }
+            compose.onAllNodes(hasContentDescription("Roll call.", substring = true) and hasClickAction()).onFirst().performClick()
+            waitForText("Start roll call")
+            compose.onAllNodes(hasText("Start roll call") and hasClickAction(), useUnmergedTree = false).onFirst().performClick()
+            waitForText("accounted for")
+            // Each row is one TalkBack stop: its state says Missing, and a tap ticks it.
+            compose.onAllNodes(hasStateDescription("Missing") and hasClickAction()).onFirst().performClick()
+            waitForText("1 of ")
+            synchronized(requests) {
+                check(requests.count { it == "POST /events/${liveEvent.id}/scans" } == scanPosts) { "a phone-only roll call sent a scan: $requests" }
+            }
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+
+            // First-aid sheet from Home.
+            compose.onAllNodes(hasContentDescription("First aid.", substring = true) and hasClickAction()).onFirst().performClick()
+            waitForText("First-aid sheet")
+            waitForText("Anaphylaxis risk")
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+            assertSelected("Home")
+
             // Swipe between tabs: Home → Scan → People.
             compose.onRoot().performTouchInput { swipeLeft(startX = right * 0.9f, endX = left + right * 0.1f) }
             compose.waitForIdle()
@@ -195,6 +221,12 @@ class AppSmokeTest {
             val visible = (0 until accounts.fetchSemanticsNodes().size).first { i -> runCatching { accounts[i].assertIsDisplayed() }.isSuccess }
             accounts[visible].performClick()
             waitForText("Appearance")
+
+            // Settings → Event staff (the sample user is an event admin), then back to Settings.
+            compose.onAllNodesWithText("Event staff").onFirst().performClick()
+            waitForText("Leah Mitchell")
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            waitForText("Appearance")
             compose.mainClock.autoAdvance = true
             compose.waitForIdle()
 
@@ -213,6 +245,7 @@ class AppSmokeTest {
         synchronized(requests) {
             check(requests.any { it == "GET /events" }) { "events never requested: $requests" }
             check(requests.any { it.startsWith("GET /events/${liveEvent.id}/participants") }) { "roster never synced: $requests" }
+            check(requests.any { it == "GET /events/${liveEvent.id}/staff" }) { "staff never loaded: $requests" }
         }
     }
 

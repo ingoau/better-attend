@@ -65,11 +65,13 @@ struct ScanAlertBanners: View {
 }
 
 /// Home's banner for queued scans the server turned down when they synced. Each row names the person
-/// and the reason and opens them; it stays until dismissed.
+/// and the reason and opens them (where `canOpen` allows: rows can belong to other events); it stays
+/// until dismissed.
 struct OfflineRejectionsCard: View {
     let rejections: [ScanRejection]
     let timezone: String?
     var onOpen: ((ScanRejection) -> Void)?
+    var canOpen: (ScanRejection) -> Bool = { _ in true }
     var onDismissAll: () -> Void
 
     var body: some View {
@@ -101,7 +103,7 @@ struct OfflineRejectionsCard: View {
     }
 
     private func row(_ r: ScanRejection) -> some View {
-        let open = r.participantEventId == nil ? nil : onOpen
+        let open = r.participantEventId == nil || !canOpen(r) ? nil : onOpen
         let detail = [r.reason.capitalizedFirst, r.contextName, Time.dayTime(r.scannedAt, tz: timezone),
                       r.stillRecorded ? "still recorded on Attend, undo it from their page" : nil].compactMap { $0 }
         return HStack(spacing: 10) {

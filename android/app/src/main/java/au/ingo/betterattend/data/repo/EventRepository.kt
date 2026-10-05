@@ -55,6 +55,15 @@ class EventRepository(
 
     suspend fun select(eventId: String) = settings.setSelectedEvent(eventId)
 
+    /** Changes one cached event in place (e.g. the user's own role, before the next refresh confirms it). */
+    suspend fun updateCached(eventId: String, transform: (Event) -> Event) {
+        val list = _events.value ?: return
+        if (list.none { it.id == eventId }) return
+        val updated = list.map { if (it.id == eventId) transform(it) else it }
+        _events.value = updated
+        cache.write(KEY_EVENTS, ListSerializer(Event.serializer()), updated)
+    }
+
     /**
      * The selected event, waiting for the events cache and saved settings to load first. Use this
      * from background work (widgets, workers): [selectedEvent] starts as null in a fresh process and

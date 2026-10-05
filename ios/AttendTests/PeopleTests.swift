@@ -285,6 +285,40 @@ extension Fixtures {
         #expect(ParticipantDetailLogic.scanPoints(Fixtures.arjun, contexts: []).isEmpty)
     }
 
+    @Test func anEditIsShownWithoutBringingBackWhatItCleared() {
+        var detail = Fixtures.participants[2]
+        detail.phone = "+61 400 000 000"
+        detail.pronouns = "she/her"
+        detail.tshirtSize = "M"
+        detail.lifeThreateningAllergies = "Peanuts"
+        detail.personal = Personal(legalFirstName: "Maya", legalLastName: "Chen", preferredName: "May", age: 15,
+                                   tshirtSize: "M", dateOfBirth: "2011-01-01")
+        // Upstream's PATCH answer is the roster shape: no detail sections, and a cleared phone is just null.
+        var live = Fixtures.participants[2]
+        live.phone = nil
+        live.pronouns = nil
+        live.tshirtSize = nil
+        let edit = ParticipantEdit(legalLastName: "Chen-Li", preferredName: "", phone: "", pronouns: "", tshirtSize: "", dateOfBirth: "2010-12-31")
+        let now = Time.parse("2026-10-03T00:00:00Z")!
+        let p = ParticipantDetailLogic.applying(edit, live: live, to: detail, now: now)
+        #expect(p.phone == nil, "cleared, not restored from the old profile")
+        #expect(p.pronouns == nil)
+        #expect(p.tshirtSize == nil)
+        #expect(p.personal?.tshirtSize == nil)
+        #expect(p.personal?.legalFirstName == "Maya", "untouched fields stay")
+        #expect(p.personal?.legalLastName == "Chen-Li")
+        #expect(p.personal?.preferredName == nil)
+        #expect(p.personal?.dateOfBirth == "2010-12-31")
+        #expect(p.personal?.age == 15)
+        #expect(p.lifeThreateningAllergies == "Peanuts", "detail-only fields stay")
+
+        // Fields the edit didn't touch keep the old profile's values when the PATCH answer leaves them out.
+        let pronounsOnly = ParticipantDetailLogic.applying(ParticipantEdit(pronouns: "they/them"), live: live, to: detail, now: now)
+        #expect(pronounsOnly.pronouns == "they/them")
+        #expect(pronounsOnly.phone == "+61 400 000 000")
+        #expect(pronounsOnly.personal == detail.personal)
+    }
+
     @Test func overlayKeepsDetailOnlyFieldsAfterADeltaSync() {
         var detail = Fixtures.participants[2]
         detail.lifeThreateningAllergies = "Peanuts"

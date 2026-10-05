@@ -99,6 +99,8 @@ fun OfflineRejectionsCard(
     onOpen: ((ScanRejection) -> Unit)?,
     onDismissAll: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Whether a row may open its person (their event's access, not the current one's). */
+    canOpen: (ScanRejection) -> Boolean = { true },
 ) {
     if (rejections.isEmpty()) return
     val s = MaterialTheme.status
@@ -115,7 +117,7 @@ fun OfflineRejectionsCard(
             }
             rejections.forEach { r ->
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = s.onDangerContainer.copy(alpha = 0.12f))
-                val open = onOpen?.takeIf { r.participantEventId != null }
+                val open = onOpen?.takeIf { r.participantEventId != null && canOpen(r) }
                 Row(
                     Modifier.fillMaxWidth()
                         .then(if (open != null) Modifier.clickable(onClickLabel = "Open ${r.name}") { open(r) } else Modifier)

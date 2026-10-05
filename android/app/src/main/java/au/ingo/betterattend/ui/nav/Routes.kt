@@ -35,6 +35,9 @@ enum class Tab(val label: String, val icon: ImageVector, val selectedIcon: Image
 @Serializable data object SettingsRoute
 @Serializable data class BlastsRoute(val eventId: String)
 @Serializable data class KioskRoute(val eventId: String, val scanContextId: String?)
+@Serializable data class StaffRoute(val eventId: String)
+@Serializable data class RollCallRoute(val eventId: String)
+@Serializable data class FirstAidRoute(val eventId: String)
 
 /** Navigation actions available to every screen. */
 interface AppNavigator {
@@ -46,6 +49,10 @@ interface AppNavigator {
     fun openKiosk(eventId: String, scanContextId: String?)
     fun openEventPicker()
     fun back()
+    /** Settings → Event staff. */
+    fun openStaff(eventId: String) {}
+    fun openRollCall(eventId: String) {}
+    fun openFirstAid(eventId: String) {}
 }
 
 object NoopNavigator : AppNavigator {

@@ -194,11 +194,17 @@ struct HomeQuickActions: View {
         if showFind { a.append(Action(title: "Find", icon: "magnifyingglass") { router.switchTab(.people) }) }
         a.append(Action(title: "Announce", icon: "megaphone") { router.open(.blasts(eventId: event.id)) })
         a.append(Action(title: "Kiosk", icon: "ipad.and.iphone") { router.kiosk = KioskConfig(eventId: event.id, scanContextId: nil) })
+        // Both read the cached roster, so only for roles that can see it.
+        if EventPermissions.canViewParticipants(event) {
+            a.append(Action(title: "Roll Call", icon: "checklist") { router.open(.rollCall(eventId: event.id)) })
+            a.append(Action(title: "First Aid", icon: "cross.case") { router.open(.firstAid(eventId: event.id)) })
+        }
         return a
     }
 
     var body: some View {
-        let columns = typeSize >= .xxxLarge ? 2 : actions.count
+        // More than four wraps onto a second row of three.
+        let columns = typeSize >= .xxxLarge ? 2 : actions.count > 4 ? 3 : actions.count
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns), spacing: 10) {
             ForEach(actions) { a in
                 let button = Button {
