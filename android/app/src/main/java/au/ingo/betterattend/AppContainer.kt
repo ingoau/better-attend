@@ -6,6 +6,7 @@ import au.ingo.betterattend.data.auth.AuthRepository
 import au.ingo.betterattend.data.auth.SecureTokenStore
 import au.ingo.betterattend.data.repo.EventRepository
 import au.ingo.betterattend.data.repo.ParticipantRepository
+import au.ingo.betterattend.data.repo.RollCallRepository
 import au.ingo.betterattend.data.repo.ScanRepository
 import au.ingo.betterattend.data.repo.TicketRepository
 import au.ingo.betterattend.data.repo.TravelRepository
@@ -38,6 +39,7 @@ class AppContainer(context: Context) {
     val scans = ScanRepository(api, cache, participants, scope)
     val tickets = TicketRepository(api, cache, scope)
     val travel = TravelRepository(api, cache)
+    val rollCalls = RollCallRepository(cache, scans, participants, scope)
 
     init {
         scans.fallbackContext = { eventId ->
@@ -70,6 +72,7 @@ class AppContainer(context: Context) {
         runCatching { events.clear() }
         runCatching { tickets.clear() }
         runCatching { travel.clear() }
+        runCatching { rollCalls.clear() }
         runCatching { settings.clearAccountData() }
         // Participant headshots (minors) live in Coil's caches.
         runCatching {
