@@ -139,6 +139,8 @@ struct RollCallEntry: Hashable, Sendable, Identifiable {
     var added: Bool
     /// Unticked offline after their scan was recorded: it still stands at the scan point.
     var stillRecorded: Bool = false
+    /// False when they've dropped out of the cached roster since the roll call started.
+    var known: Bool = true
     var id: String { participant.participantEventId }
 }
 
@@ -215,7 +217,7 @@ enum RollCallLogic {
         let expected = Set(session.expectedIds)
         return session.listIds.map { id in
             RollCallEntry(participant: byId[id] ?? placeholder(id), accounted: ticks[id] != nil, accountedAt: ticks[id],
-                          added: !expected.contains(id), stillRecorded: still.contains(id))
+                          added: !expected.contains(id), stillRecorded: still.contains(id), known: byId[id] != nil)
         }
     }
 

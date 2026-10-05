@@ -26,6 +26,15 @@ struct FirstAidContact: Hashable, Sendable {
     var email: String?
 }
 
+/// A labelled line of medical text on a card ("Allergies: Peanuts").
+struct FirstAidLine: Hashable, Sendable, Identifiable {
+    var label: String
+    var value: String?
+    var urgent = false
+    var id: String { label }
+    var text: String { value ?? "" }
+}
+
 /// One person on the sheet, with everything the viewer is allowed to see.
 struct FirstAidEntry: Hashable, Sendable, Identifiable {
     var participant: Participant
@@ -42,10 +51,13 @@ struct FirstAidEntry: Hashable, Sendable, Identifiable {
     var isHere: Bool { participant.isCheckedIn }
 
     /// The labelled medical lines, in display order.
-    var medicalLines: [(label: String, value: String)] {
-        [("Life-threatening allergies", lifeThreateningAllergies), ("Allergies", allergies), ("Conditions", medicalConditions),
-         ("Medications", medications), ("Diet", dietType)]
-            .compactMap { label, value in value.map { (label, $0) } }
+    var medicalLines: [FirstAidLine] {
+        [FirstAidLine(label: "Life-threatening allergies", value: lifeThreateningAllergies, urgent: true),
+         FirstAidLine(label: "Allergies", value: allergies),
+         FirstAidLine(label: "Conditions", value: medicalConditions),
+         FirstAidLine(label: "Medications", value: medications),
+         FirstAidLine(label: "Diet", value: dietType)]
+            .filter { $0.value?.nonBlank != nil }
     }
 }
 
@@ -197,7 +209,7 @@ enum FirstAidLogic {
             if canViewSensitive {
                 let lines = e.medicalLines
                 if !lines.isEmpty {
-                    card += "<table>\n" + lines.map { "<tr><th>\(escape($0.label))</th><td>\(escape($0.value))</td></tr>" }
+                    card += "<table>\n" + lines.map { "<tr><th>\(escape($0.label))</th><td>\(escape($0.text))</td></tr>" }
                         .joined(separator: "\n") + "\n</table>\n"
                 }
                 if !e.contacts.isEmpty {
