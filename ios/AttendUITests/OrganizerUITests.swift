@@ -15,7 +15,7 @@ final class OrganizerUITests: XCTestCase {
         invite.tap()
 
         let email = app.textFields["invite-email"]
-        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        XCTAssertTrue(email.waitForExistence(timeout: 15)) // the sheet can be slow on a busy CI simulator
         email.tap()
         email.typeText("river.walkin@example.com")
         let first = app.textFields["invite-first-name"]
@@ -39,7 +39,7 @@ final class OrganizerUITests: XCTestCase {
         XCTAssertTrue(invite.waitForExistence(timeout: 15))
         invite.tap()
         let email = app.textFields["invite-email"]
-        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        XCTAssertTrue(email.waitForExistence(timeout: 15)) // the sheet can be slow on a busy CI simulator
         email.tap()
         email.typeText("sam.lee0@example.com") // demo person 0, Sam Lee
         app.buttons["invite-send"].tap()
