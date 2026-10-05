@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.FilterAltOff
 import androidx.compose.material.icons.outlined.GroupOff
+import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
@@ -144,7 +145,21 @@ fun PeopleScreen(nav: AppNavigator) {
         onChooseEvent = nav::openEventPicker,
         onAccount = nav::openSettings,
         onOpenScanner = { nav.switchTab(Tab.Scan) },
+        onInvite = vm::openInvite,
     )
+
+    state.invite?.let { invite ->
+        InviteSheet(
+            state = invite,
+            onChange = vm::updateInvite,
+            onSend = vm::sendInvite,
+            onView = { id ->
+                vm.closeInvite()
+                state.event?.let { nav.openParticipant(it.id, id) }
+            },
+            onDismiss = vm::closeInvite,
+        )
+    }
 }
 
 @Composable
@@ -162,6 +177,7 @@ fun PeopleContent(
     onChooseEvent: () -> Unit = {},
     onAccount: () -> Unit = {},
     onOpenScanner: () -> Unit = {},
+    onInvite: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     // Every quick-filter change (chips, summary numbers, "Show everyone") gets the same selection tick.
@@ -191,7 +207,10 @@ fun PeopleContent(
         topBar = {
             TopAppBar(
                 title = { EventSwitcherTitle(event?.name, subtitle, onChooseEvent) },
-                actions = { AccountButton(state.user, onAccount) },
+                actions = {
+                    if (state.canInvite) IconButton(onClick = onInvite) { Icon(Icons.Outlined.PersonAdd, "Invite someone") }
+                    AccountButton(state.user, onAccount)
+                },
                 scrollBehavior = scroll,
             )
         },
