@@ -77,6 +77,21 @@ final class ParticipantRepository {
         onChange()
     }
 
+    /// Drops a registration that was deleted on the server. Delta syncs can't report deletions, so
+    /// without this the person would linger until the next full sync. Waits for any sync in flight,
+    /// so that sync can't write the person back.
+    func remove(_ eventId: String, participantEventId: String) async {
+        await mutex.withLock {
+            guard var roster = await load(eventId) else { return }
+            let before = roster.participants.count
+            roster.participants.removeAll { $0.participantEventId == participantEventId }
+            guard roster.participants.count != before else { return }
+            rosters[eventId] = roster
+            await cache.write(key(eventId), roster)
+            onChange()
+        }
+    }
+
     /// Reflects an undo locally so lists update instantly (the next delta sync confirms it).
     func applyUndo(_ eventId: String, participantEventId: String, scanContextId: String?, contexts: [ScanContext]) async {
         guard let roster = await load(eventId), var p = roster.byEventId[participantEventId] else { return }
