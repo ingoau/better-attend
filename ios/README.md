@@ -28,7 +28,8 @@ scripts/shot.sh "iPhone 17 Pro" /tmp/people.png attend://people dark
 
 Deep links: `attend://home|scan|people|travel|tickets`, `attend://ticket/<id>`,
 `attend://participant/<eventId>/<participantEventId>`, `attend://blasts`, `attend://kiosk`,
-`attend://settings`, `attend://events`. In demo data the event id is
+`attend://settings`, `attend://events`, `attend://rollcall` (roll call for the selected event), `attend://firstaid`
+(first-aid sheet for the selected event). In demo data the event id is
 `0f5d1a64-2a0e-4d0c-8a3b-1e4c9a7b3c21` (`DemoData.mainEventId`). Participant event ids are
 `String(format: "%08x-8d7e-4f60-9a1b-2c3d4e5f6a7b", 0x3b1f_9000 + i * 104_729)` for generated person `i`
 (e.g. `3b1f9000-…` is Sam Lee, checked in; `3b245b4b-8d7e-4f60-9a1b-2c3d4e5f6a7b` is `i = 3`, Leo Nguyen,
@@ -55,7 +56,7 @@ right target automatically. Never hand-edit `project.pbxproj` for new files.
 - **Concurrency**: Swift 6 language mode. Models in `Shared/` are plain `Sendable` structs. App-side
   state holders are `@MainActor @Observable final class`; views read them directly.
 - **Dependencies** come from the environment: `@Environment(AppModel.self) var app` (repositories:
-  `app.events`, `app.participants`, `app.scans`, `app.tickets`, `app.travel`, `app.settings`,
+  `app.events`, `app.participants`, `app.scans`, `app.tickets`, `app.travel`, `app.rollCalls`, `app.settings`,
   `app.auth`, `app.api`) and `@Environment(Router.self) var router` (navigation).
 - **Navigation**: `TabView` + one `NavigationStack` per tab. Push with `router.open(.participant(…))`
   etc. Settings and the event picker are sheets (`router.sheet`), kiosk is a full-screen cover
