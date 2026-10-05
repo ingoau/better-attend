@@ -19,6 +19,7 @@ final class AppModel {
     let scans: ScanRepository
     let tickets: TicketRepository
     let travel: TravelRepository
+    let rollCalls: RollCallStore
 
     /// False while the network is unreachable (drives "offline" hints and queued-scan retries).
     private(set) var isOnline = true
@@ -57,6 +58,7 @@ final class AppModel {
         self.scans = ScanRepository(api: api, cache: cache, participants: participants)
         self.tickets = TicketRepository(api: api, cache: cache)
         self.travel = TravelRepository(api: api, cache: cache)
+        self.rollCalls = RollCallStore(cache: cache)
 
         api.onSessionExpired = { [weak self] in self?.auth.sessionExpired() }
         auth.onSignedOut = { [weak self] in Task { await self?.clearAccountData() } }
@@ -114,6 +116,7 @@ final class AppModel {
         events.clear()
         tickets.clear()
         travel.clear()
+        rollCalls.clear()
         settings.clearAccountData()
         // Participant headshots (minors) may sit in the URL cache.
         URLCache.shared.removeAllCachedResponses()
