@@ -23,8 +23,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,6 +62,8 @@ import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -107,7 +110,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -477,7 +479,7 @@ fun ParticipantDetailContent(
 private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: DetailCallbacks, onDialog: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More actions for this person") }
         // Edit and the web link are in the action row; this keeps the copy and the destructive actions.
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
@@ -631,42 +633,89 @@ private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: Detail
         // Whatever email the server sends is already on screen, so mailing it needs no extra permission.
         val email = p.email?.takeIf { it.isNotBlank() }
         val slack = p.slackUserId?.takeIf { it.isNotBlank() }
-        val tiles = buildList {
+        val reach = buildList {
             if (phone != null) {
-                add(ActionTileSpec(Icons.Outlined.Call, "Call") { callbacks.contact.call(phone) })
-                add(ActionTileSpec(Icons.Outlined.Sms, "Message") { callbacks.contact.sms(phone) })
-                add(ActionTileSpec(Icons.AutoMirrored.Outlined.Chat, "WhatsApp") { callbacks.contact.whatsApp(phone) })
+                add(QuickAction(Icons.Outlined.Call, "Call") { callbacks.contact.call(phone) })
+                add(QuickAction(Icons.Outlined.Sms, "Message") { callbacks.contact.sms(phone) })
+                add(QuickAction(Icons.AutoMirrored.Outlined.Chat, "WhatsApp") { callbacks.contact.whatsApp(phone) })
             }
-            if (email != null) add(ActionTileSpec(Icons.Outlined.Email, "Email") { callbacks.contact.email(email) })
-            if (slack != null) add(ActionTileSpec(Icons.Outlined.Tag, "Slack") { callbacks.contact.slack(slack) })
-            add(ActionTileSpec(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
-            // Only once the full profile is here: the roster copy has no legal names or birthday.
-            if (state.canEditDetails && state.detailLoaded) add(ActionTileSpec(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
-            if (state.event != null) add(ActionTileSpec(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
+            if (email != null) add(QuickAction(Icons.Outlined.Email, "Email") { callbacks.contact.email(email) })
+            if (slack != null) add(QuickAction(Icons.Outlined.Tag, "Slack") { callbacks.contact.slack(slack) })
         }
-        ActionTiles(tiles)
+        val manage = buildList {
+            add(QuickAction(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
+            // Only once the full profile is here: the roster copy has no legal names or birthday.
+            if (state.canEditDetails && state.detailLoaded) add(QuickAction(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
+            if (state.event != null) add(QuickAction(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (reach.isNotEmpty()) QuickActionGroup(reach, stacked = true)
+            QuickActionGroup(manage, stacked = false)
+        }
     }
 }
 
-private class ActionTileSpec(val icon: ImageVector, val label: String, val busy: Boolean = false, val onClick: () -> Unit)
+private class QuickAction(val icon: ImageVector, val label: String, val busy: Boolean = false, val onClick: () -> Unit)
 
 /**
- * Up to five tiles in one row; more wrap into two even rows (8 → 4 + 4, 7 → 4 + 3) with the
- * columns lined up and a shorter last row centred.
+ * An expressive button group, like Home's quick actions: pill buttons share the row, the pressed one
+ * squares off and pushes its neighbours aside, and any that don't fit move into an overflow menu.
+ * [stacked]: tall tonal buttons with the label under the icon (ways to reach them); otherwise a
+ * quieter row with the label beside the icon (things to do with the record).
  */
 @Composable
-private fun ActionTiles(tiles: List<ActionTileSpec>) {
-    if (tiles.isEmpty()) return
-    val perRow = if (tiles.size <= 5) tiles.size else (tiles.size + 1) / 2
-    // Explicit rows rather than a FlowRow: cells rounded up to whole pixels would wrap a full row.
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val cell = min(maxWidth / perRow, 96.dp)
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            tiles.chunked(perRow).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    row.forEach { ActionTile(it, Modifier.width(cell)) }
-                }
-            }
+private fun QuickActionGroup(actions: List<QuickAction>, stacked: Boolean) {
+    ButtonGroup(
+        overflowIndicator = { menu -> ButtonGroupDefaults.OverflowIndicator(menu) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        actions.forEach { a ->
+            customItem(
+                buttonGroupContent = {
+                    val source = remember { MutableInteractionSource() }
+                    FilledTonalButton(
+                        onClick = a.onClick,
+                        enabled = !a.busy,
+                        shapes = ButtonDefaults.shapes(),
+                        colors = if (stacked) ButtonDefaults.filledTonalButtonColors()
+                        else ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        interactionSource = source,
+                        contentPadding = if (stacked) PaddingValues(horizontal = 2.dp, vertical = 12.dp) else PaddingValues(horizontal = 12.dp),
+                        modifier = Modifier.weight(1f).animateWidth(source).heightIn(min = if (stacked) 76.dp else 56.dp),
+                    ) {
+                        val icon: @Composable () -> Unit = {
+                            if (a.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(a.icon, null, Modifier.size(24.dp))
+                        }
+                        // Five tall pills share a phone's width: a size down keeps "WhatsApp" whole.
+                        val style = if (stacked && actions.size > 4) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge
+                        val label: @Composable () -> Unit = {
+                            Text(a.label, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (stacked) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                icon()
+                                Spacer(Modifier.height(4.dp))
+                                label()
+                            }
+                        } else {
+                            icon()
+                            Spacer(Modifier.width(8.dp))
+                            label()
+                        }
+                    }
+                },
+                menuContent = { menu ->
+                    DropdownMenuItem(
+                        text = { Text(a.label) },
+                        leadingIcon = { Icon(a.icon, null) },
+                        enabled = !a.busy,
+                        onClick = { menu.dismiss(); a.onClick() },
+                    )
+                },
+            )
         }
     }
 }
@@ -747,15 +796,4 @@ private fun CheckInLabel(busy: Boolean, label: String) {
     else Icon(Icons.Outlined.CheckCircle, null)
     Spacer(Modifier.width(8.dp))
     Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-
-@Composable
-private fun ActionTile(tile: ActionTileSpec, modifier: Modifier = Modifier) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
-        FilledTonalIconButton(onClick = tile.onClick, enabled = !tile.busy, modifier = Modifier.size(56.dp)) {
-            if (tile.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(tile.icon, tile.label)
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(tile.label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-    }
 }

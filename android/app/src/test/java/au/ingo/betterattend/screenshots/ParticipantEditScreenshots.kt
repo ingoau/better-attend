@@ -1,7 +1,6 @@
 package au.ingo.betterattend.screenshots
 
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import au.ingo.betterattend.ui.people.EditDetailsContent
@@ -47,7 +46,8 @@ class ParticipantEditScreenshots : ScreenshotTest() {
     }
 
     private fun openMenu() {
-        compose.onAllNodes(hasContentDescription("More options")).onFirst().performClick()
+        // Not "More options": the action row's button groups have overflow indicators with that label.
+        compose.onNodeWithContentDescription("More actions for this person").performClick()
         compose.waitForIdle()
     }
 
