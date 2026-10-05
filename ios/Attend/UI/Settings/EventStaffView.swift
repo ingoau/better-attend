@@ -155,6 +155,9 @@ enum StaffText {
         if StaffLogic.losesStaffAccess(member, newRole: nil, user: user, event: event, staff: staff) {
             return "This is you. You'll lose access to managing staff for \(eventName), and to the event itself unless you have another role."
         }
+        if StaffLogic.isSelf(member, user: user) {
+            return "This is you. You keep access to \(eventName) through your other roles."
+        }
         return "They'll lose access to \(eventName) straight away. You can add them again later."
     }
 }
