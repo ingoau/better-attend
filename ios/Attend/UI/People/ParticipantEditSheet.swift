@@ -48,7 +48,7 @@ struct ParticipantEditSheet: View {
                     field("First name", text: $form.legalFirstName, content: .givenName)
                     field("Last name", text: $form.legalLastName, content: .familyName)
                     field("Preferred name", text: $form.preferredName, content: .nickname)
-                    field("Pronouns", text: $form.pronouns, content: nil)
+                    field("Pronouns", text: $form.pronouns, content: nil, caps: .never)
                 } header: {
                     Text("Name")
                 } footer: {
@@ -126,11 +126,12 @@ struct ParticipantEditSheet: View {
         .interactiveDismissDisabled(!edit.isEmpty || saving)
     }
 
-    private func field(_ title: String, text: Binding<String>, content: UITextContentType?) -> some View {
+    private func field(_ title: String, text: Binding<String>, content: UITextContentType?,
+                       caps: TextInputAutocapitalization = .words) -> some View {
         LabeledContent(title) {
             TextField(title, text: text, prompt: Text("None"))
                 .textContentType(content)
-                .textInputAutocapitalization(.words)
+                .textInputAutocapitalization(caps)
                 .multilineTextAlignment(.trailing)
         }
     }

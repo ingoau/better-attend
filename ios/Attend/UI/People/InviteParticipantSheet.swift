@@ -54,6 +54,7 @@ struct InviteParticipantSheet: View {
                         } else {
                             Button("Invite") { invite() }
                                 .fontWeight(.semibold)
+                                .accessibilityIdentifier("invite-send")
                                 .disabled(email.isBlank || !ParticipantActionVisibility(event).invite)
                         }
                     }
@@ -90,6 +91,7 @@ struct InviteParticipantSheet: View {
                     .autocorrectionDisabled()
                     .submitLabel(.next)
                     .focused($focus, equals: .email)
+                    .accessibilityIdentifier("invite-email")
                     .onSubmit { focus = .firstName }
             } header: {
                 Text("Email")
@@ -103,11 +105,13 @@ struct InviteParticipantSheet: View {
                     .textContentType(.givenName)
                     .submitLabel(.next)
                     .focused($focus, equals: .firstName)
+                    .accessibilityIdentifier("invite-first-name")
                     .onSubmit { focus = .lastName }
                 TextField("Last name", text: $lastName)
                     .textContentType(.familyName)
                     .submitLabel(.send)
                     .focused($focus, equals: .lastName)
+                    .accessibilityIdentifier("invite-last-name")
                     .onSubmit { invite() }
             } header: {
                 Text("Name (Optional)")
