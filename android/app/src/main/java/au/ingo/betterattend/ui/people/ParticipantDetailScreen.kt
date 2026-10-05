@@ -25,8 +25,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -656,19 +654,19 @@ private class ActionTileSpec(val icon: ImageVector, val label: String, val busy:
  * Up to five tiles in one row; more wrap into two even rows (8 → 4 + 4, 7 → 4 + 3) with the
  * columns lined up and a shorter last row centred.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActionTiles(tiles: List<ActionTileSpec>) {
+    if (tiles.isEmpty()) return
     val perRow = if (tiles.size <= 5) tiles.size else (tiles.size + 1) / 2
+    // Explicit rows rather than a FlowRow: cells rounded up to whole pixels would wrap a full row.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val cell = min(maxWidth / perRow.coerceAtLeast(1), 96.dp)
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            maxItemsInEachRow = perRow,
-        ) {
-            tiles.forEach { ActionTile(it, Modifier.width(cell)) }
+        val cell = min(maxWidth / perRow, 96.dp)
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            tiles.chunked(perRow).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    row.forEach { ActionTile(it, Modifier.width(cell)) }
+                }
+            }
         }
     }
 }
