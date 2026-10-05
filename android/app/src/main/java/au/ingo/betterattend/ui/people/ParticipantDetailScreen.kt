@@ -24,6 +24,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -57,6 +60,7 @@ import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -95,16 +99,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -290,6 +295,12 @@ private fun ParticipantDetailPage(eventId: String, participantEventId: String, n
         sms = { haptics.click(); launch(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(it))), "No messaging app found") },
         whatsApp = { haptics.click(); launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + it.filter(Char::isDigit))), "WhatsApp isn't installed") },
         email = { haptics.click(); launch(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + Uri.encode(it))), "No email app found") },
+        slack = {
+            haptics.click()
+            try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SlackLinks.app(it)))) } catch (_: ActivityNotFoundException) {
+                launch(Intent(Intent.ACTION_VIEW, Uri.parse(SlackLinks.web(it))), "Slack isn't installed")
+            }
+        },
         openUrl = { haptics.click(); launch(Intent(Intent.ACTION_VIEW, Uri.parse(it)), "No browser found") },
         // The long-press haptic comes from the long-pressed row itself.
         copy = { label, value -> copy(label, value) },
@@ -469,20 +480,8 @@ private fun OverflowMenu(state: DetailUiState, p: Participant, callbacks: Detail
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More options") }
+        // Edit and the web link are in the action row; this keeps the copy and the destructive actions.
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            // Only once the full profile is here: the roster copy has no legal names or birthday.
-            if (state.canEditDetails && state.detailLoaded) {
-                DropdownMenuItem(
-                    text = { Text("Edit details") },
-                    leadingIcon = { Icon(Icons.Outlined.Edit, null) },
-                    onClick = { open = false; callbacks.editDetails() },
-                )
-            }
-            DropdownMenuItem(
-                text = { Text("Open in Attend web") },
-                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
-                onClick = { open = false; callbacks.openWeb() },
-            )
             DropdownMenuItem(
                 text = { Text("Copy participant ID") },
                 leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) },
@@ -587,10 +586,8 @@ private fun LazyListScope.section(key: String, content: @Composable () -> Unit) 
 @Composable
 private fun Header(p: Participant, tz: String?) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(contentAlignment = Alignment.Center) {
-            Box(Modifier.size(136.dp).clip(MaterialShapes.Cookie9Sided.toShape()).background(MaterialTheme.colorScheme.tertiaryContainer))
-            Avatar(p.fullName ?: p.name, p.headshotUrl, size = 108.dp)
-        }
+        // The expressive cookie is the photo's mask, not a frame around a circle.
+        Avatar(p.fullName ?: p.name, p.headshotUrl, size = 136.dp, shape = MaterialShapes.Cookie9Sided.toShape())
         Spacer(Modifier.height(12.dp))
         Text(p.name, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
         val sub = listOfNotNull(
@@ -633,15 +630,45 @@ private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: Detail
             label = "checkInButtons",
         ) { checkedIn -> CheckInButtons(state, p, checkedIn, callbacks, onDialog) }
         val phone = p.phone?.takeIf { state.canViewPii && it.isNotBlank() }
-        val email = p.email?.takeIf { state.canViewPii && it.isNotBlank() }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        // Whatever email the server sends is already on screen, so mailing it needs no extra permission.
+        val email = p.email?.takeIf { it.isNotBlank() }
+        val slack = p.slackUserId?.takeIf { it.isNotBlank() }
+        val tiles = buildList {
             if (phone != null) {
-                ActionTile(Icons.Outlined.Call, "Call") { callbacks.contact.call(phone) }
-                ActionTile(Icons.Outlined.Sms, "Message") { callbacks.contact.sms(phone) }
-                ActionTile(Icons.AutoMirrored.Outlined.Chat, "WhatsApp") { callbacks.contact.whatsApp(phone) }
+                add(ActionTileSpec(Icons.Outlined.Call, "Call") { callbacks.contact.call(phone) })
+                add(ActionTileSpec(Icons.Outlined.Sms, "Message") { callbacks.contact.sms(phone) })
+                add(ActionTileSpec(Icons.AutoMirrored.Outlined.Chat, "WhatsApp") { callbacks.contact.whatsApp(phone) })
             }
-            if (email != null) ActionTile(Icons.Outlined.Email, "Email") { callbacks.contact.email(email) }
-            ActionTile(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge)
+            if (email != null) add(ActionTileSpec(Icons.Outlined.Email, "Email") { callbacks.contact.email(email) })
+            if (slack != null) add(ActionTileSpec(Icons.Outlined.Tag, "Slack") { callbacks.contact.slack(slack) })
+            add(ActionTileSpec(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
+            // Only once the full profile is here: the roster copy has no legal names or birthday.
+            if (state.canEditDetails && state.detailLoaded) add(ActionTileSpec(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
+            if (state.event != null) add(ActionTileSpec(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
+        }
+        ActionTiles(tiles)
+    }
+}
+
+private class ActionTileSpec(val icon: ImageVector, val label: String, val busy: Boolean = false, val onClick: () -> Unit)
+
+/**
+ * Up to five tiles in one row; more wrap into two even rows (8 → 4 + 4, 7 → 4 + 3) with the
+ * columns lined up and a shorter last row centred.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ActionTiles(tiles: List<ActionTileSpec>) {
+    val perRow = if (tiles.size <= 5) tiles.size else (tiles.size + 1) / 2
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val cell = min(maxWidth / perRow.coerceAtLeast(1), 96.dp)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            maxItemsInEachRow = perRow,
+        ) {
+            tiles.forEach { ActionTile(it, Modifier.width(cell)) }
         }
     }
 }
@@ -725,12 +752,12 @@ private fun CheckInLabel(busy: Boolean, label: String) {
 }
 
 @Composable
-private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, busy: Boolean = false, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(76.dp)) {
-        FilledTonalIconButton(onClick = onClick, enabled = !busy, modifier = Modifier.size(56.dp)) {
-            if (busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(icon, label)
+private fun ActionTile(tile: ActionTileSpec, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+        FilledTonalIconButton(onClick = tile.onClick, enabled = !tile.busy, modifier = Modifier.size(56.dp)) {
+            if (tile.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(tile.icon, tile.label)
         }
         Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(tile.label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }

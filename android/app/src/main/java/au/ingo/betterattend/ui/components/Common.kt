@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -123,9 +124,9 @@ fun initials(name: String): String =
 
 /** Headshot with initials fallback. */
 @Composable
-fun Avatar(name: String, url: String?, modifier: Modifier = Modifier, size: Dp = 44.dp) {
+fun Avatar(name: String, url: String?, modifier: Modifier = Modifier, size: Dp = 44.dp, shape: Shape = CircleShape) {
     Box(
-        modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+        modifier.size(size).clip(shape).background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         Text(

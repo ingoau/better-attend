@@ -168,10 +168,8 @@ private struct DetailHeader: View {
                         }
                         .accessibilityLabel("Ticket code \(p.shortCode.map(String.init).joined(separator: " "))")
                 }
-                if canViewPii {
-                    ContactTiles(participant: p)
-                        .padding(.top, 4)
-                }
+                ContactTiles(participant: p, canViewPii: canViewPii)
+                    .padding(.top, 4)
             }
             .frame(maxWidth: .infinity)
             .listRowBackground(Color.clear)
@@ -180,31 +178,42 @@ private struct DetailHeader: View {
     }
 }
 
-/// Contacts-style action buttons: call, message, WhatsApp, FaceTime, mail.
+/// Contacts-style action buttons: call, message, WhatsApp, FaceTime, mail, Slack.
 private struct ContactTiles: View {
     let participant: Participant
+    let canViewPii: Bool
     @Environment(\.openURL) private var openURL
 
     private static let hasWhatsApp = URL(string: "whatsapp://").map { UIApplication.shared.canOpenURL($0) } ?? false
 
     var body: some View {
-        let phone = participant.phone?.nonBlank
+        let phone = canViewPii ? participant.phone?.nonBlank : nil
+        // Whatever email the server sends is already on screen, so mailing it needs no extra permission.
         let email = participant.email?.nonBlank
-        if phone != nil || email != nil {
+        let slack = participant.slackUserId?.nonBlank
+        if phone != nil || email != nil || slack != nil {
             HStack(spacing: 8) {
-                tile("Call", "phone.fill", phone.flatMap(ContactLinks.call))
-                tile("Message", "message.fill", phone.flatMap(ContactLinks.sms))
-                if Self.hasWhatsApp { tile("WhatsApp", "bubble.left.and.bubble.right.fill", phone.flatMap(ContactLinks.whatsApp)) }
-                tile("FaceTime", "video.fill", phone.flatMap(ContactLinks.faceTime))
+                if canViewPii {
+                    tile("Call", "phone.fill", phone.flatMap(ContactLinks.call))
+                    tile("Message", "message.fill", phone.flatMap(ContactLinks.sms))
+                    if Self.hasWhatsApp { tile("WhatsApp", "bubble.left.and.bubble.right.fill", phone.flatMap(ContactLinks.whatsApp)) }
+                    tile("FaceTime", "video.fill", phone.flatMap(ContactLinks.faceTime))
+                }
                 tile("Mail", "envelope.fill", email.flatMap(ContactLinks.email))
+                tile("Slack", "number", slack.flatMap(ContactLinks.slack), fallback: slack.flatMap(ContactLinks.slackWeb))
             }
         }
     }
 
-    private func tile(_ title: String, _ symbol: String, _ url: URL?) -> some View {
+    /// [fallback] opens if nothing handles [url] (Slack not installed → its web profile).
+    private func tile(_ title: String, _ symbol: String, _ url: URL?, fallback: URL? = nil) -> some View {
         Button {
             Haptics.tap()
-            if let url { openURL(url) }
+            if let url {
+                openURL(url) { accepted in
+                    if !accepted, let fallback { openURL(fallback) }
+                }
+            }
         } label: {
             VStack(spacing: 5) {
                 Image(systemName: symbol).font(.title3)
@@ -551,12 +560,18 @@ private struct LinkRow<Extra: View>: View {
     let label: String
     let value: String
     let url: URL?
+    /// Opens if nothing handles `url` (Slack not installed → its web profile).
+    var fallback: URL? = nil
     @ViewBuilder var extra: Extra
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Button {
-            if let url { openURL(url) }
+            if let url {
+                openURL(url) { accepted in
+                    if !accepted, let fallback { openURL(fallback) }
+                }
+            }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label).font(.subheadline).foregroundStyle(.secondary)
@@ -575,8 +590,8 @@ private struct LinkRow<Extra: View>: View {
 }
 
 extension LinkRow where Extra == EmptyView {
-    init(label: String, value: String, url: URL?) {
-        self.init(label: label, value: value, url: url) { EmptyView() }
+    init(label: String, value: String, url: URL?, fallback: URL? = nil) {
+        self.init(label: label, value: value, url: url, fallback: fallback) { EmptyView() }
     }
 }
 
@@ -629,8 +644,8 @@ private struct ContactSection: View {
         if phone != nil || email != nil || slack != nil {
             Section("Contact") {
                 if let phone { PhoneRow(label: "Mobile", phone: phone) }
-                if let email { LinkRow(label: "Email", value: email, url: canViewPii ? ContactLinks.email(email) : nil) }
-                if let slack { FieldRow("Slack ID", slack) }
+                if let email { LinkRow(label: "Email", value: email, url: ContactLinks.email(email)) }
+                if let slack { LinkRow(label: "Slack", value: slack, url: ContactLinks.slack(slack), fallback: ContactLinks.slackWeb(slack)) }
             }
         }
     }

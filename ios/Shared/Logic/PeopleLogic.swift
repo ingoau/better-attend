@@ -597,5 +597,22 @@ enum ContactLinks {
         return URL(string: "mailto:\(enc)")
     }
 
+    /// Hack Club's Slack, where Attend's Slack IDs live.
+    static let slackTeamId = "T0266FRGM"
+
+    /// Slack's deep link: opens a DM with the user in the app.
+    static func slack(_ userId: String) -> URL? {
+        slackId(userId).flatMap { URL(string: "slack://user?team=\(slackTeamId)&id=\($0)") }
+    }
+
+    /// Their profile on the web, for when the Slack app isn't installed.
+    static func slackWeb(_ userId: String) -> URL? {
+        slackId(userId).flatMap { URL(string: "https://hackclub.slack.com/team/\($0)") }
+    }
+
+    private static func slackId(_ userId: String) -> String? {
+        nonEmpty(userId.trimmingCharacters(in: .whitespaces).addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")
+    }
+
     private static func nonEmpty(_ s: String) -> String? { s.isEmpty || s == "+" ? nil : s }
 }

@@ -413,4 +413,10 @@ extension Fixtures {
         #expect(ContactLinks.email(" maya@example.com ")?.absoluteString == "mailto:maya@example.com")
         #expect(ContactLinks.email("not an email") == nil)
     }
+
+    @Test func slackLinks() {
+        #expect(ContactLinks.slack(" U09K59BPM2M ")?.absoluteString == "slack://user?team=T0266FRGM&id=U09K59BPM2M")
+        #expect(ContactLinks.slackWeb("U09K59BPM2M")?.absoluteString == "https://hackclub.slack.com/team/U09K59BPM2M")
+        #expect(ContactLinks.slack("  ") == nil)
+    }
 }
