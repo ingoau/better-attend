@@ -19,6 +19,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -42,15 +43,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ContactPhone
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.HowToReg
 import androidx.compose.material.icons.outlined.MoreVert
@@ -58,8 +57,6 @@ import androidx.compose.material.icons.outlined.Nfc
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material.icons.outlined.Sms
-import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroup
@@ -100,6 +97,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -453,6 +451,8 @@ fun ParticipantDetailContent(
     }
 
     if (p != null) when (dialog) {
+        "contact" -> ContactSheet(p.name, contactOptions(p, state.canViewPii, callbacks.contact), onDismiss = { dialog = null })
+        "photo" -> p.headshotUrl?.let { PhotoViewer(it, p.fullName ?: p.name, onDismiss = { dialog = null }) }
         "undo" -> UndoCheckInDialog(p.name, p.scansByContext, tz, onConfirm = { dialog = null; callbacks.undo(it) }, onDismiss = { dialog = null })
         "withdraw" -> ConfirmDialog(
             "Withdraw ${p.name}?", "They'll be hidden from the list and lose access to their ticket. You can reinstate them later.",
@@ -541,7 +541,7 @@ private fun DetailBody(
     ) {
         // Sections fill in as the full profile arrives: each one fades in / grows and the rest glide
         // down to make room, rather than the page popping into a new layout.
-        section("header") { Header(p, tz) }
+        section("header") { Header(p, tz, onOpenPhoto = { onDialog("photo") }) }
         if (state.error != null && !state.detailLoaded) {
             section("err") { OfflineBanner("Showing saved details. ${state.error}", onRetry = callbacks.refresh) }
         }
@@ -584,10 +584,15 @@ private fun LazyListScope.section(key: String, content: @Composable () -> Unit) 
 }
 
 @Composable
-private fun Header(p: Participant, tz: String?) {
+private fun Header(p: Participant, tz: String?, onOpenPhoto: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // The expressive cookie is the photo's mask, not a frame around a circle.
-        Avatar(p.fullName ?: p.name, p.headshotUrl, size = 136.dp, shape = MaterialShapes.Cookie9Sided.toShape())
+        val cookie = MaterialShapes.Cookie9Sided.toShape()
+        Avatar(
+            p.fullName ?: p.name, p.headshotUrl, size = 136.dp, shape = cookie,
+            // Only a real photo opens full screen; initials have nothing more to show.
+            modifier = if (p.headshotUrl != null) Modifier.clip(cookie).clickable(onClickLabel = "View photo", onClick = onOpenPhoto) else Modifier,
+        )
         Spacer(Modifier.height(12.dp))
         Text(p.name, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
         val sub = listOfNotNull(
@@ -629,29 +634,16 @@ private fun ActionsPanel(state: DetailUiState, p: Participant, callbacks: Detail
             },
             label = "checkInButtons",
         ) { checkedIn -> CheckInButtons(state, p, checkedIn, callbacks, onDialog) }
-        val phone = p.phone?.takeIf { state.canViewPii && it.isNotBlank() }
-        // Whatever email the server sends is already on screen, so mailing it needs no extra permission.
-        val email = p.email?.takeIf { it.isNotBlank() }
-        val slack = p.slackUserId?.takeIf { it.isNotBlank() }
-        val reach = buildList {
-            if (phone != null) {
-                add(QuickAction(Icons.Outlined.Call, "Call") { callbacks.contact.call(phone) })
-                add(QuickAction(Icons.Outlined.Sms, "Message") { callbacks.contact.sms(phone) })
-                add(QuickAction(Icons.AutoMirrored.Outlined.Chat, "WhatsApp") { callbacks.contact.whatsApp(phone) })
-            }
-            if (email != null) add(QuickAction(Icons.Outlined.Email, "Email") { callbacks.contact.email(email) })
-            if (slack != null) add(QuickAction(Icons.Outlined.Tag, "Slack") { callbacks.contact.slack(slack) })
-        }
-        val manage = buildList {
+        // One row; every way to reach them sits behind Contact, in a sheet.
+        val reachable = remember(p, state.canViewPii) { contactOptions(p, state.canViewPii, ContactActions()).isNotEmpty() }
+        val actions = buildList {
+            if (reachable) add(QuickAction(Icons.Outlined.ContactPhone, "Contact") { onDialog("contact") })
             add(QuickAction(Icons.Outlined.Nfc, "Badge", busy = state.busy == DetailBusy.ResettingBadge, onClick = callbacks.writeBadge))
             // Only once the full profile is here: the roster copy has no legal names or birthday.
             if (state.canEditDetails && state.detailLoaded) add(QuickAction(Icons.Outlined.Edit, "Edit", onClick = callbacks.editDetails))
             if (state.event != null) add(QuickAction(Icons.AutoMirrored.Outlined.OpenInNew, "Web", onClick = callbacks.openWeb))
         }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (reach.isNotEmpty()) QuickActionGroup(reach, stacked = true)
-            QuickActionGroup(manage, stacked = false)
-        }
+        QuickActionGroup(actions)
     }
 }
 
@@ -660,11 +652,9 @@ private class QuickAction(val icon: ImageVector, val label: String, val busy: Bo
 /**
  * An expressive button group, like Home's quick actions: pill buttons share the row, the pressed one
  * squares off and pushes its neighbours aside, and any that don't fit move into an overflow menu.
- * [stacked]: tall tonal buttons with the label under the icon (ways to reach them); otherwise a
- * quieter row with the label beside the icon (things to do with the record).
  */
 @Composable
-private fun QuickActionGroup(actions: List<QuickAction>, stacked: Boolean) {
+private fun QuickActionGroup(actions: List<QuickAction>) {
     ButtonGroup(
         overflowIndicator = { menu -> ButtonGroupDefaults.OverflowIndicator(menu) },
         modifier = Modifier.fillMaxWidth(),
@@ -677,33 +667,14 @@ private fun QuickActionGroup(actions: List<QuickAction>, stacked: Boolean) {
                         onClick = a.onClick,
                         enabled = !a.busy,
                         shapes = ButtonDefaults.shapes(),
-                        colors = if (stacked) ButtonDefaults.filledTonalButtonColors()
-                        else ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
                         interactionSource = source,
-                        contentPadding = if (stacked) PaddingValues(horizontal = 2.dp, vertical = 12.dp) else PaddingValues(horizontal = 12.dp),
-                        modifier = Modifier.weight(1f).animateWidth(source).heightIn(min = if (stacked) 76.dp else 56.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 12.dp),
+                        modifier = Modifier.weight(1f).animateWidth(source).heightIn(min = 76.dp),
                     ) {
-                        val icon: @Composable () -> Unit = {
-                            if (a.busy) LoadingIndicator(Modifier.size(24.dp)) else Icon(a.icon, null, Modifier.size(24.dp))
-                        }
-                        // Five tall pills share a phone's width: a size down keeps "WhatsApp" whole.
-                        val style = if (stacked && actions.size > 4) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge
-                        val label: @Composable () -> Unit = {
-                            Text(a.label, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                        if (stacked) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                icon()
-                                Spacer(Modifier.height(4.dp))
-                                label()
-                            }
-                        } else {
-                            icon()
-                            Spacer(Modifier.width(8.dp))
-                            label()
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (a.busy) LoadingIndicator(Modifier.size(26.dp)) else Icon(a.icon, null, Modifier.size(26.dp))
+                            Spacer(Modifier.height(4.dp))
+                            Text(a.label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 },
