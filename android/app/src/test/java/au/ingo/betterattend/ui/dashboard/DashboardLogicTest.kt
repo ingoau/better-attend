@@ -3,6 +3,7 @@ package au.ingo.betterattend.ui.dashboard
 import au.ingo.betterattend.data.model.Scan
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.repo.EventStats
+import au.ingo.betterattend.data.repo.ScanRejection
 import au.ingo.betterattend.ui.preview.OrganizerSamples
 import au.ingo.betterattend.ui.preview.SampleData
 import org.junit.Assert.assertEquals
@@ -16,6 +17,18 @@ class DashboardLogicTest {
     private val now = OrganizerSamples.now
     private val stats = EventStats.from(OrganizerSamples.participants, now)
     private val tz = "Australia/Sydney"
+
+    @Test fun rejectionRows_openOnlyWhereThatEventAllowsIt() {
+        val here = SampleData.event.copy(id = "e1", role = "ops", canViewParticipants = true)
+        val readOnly = SampleData.event.copy(id = "e2", role = "read_only", canViewParticipants = false)
+        fun r(eventId: String, pe: String? = "pe1") = ScanRejection("c-$eventId", eventId, pe, "Mia", "consent not signed", "2026-10-03T00:00:00Z")
+        val events = listOf(here, readOnly)
+        assertTrue(DashboardLogic.canOpenRejection(r("e1"), events))
+        assertFalse(DashboardLogic.canOpenRejection(r("e2"), events)) // another event, where they can't see people
+        assertFalse(DashboardLogic.canOpenRejection(r("e9"), events)) // an event no longer on the list
+        assertFalse(DashboardLogic.canOpenRejection(r("e1", pe = null), events))
+        assertFalse(DashboardLogic.canOpenRejection(r("e1"), null))
+    }
 
     @Test fun heroNumbersAddUp() {
         assertEquals(120, stats.confirmed)
