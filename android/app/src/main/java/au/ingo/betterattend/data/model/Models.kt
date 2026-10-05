@@ -540,6 +540,79 @@ data class TravelCalendar(
     val counts: TravelCounts = TravelCounts(),
 )
 
+// ---------- Participant edits & invites ----------
+
+/**
+ * Fields for `PATCH /events/:id/participants/:pe_id`. Only non-null fields are sent, so a one-field
+ * edit stays a one-field edit; send "" to clear a field. Upstream writes these to the person's
+ * profile (PARTICIPANT_WRITABLE_FIELDS in hackclub/attend).
+ */
+@Serializable
+data class ParticipantEdit(
+    @SerialName("legal_first_name") val legalFirstName: String? = null,
+    @SerialName("legal_last_name") val legalLastName: String? = null,
+    @SerialName("preferred_name") val preferredName: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+    val pronouns: String? = null,
+    @SerialName("tshirt_size") val tshirtSize: String? = null,
+    /** ISO date, yyyy-MM-dd. */
+    @SerialName("date_of_birth") val dateOfBirth: String? = null,
+) {
+    val isEmpty: Boolean get() = listOf(legalFirstName, legalLastName, preferredName, email, phone, pronouns, tshirtSize, dateOfBirth).all { it == null }
+}
+
+/** Response of `POST /events/:id/participants` (invite). */
+@Serializable
+data class InviteResult(
+    val success: Boolean = true,
+    /** True when the event holds onboarding invitations: recorded now, emailed when released. */
+    val held: Boolean = false,
+    val message: String? = null,
+    val event: String? = null,
+    @SerialName("participant_id") val participantId: String? = null,
+    @SerialName("participant_event_id") val participantEventId: String? = null,
+    val status: String? = null,
+)
+
+// ---------- Event staff ----------
+
+@Serializable
+data class StaffUser(
+    val id: String,
+    val email: String,
+    val name: String? = null,
+    @SerialName("global_admin") val globalAdmin: Boolean = false,
+) {
+    val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: email.substringBefore('@')
+}
+
+@Serializable
+data class StaffMember(
+    /** Assignment id: what PATCH/DELETE /staff/:id take. */
+    val id: String,
+    val role: String,
+    @SerialName("role_label") val roleLabel: String? = null,
+    /** Access comes from the event series; upstream refuses to remove it here (409). */
+    @SerialName("inherited_from_series") val inheritedFromSeries: Boolean = false,
+    @SerialName("series_role") val seriesRole: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    val user: StaffUser,
+)
+
+/** One entry of the role catalogue `GET /staff` returns, so roles are never hardcoded. */
+@Serializable
+data class StaffRole(val role: String, val label: String, val summary: String? = null)
+
+@Serializable
+data class StaffResponse(val staff: List<StaffMember> = emptyList(), val roles: List<StaffRole> = emptyList())
+
+@Serializable
+data class StaffMemberResponse(
+    @SerialName("staff_member") val staffMember: StaffMember,
+    @SerialName("account_created") val accountCreated: Boolean = false,
+)
+
 // ---------- Slack blasts ----------
 
 @Serializable

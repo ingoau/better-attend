@@ -551,6 +551,82 @@ struct SlackBlastsResponse: Codable, Sendable {
 
 struct SlackBlastResponse: Codable, Sendable { var slackBlast: SlackBlast }
 
+// MARK: - Participant edits & invites
+
+/// Fields for `PATCH /events/:id/participants/:pe_id`. Only non-nil fields are sent, so a one-field
+/// edit stays a one-field edit; send "" to clear a field. Upstream writes these to the person's
+/// profile (PARTICIPANT_WRITABLE_FIELDS in hackclub/attend).
+struct ParticipantEdit: Codable, Hashable, Sendable {
+    var legalFirstName: String?
+    var legalLastName: String?
+    var preferredName: String?
+    var email: String?
+    var phone: String?
+    var pronouns: String?
+    var tshirtSize: String?
+    /// ISO date, yyyy-MM-dd.
+    var dateOfBirth: String?
+
+    var isEmpty: Bool {
+        [legalFirstName, legalLastName, preferredName, email, phone, pronouns, tshirtSize, dateOfBirth].allSatisfy { $0 == nil }
+    }
+}
+
+/// Response of `POST /events/:id/participants` (invite).
+struct InviteResult: Codable, Hashable, Sendable {
+    @Default<True> var success: Bool = true
+    /// True when the event holds onboarding invitations: recorded now, emailed when released.
+    @Default<False> var held: Bool = false
+    var message: String?
+    var event: String?
+    var participantId: String?
+    var participantEventId: String?
+    var status: String?
+}
+
+// MARK: - Event staff
+
+struct StaffUser: Codable, Hashable, Sendable, Identifiable {
+    var id: String
+    var email: String
+    var name: String?
+    @Default<False> var globalAdmin: Bool = false
+
+    var displayName: String {
+        name?.nonBlank ?? String(email.split(separator: "@", maxSplits: 1).first ?? Substring(email))
+    }
+}
+
+struct StaffMember: Codable, Hashable, Sendable, Identifiable {
+    /// Assignment id: what PATCH/DELETE /staff/:id take.
+    var id: String
+    var role: String
+    var roleLabel: String?
+    /// Access comes from the event series; upstream refuses to remove it here (409).
+    @Default<False> var inheritedFromSeries: Bool = false
+    var seriesRole: String?
+    var createdAt: String?
+    var user: StaffUser
+}
+
+/// One entry of the role catalogue `GET /staff` returns, so roles are never hardcoded.
+struct StaffRole: Codable, Hashable, Sendable, Identifiable {
+    var role: String
+    var label: String
+    var summary: String?
+    var id: String { role }
+}
+
+struct StaffResponse: Codable, Sendable {
+    @Default<Empty<StaffMember>> var staff: [StaffMember] = []
+    @Default<Empty<StaffRole>> var roles: [StaffRole] = []
+}
+
+struct StaffMemberResponse: Codable, Sendable {
+    var staffMember: StaffMember
+    @Default<False> var accountCreated: Bool = false
+}
+
 struct ErrorBody: Codable, Sendable {
     var error: String?
     var message: String?

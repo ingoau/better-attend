@@ -267,6 +267,42 @@ class AttendApi(
             put("status", status)
         }).participant
 
+    /** Edits the person's profile. Only [ParticipantEdit]'s non-null fields are sent. */
+    suspend fun updateParticipant(eventId: String, participantEventId: String, edit: ParticipantEdit): Participant =
+        send<ParticipantResponse>("PATCH", "/events/$eventId/participants/$participantEventId", buildJsonObject {
+            put("participant", json.encodeToJsonElement(ParticipantEdit.serializer(), edit))
+        }).participant
+
+    /** Adds someone to the roster as `invited` and emails their invitation (event admins only). */
+    suspend fun inviteParticipant(eventId: String, email: String, firstName: String?, lastName: String?): InviteResult =
+        send("POST", "/events/$eventId/participants", buildJsonObject {
+            put("email", email)
+            firstName?.let { put("first_name", it) }
+            lastName?.let { put("last_name", it) }
+        })
+
+    /** Removes this registration (and its travel, consents and scans) from the event (event admins only). */
+    suspend fun deleteParticipant(eventId: String, participantEventId: String) {
+        raw("DELETE", "/events/$eventId/participants/$participantEventId")
+    }
+
+    // ---------------- staff ----------------
+
+    suspend fun staff(eventId: String): StaffResponse = get("/events/$eventId/staff")
+
+    suspend fun addStaff(eventId: String, email: String, role: String): StaffMemberResponse =
+        send("POST", "/events/$eventId/staff", buildJsonObject {
+            put("email", email)
+            put("role", role)
+        })
+
+    suspend fun updateStaffRole(eventId: String, assignmentId: String, role: String): StaffMember =
+        send<StaffMemberResponse>("PATCH", "/events/$eventId/staff/$assignmentId", buildJsonObject { put("role", role) }).staffMember
+
+    suspend fun removeStaff(eventId: String, assignmentId: String) {
+        raw("DELETE", "/events/$eventId/staff/$assignmentId")
+    }
+
     // ---------------- notes ----------------
 
     suspend fun notes(eventId: String, participantEventId: String): List<Note> =

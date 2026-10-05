@@ -9,6 +9,7 @@ import au.ingo.betterattend.data.api.ApiException
 import au.ingo.betterattend.data.api.friendlyMessage
 import au.ingo.betterattend.data.auth.AuthState
 import au.ingo.betterattend.data.model.Event
+import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.Note
 import au.ingo.betterattend.data.model.NoteAuthor
 import au.ingo.betterattend.data.model.Participant
@@ -65,8 +66,8 @@ data class DetailUiState(
 ) {
     val canViewPii get() = event?.canViewParticipantPii == true
     val canViewSensitive get() = event?.canViewSensitiveData == true
-    /** PATCH participants is limited to these direct roles (safeguarding leads and series-only members get 403). */
-    val canChangeStatus get() = event?.role in setOf("event_admin", "ops", "limited", "global_admin")
+    /** PATCH participants is limited to direct edit roles (safeguarding leads and series-only members get 403). */
+    val canChangeStatus get() = EventPermissions.canEditParticipant(event)
     val checkInContexts: List<ScanContext> get() = contexts.filter { it.checksIn }.ifEmpty { contexts }
     val defaultCheckInContext: ScanContext? get() = EventRepository.defaultContext(checkInContexts)
 }

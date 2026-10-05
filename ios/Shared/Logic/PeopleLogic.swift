@@ -414,10 +414,8 @@ enum Safety {
 // MARK: - Detail
 
 enum ParticipantDetailLogic {
-    /// PATCH participants is limited to these direct roles (safeguarding leads and series-only members get 403).
-    static func canChangeStatus(_ event: Event?) -> Bool {
-        ["event_admin", "ops", "limited", "global_admin"].contains(event?.role ?? "")
-    }
+    /// PATCH participants is limited to direct edit roles (safeguarding leads and series-only members get 403).
+    static func canChangeStatus(_ event: Event?) -> Bool { EventPermissions.canEditParticipant(event) }
 
     /// Default selection for undo: the only context, else the check-in context, else everything (nil).
     static func defaultUndoSelection(_ scans: [ContextScanSummary]) -> String? {

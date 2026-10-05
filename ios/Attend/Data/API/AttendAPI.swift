@@ -43,7 +43,7 @@ final class AttendAPI {
 
     // MARK: Low level
 
-    private func request(_ method: String, _ path: String, query: [String: String?], body: [String: String]?, token: String?) -> URLRequest {
+    private func request(_ method: String, _ path: String, query: [String: String?], body: [String: String]?, jsonBody: Data? = nil, token: String?) -> URLRequest {
         var components = URLComponents(url: baseURL.appending(path: "api/v1" + path), resolvingAgainstBaseURL: false)!
         let items = query.compactMap { k, v in v.map { URLQueryItem(name: k, value: $0) } }.sorted { $0.name < $1.name }
         if !items.isEmpty { components.queryItems = items }
@@ -52,7 +52,10 @@ final class AttendAPI {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-        if let body {
+        if let jsonBody {
+            req.httpBody = jsonBody
+            req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        } else if let body {
             req.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
             req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         } else if ["POST", "PUT", "PATCH"].contains(method) {
@@ -79,17 +82,18 @@ final class AttendAPI {
         _ path: String,
         query: [String: String?] = [:],
         body: [String: String]? = nil,
+        jsonBody: Data? = nil,
         authenticated: Bool = true
     ) async throws -> Data {
         let usedToken = authenticated ? tokens.token : nil
         var sentToken = usedToken
-        var (data, res) = try await send(request(method, path, query: query, body: body, token: usedToken))
+        var (data, res) = try await send(request(method, path, query: query, body: body, jsonBody: jsonBody, token: usedToken))
         if res.statusCode == 401, authenticated, let usedToken {
             // Let any in-flight rotation finish, then retry if the token changed underneath us.
             _ = await refreshTask?.value
             if let current = tokens.token, current != usedToken {
                 sentToken = current
-                (data, res) = try await send(request(method, path, query: query, body: body, token: current))
+                (data, res) = try await send(request(method, path, query: query, body: body, jsonBody: jsonBody, token: current))
             }
         }
         guard (200..<300).contains(res.statusCode) else {
@@ -124,6 +128,12 @@ final class AttendAPI {
 
     private func send<T: Decodable>(_ method: String, _ path: String, body: [String: String]? = nil, query: [String: String?] = [:]) async throws -> T {
         try AttendJSON.decoder().decode(T.self, from: await raw(method, path, query: query, body: body))
+    }
+
+    /// Sends an Encodable body (for nested JSON the `[String: String]` body can't express).
+    private func send<T: Decodable, B: Encodable>(_ method: String, _ path: String, encoding body: B) async throws -> T {
+        let data = try AttendJSON.encoder().encode(body)
+        return try AttendJSON.decoder().decode(T.self, from: await raw(method, path, jsonBody: data))
     }
 
     // MARK: Session
@@ -211,6 +221,42 @@ final class AttendAPI {
 
     func updateParticipantStatus(eventId: String, participantEventId: String, status: String) async throws -> Participant {
         try await (send("PATCH", "/events/\(eventId)/participants/\(participantEventId)", body: ["status": status]) as ParticipantResponse).participant
+    }
+
+    private struct ParticipantEditBody: Encodable { var participant: ParticipantEdit }
+
+    /// Edits the person's profile. Only `edit`'s non-nil fields are sent.
+    func updateParticipant(eventId: String, participantEventId: String, edit: ParticipantEdit) async throws -> Participant {
+        try await (send("PATCH", "/events/\(eventId)/participants/\(participantEventId)", encoding: ParticipantEditBody(participant: edit)) as ParticipantResponse).participant
+    }
+
+    /// Adds someone to the roster as `invited` and emails their invitation (event admins only).
+    func inviteParticipant(eventId: String, email: String, firstName: String?, lastName: String?) async throws -> InviteResult {
+        var body = ["email": email]
+        body["first_name"] = firstName
+        body["last_name"] = lastName
+        return try await send("POST", "/events/\(eventId)/participants", body: body)
+    }
+
+    /// Removes this registration (and its travel, consents and scans) from the event (event admins only).
+    func deleteParticipant(eventId: String, participantEventId: String) async throws {
+        _ = try await raw("DELETE", "/events/\(eventId)/participants/\(participantEventId)")
+    }
+
+    // MARK: Staff
+
+    func staff(eventId: String) async throws -> StaffResponse { try await get("/events/\(eventId)/staff") }
+
+    func addStaff(eventId: String, email: String, role: String) async throws -> StaffMemberResponse {
+        try await send("POST", "/events/\(eventId)/staff", body: ["email": email, "role": role])
+    }
+
+    func updateStaffRole(eventId: String, assignmentId: String, role: String) async throws -> StaffMember {
+        try await (send("PATCH", "/events/\(eventId)/staff/\(assignmentId)", body: ["role": role]) as StaffMemberResponse).staffMember
+    }
+
+    func removeStaff(eventId: String, assignmentId: String) async throws {
+        _ = try await raw("DELETE", "/events/\(eventId)/staff/\(assignmentId)")
     }
 
     // MARK: Notes
