@@ -598,7 +598,8 @@ private fun RollCallPersonRow(row: RollCallRow, tz: String?, contextName: String
                     secondary.first,
                     style = MaterialTheme.typography.bodyMedium,
                     color = secondary.second ?: MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    // A warning (not recorded / still scanned) names the scan point: let it wrap rather than cut it off.
+                    maxLines = if (secondary.second != null) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

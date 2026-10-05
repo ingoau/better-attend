@@ -59,7 +59,7 @@ object SafetySamples {
 
     /**
      * A roll call of the 84 people checked in on [OrganizerSamples.roster], recording at Saturday lunch:
-     * 69 ticked plus one walk-in, 15 missing (one of them unticked offline).
+     * 69 ticked (one not recorded at the scan point) plus one walk-in, 15 missing (one still scanned there).
      */
     val rollCall: RollCall = run {
         val people = OrganizerSamples.participants
@@ -77,6 +77,8 @@ object SafetySamples {
             accounted = ticked + (walkIn.participantEventId to iso(-2)),
             added = listOf(walkIn.participantEventId),
             stillRecorded = setOf(people[22].participantEventId),
+            // One tick Attend couldn't record (e.g. a network error that wasn't queued).
+            notRecorded = setOf(expected.filter { it.participantEventId in ticked }.sortedBy { (it.fullName ?: it.name).lowercase() }[1].participantEventId),
         )
     }
 

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
@@ -183,7 +184,8 @@ class AppSmokeTest {
             waitForText("Start roll call")
             compose.onAllNodes(hasText("Start roll call") and hasClickAction(), useUnmergedTree = false).onFirst().performClick()
             waitForText("accounted for")
-            compose.onAllNodes(hasContentDescription("Mark ", substring = true) and hasClickAction()).onFirst().performClick()
+            // Each row is one TalkBack stop: its state says Missing, and a tap ticks it.
+            compose.onAllNodes(hasStateDescription("Missing") and hasClickAction()).onFirst().performClick()
             waitForText("1 of ")
             synchronized(requests) {
                 check(requests.count { it == "POST /events/${liveEvent.id}/scans" } == scanPosts) { "a phone-only roll call sent a scan: $requests" }
