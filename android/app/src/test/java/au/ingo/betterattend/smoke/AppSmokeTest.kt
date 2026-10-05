@@ -175,6 +175,28 @@ class AppSmokeTest {
             waitForText("checked in")
             assertSelected("Home")
 
+            // Roll call from Home: start (ticks stay on this phone by default), tick someone, leave.
+            val scanPosts = synchronized(requests) { requests.count { it == "POST /events/${liveEvent.id}/scans" } }
+            compose.onAllNodes(hasContentDescription("Roll call.", substring = true) and hasClickAction()).onFirst().performClick()
+            waitForText("Start roll call")
+            compose.onAllNodes(hasText("Start roll call") and hasClickAction(), useUnmergedTree = false).onFirst().performClick()
+            waitForText("accounted for")
+            compose.onAllNodes(hasContentDescription("Mark ", substring = true) and hasClickAction()).onFirst().performClick()
+            waitForText("1 of ")
+            synchronized(requests) {
+                check(requests.count { it == "POST /events/${liveEvent.id}/scans" } == scanPosts) { "a phone-only roll call sent a scan: $requests" }
+            }
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+
+            // First-aid sheet from Home.
+            compose.onAllNodes(hasContentDescription("First aid.", substring = true) and hasClickAction()).onFirst().performClick()
+            waitForText("First-aid sheet")
+            waitForText("Anaphylaxis risk")
+            withActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+            assertSelected("Home")
+
             // Swipe between tabs: Home → Scan → People.
             compose.onRoot().performTouchInput { swipeLeft(startX = right * 0.9f, endX = left + right * 0.1f) }
             compose.waitForIdle()
