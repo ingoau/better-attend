@@ -1,6 +1,7 @@
 package au.ingo.betterattend.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -87,7 +89,12 @@ fun EmptyState(
         }
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(20.dp))
-            Button(onClick = onAction, shapes = ButtonDefaults.shapes()) { Text(actionLabel) }
+            Button(
+                onClick = onAction,
+                shapes = ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight),
+                contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MediumContainerHeight),
+                modifier = Modifier.heightIn(min = ButtonDefaults.MediumContainerHeight),
+            ) { Text(actionLabel, style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight)) }
         }
     }
 }
@@ -177,6 +184,21 @@ fun EventSwitcherTitle(eventName: String?, subtitle: String?, onClick: () -> Uni
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
+    }
+}
+
+/** The event name with a chevron, for large app-bar titles: tap to switch events. */
+@Composable
+fun EventTitle(name: String?, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(MaterialTheme.shapes.small)
+            .clickable(onClickLabel = "Switch event", role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = "Event: ${name ?: "none chosen"}" }
+            .padding(end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(name ?: "Choose an event", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Icon(Icons.Outlined.ExpandMore, null)
     }
 }
 

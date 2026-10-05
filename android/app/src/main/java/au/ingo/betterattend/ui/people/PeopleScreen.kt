@@ -49,20 +49,41 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.ExpandedFullScreenSearchBar
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.SearchBarState
+import androidx.compose.material3.SearchBarValue
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.rememberSearchBarState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import au.ingo.betterattend.ui.components.EventTitle
+import au.ingo.betterattend.ui.components.ProvideEntranceStagger
+import au.ingo.betterattend.ui.components.animatedFlexWeight
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +96,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
@@ -94,12 +116,12 @@ import au.ingo.betterattend.data.repo.EventStats
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.AccountButton
 import au.ingo.betterattend.ui.components.EmptyState
-import au.ingo.betterattend.ui.components.EventSwitcherTitle
 import au.ingo.betterattend.ui.components.HapticPullToRefreshBox
 import au.ingo.betterattend.ui.components.LoadingState
 import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.components.OfflineBanner
 import au.ingo.betterattend.ui.nav.AppNavigator
+import au.ingo.betterattend.ui.nav.LocalSharedTransitionScope
 import au.ingo.betterattend.ui.nav.Tab
 import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.delay
@@ -186,8 +208,11 @@ fun PeopleContent(
     // Every quick-filter change (chips, summary numbers, "Show everyone") gets the same selection tick.
     val onQuickTick: (QuickFilter) -> Unit = { f -> if (f != state.quick) haptics.tick(); onQuick(f) }
     val event = state.event
-    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
+    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    // Hoisted so every way out of People (a result in search or in the list) closes search first.
+    val search = rememberSearchBarState()
+    val scope = rememberCoroutineScope()
     val canSensitive = event?.canViewSensitiveData == true
     val roster = state.roster.orEmpty()
 
@@ -208,8 +233,10 @@ fun PeopleContent(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         topBar = {
-            TopAppBar(
-                title = { EventSwitcherTitle(event?.name, subtitle, onChooseEvent) },
+            // A large title that collapses as the list scrolls, like Home's.
+            LargeFlexibleTopAppBar(
+                title = { EventTitle(event?.name, onChooseEvent) },
+                subtitle = { if (subtitle != null) Text(subtitle, maxLines = 1) },
                 actions = {
                     if (state.canInvite) IconButton(onClick = onInvite, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.PersonAdd, "Invite someone") }
                     AccountButton(state.user, onAccount)
@@ -239,8 +266,15 @@ fun PeopleContent(
                     Icons.Outlined.CloudOff, "Couldn't load people",
                     body = state.syncError, actionLabel = "Try again", onAction = onRefresh,
                 )
-                else -> Column(Modifier.fillMaxSize()) {
-                    SearchRow(state.query, onQuery, state.options.activeCount) { sheetOpen = true }
+                else -> CompositionLocalProvider(
+                    LocalCollapseSearch provides { then -> scope.launch { search.snapTo(0f); then() } },
+                ) { Column(Modifier.fillMaxSize()) {
+                    val listArgs: @Composable () -> Unit = {
+                        PeopleList(state, roster, result, items, now, onOpen, onQuickTick) {
+                            haptics.tick(); onQuick(QuickFilter.All); onOptions(FilterOptions()); onQuery("")
+                        }
+                    }
+                    SearchRow(search, state.query, onQuery, state.options.activeCount, onFilters = { sheetOpen = true }, results = listArgs)
                     QuickChips(state.quick, result.counts.takeIf { state.rosterComplete }, onQuickTick)
                     AnimatedVisibility(
                         visible = state.options.activeCount > 0,
@@ -253,11 +287,9 @@ fun PeopleContent(
                         ActiveFiltersLine(shown) { haptics.tick(); onOptions(FilterOptions()) }
                     }
                     HapticPullToRefreshBox(isRefreshing = refreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
-                        PeopleList(state, roster, result, items, now, onOpen, onQuickTick) {
-                            haptics.tick(); onQuick(QuickFilter.All); onOptions(FilterOptions()); onQuery("")
-                        }
+                        listArgs()
                     }
-                }
+                } }
             }
         }
     }
@@ -278,30 +310,46 @@ fun PeopleContent(
 
 private val statusOrder = listOf("complete", "awaiting_guardian", "in_progress", "invited", "withdrawn", "rejected")
 
+/**
+ * Expressive search: a pill search bar that expands into a full-screen search on tap, showing results
+ * as you type (including people found elsewhere on Attend). Collapsing keeps the query, so the list
+ * below stays filtered. The filter button sits beside it.
+ */
 @Composable
-private fun SearchRow(query: String, onQuery: (String) -> Unit, activeFilters: Int, onFilters: () -> Unit) {
-    val focus = LocalFocusManager.current
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextField(
-            value = query,
-            onValueChange = onQuery,
+private fun SearchRow(
+    search: SearchBarState,
+    query: String,
+    onQuery: (String) -> Unit,
+    activeFilters: Int,
+    onFilters: () -> Unit,
+    results: @Composable () -> Unit,
+) {
+    val text = rememberTextFieldState(query)
+    val scope = rememberCoroutineScope()
+    // Two-way sync with the view model's query ("Search everyone" and friends clear it from outside).
+    LaunchedEffect(text) { snapshotFlow { text.text.toString() }.collect { if (it != query) onQuery(it) } }
+    LaunchedEffect(query) { if (text.text.toString() != query) text.setTextAndPlaceCursorAtEnd(query) }
+
+    val input: @Composable () -> Unit = {
+        SearchBarDefaults.InputField(
+            textFieldState = text,
+            searchBarState = search,
+            onSearch = { scope.launch { search.animateToCollapsed() } },
             placeholder = { Text("Search name, email or code") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            leadingIcon = {
+                if (search.currentValue == SearchBarValue.Expanded) {
+                    IconButton(onClick = { scope.launch { search.animateToCollapsed() } }, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Close search")
+                    }
+                } else Icon(Icons.Outlined.Search, null)
+            },
             trailingIcon = if (query.isNotEmpty()) {
-                { IconButton(onClick = { onQuery("") }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") } }
+                { IconButton(onClick = { text.clearText() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Outlined.Close, "Clear search") } }
             } else null,
-            singleLine = true,
-            shape = CircleShape,
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
         )
+    }
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        SearchBar(state = search, inputField = input, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
         BadgedBox(badge = { if (activeFilters > 0) Badge { Text("$activeFilters") } }) {
             FilledTonalIconButton(
@@ -313,38 +361,63 @@ private fun SearchRow(query: String, onQuery: (String) -> Unit, activeFilters: I
             }
         }
     }
+    ExpandedFullScreenSearchBar(state = search, inputField = input) {
+        // The search is its own dialog window, which shared elements can't fly out of, so they're off in here.
+        CompositionLocalProvider(
+            LocalSharedTransitionScope provides null,
+            LocalListBackground provides SearchBarDefaults.colors().containerColor,
+        ) { results() }
+    }
 }
 
+/** What the list sits on, for its sticky headers (the search sheet's colour inside full-screen search). */
+private val LocalListBackground = staticCompositionLocalOf<Color?> { null }
+
+/**
+ * Closes the full-screen search (if open), then runs the given action. It snaps shut rather than
+ * animating: navigating away disposes the screen mid-animation, and the search would reopen on return.
+ */
+private val LocalCollapseSearch = staticCompositionLocalOf<(then: () -> Unit) -> Unit> { { then -> then() } }
+
+/**
+ * Quick filters as an Expressive connected button group (scrolls sideways when it doesn't fit). The
+ * selected one fills and its label thickens. [counts] is null while the roster is only partially
+ * loaded, so buttons don't show misleading numbers.
+ */
 @Composable
-/** [counts] is null while the roster is only partially loaded, so chips don't show misleading numbers. */
 private fun QuickChips(selected: QuickFilter, counts: Map<QuickFilter, Int>?, onQuick: (QuickFilter) -> Unit) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth(),
+    val options = QuickFilter.entries
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
     ) {
-        items(QuickFilter.entries, key = { it.name }) { f ->
+        options.forEachIndexed { i, f ->
             val on = f == selected
             val count = counts?.get(f) ?: counts?.let { 0 }
-            FilterChip(
-                selected = on,
-                onClick = { onQuick(f) },
-                label = {
-                    Text(f.label)
-                    if (count != null) {
-                        Spacer(Modifier.width(6.dp))
-                        AnimatedCount(count, fontWeight = FontWeight.Bold)
-                    }
+            ToggleButton(
+                checked = on,
+                onCheckedChange = { onQuick(f) },
+                shapes = when (i) {
+                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
-                leadingIcon = when {
-                    on -> { { Icon(Icons.Outlined.Check, null, Modifier.size(FilterChipDefaults.IconSize)) } }
-                    f == QuickFilter.NeedsAttention && (count ?: 0) > 0 -> {
-                        { Icon(Icons.Outlined.Warning, null, Modifier.size(FilterChipDefaults.IconSize), tint = MaterialTheme.colorScheme.error) }
-                    }
-                    else -> null
+                modifier = Modifier.heightIn(min = 40.dp).semantics {
+                    role = Role.RadioButton
+                    contentDescription = if (count != null) "${f.label}, $count" else f.label
                 },
-                modifier = Modifier.heightIn(min = 40.dp).semantics { contentDescription = if (count != null) "${f.label}, $count" else f.label },
-            )
+            ) {
+                if (f == QuickFilter.NeedsAttention && (count ?: 0) > 0) {
+                    Icon(Icons.Outlined.Warning, null, Modifier.size(18.dp), tint = if (on) LocalContentColor.current else MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(6.dp))
+                }
+                val weight = animatedFlexWeight(if (on) FontWeight.ExtraBold else FontWeight.Medium)
+                Text(f.label, fontWeight = weight, maxLines = 1)
+                if (count != null) {
+                    Spacer(Modifier.width(6.dp))
+                    AnimatedCount(count, fontWeight = FontWeight.Black)
+                }
+            }
         }
     }
 }
@@ -381,7 +454,10 @@ private fun PeopleList(
     val order = remember(result) { result.participants.map { it.participantEventId } }
     val remoteOrder = remember(state.remoteResults) { state.remoteResults.orEmpty().map { it.participantEventId } }
     val positions = remember(items) { segmentPositions(items) }
+    val collapseSearch = LocalCollapseSearch.current
+    val onOpen: (Participant, List<String>) -> Unit = { p, o -> collapseSearch { onOpen(p, o) } }
     // Every item animates in/out and to its new place, so filtering, sorting and sync updates glide instead of jumping.
+    ProvideEntranceStagger {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         if (state.syncError != null) {
             item(key = "offline") {
@@ -451,6 +527,7 @@ private fun PeopleList(
             }
         }
     }
+    }
 }
 
 private fun emptyTitle(q: QuickFilter) = when (q) {
@@ -474,7 +551,7 @@ private fun RemoteHeader(modifier: Modifier = Modifier) {
 
 @Composable
 private fun LetterHeader(letter: String, modifier: Modifier = Modifier) {
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
+    Surface(color = LocalListBackground.current ?: MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
         Text(
             letter,
             style = MaterialTheme.typography.titleMediumEmphasized,

@@ -44,6 +44,9 @@ import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.ui.components.Avatar
 import au.ingo.betterattend.ui.components.Pill
 import au.ingo.betterattend.ui.components.SegmentedItem
+import au.ingo.betterattend.ui.components.staggeredEntrance
+import au.ingo.betterattend.ui.nav.participantAvatarKey
+import au.ingo.betterattend.ui.nav.sharedElement
 import au.ingo.betterattend.ui.components.rememberMorphShape
 import au.ingo.betterattend.ui.theme.status
 import au.ingo.betterattend.util.Time
@@ -154,13 +157,18 @@ fun ParticipantRow(
 ) {
     val v = statusVisual(p)
     val secondary = checkInLine(p, timezone) ?: p.email ?: statusLabel(p.status)
-    SegmentedItem(index, count, modifier.padding(horizontal = 12.dp), onClick = onClick) {
+    SegmentedItem(index, count, modifier.staggeredEntrance().padding(horizontal = 12.dp), onClick = onClick) {
         Row(
             Modifier.heightIn(min = 72.dp).padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Blooms from a circle into a cookie when they check in.
-            Avatar(p.fullName ?: p.name, p.headshotUrl, size = 44.dp, shape = rememberMorphShape(p.isCheckedIn))
+            // Flies into the detail header when the row is opened.
+            val avatarShape = rememberMorphShape(p.isCheckedIn)
+            Avatar(
+                p.fullName ?: p.name, p.headshotUrl, size = 44.dp, shape = avatarShape,
+                modifier = Modifier.sharedElement(participantAvatarKey(p.participantEventId), avatarShape),
+            )
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -37,7 +37,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import au.ingo.betterattend.ui.components.animatedFlexWeight
 import au.ingo.betterattend.ui.components.rememberHaptics
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -152,7 +154,7 @@ fun MainTabs(
                         selected = tab == currentTab,
                         onClick = { if (tab != currentTab) haptics.tick(); go(tab) },
                         icon = { Icon(if (tab == currentTab) tab.selectedIcon else tab.icon, null) },
-                        label = { Text(tab.label) },
+                        label = { TabLabel(tab.label, tab == currentTab) },
                     )
                 }
             }
@@ -167,12 +169,18 @@ fun MainTabs(
                         selected = tab == currentTab,
                         onClick = { if (tab != currentTab) haptics.tick(); go(tab) },
                         icon = { Icon(if (tab == currentTab) tab.selectedIcon else tab.icon, null) },
-                        label = { Text(tab.label) },
+                        label = { TabLabel(tab.label, tab == currentTab) },
                     )
                 }
             }
         }
     }
+}
+
+/** The selected tab's label thickens (Roboto Flex is variable, so it glides rather than jumps). */
+@Composable
+private fun TabLabel(text: String, selected: Boolean) {
+    Text(text, fontWeight = animatedFlexWeight(if (selected) FontWeight.ExtraBold else FontWeight.Medium))
 }
 
 /** A child lifecycle capped at STARTED unless [active], and never above its parent's state. */

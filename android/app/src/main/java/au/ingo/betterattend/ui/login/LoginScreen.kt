@@ -32,7 +32,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,6 +40,8 @@ import au.ingo.betterattend.ui.components.MaterialShapesClover
 import au.ingo.betterattend.ui.components.MaterialShapesCookie
 import au.ingo.betterattend.ui.components.MaterialShapesSoftBurst
 import au.ingo.betterattend.ui.components.rememberHaptics
+import au.ingo.betterattend.ui.components.rememberSlowSpin
+import androidx.compose.ui.graphics.graphicsLayer
 import au.ingo.betterattend.ui.theme.HackClub
 
 @Composable
@@ -50,10 +51,13 @@ fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
     // Sign-in failed (or was cancelled on the web): a short buzz alongside the error card.
     androidx.compose.runtime.LaunchedEffect(error) { if (error != null) haptics.reject() }
     Box(Modifier.fillMaxSize().background(cs.surface)) {
-        // Decorative expressive shapes.
-        Box(Modifier.size(280.dp).offset(x = (-90).dp, y = (-60).dp).rotate(12f).clip(MaterialShapesCookie).background(cs.primaryContainer))
-        Box(Modifier.size(180.dp).align(Alignment.TopEnd).offset(x = 50.dp, y = 120.dp).rotate(-8f).clip(MaterialShapesClover).background(cs.tertiaryContainer))
-        Box(Modifier.size(120.dp).align(Alignment.CenterStart).offset(x = (-30).dp, y = 40.dp).clip(MaterialShapesSoftBurst).background(cs.secondaryContainer))
+        // Decorative expressive shapes, each turning slowly at its own pace and direction.
+        val spinA = rememberSlowSpin(periodMillis = 80_000)
+        val spinB = rememberSlowSpin(periodMillis = 55_000, clockwise = false)
+        val spinC = rememberSlowSpin(periodMillis = 40_000)
+        Box(Modifier.size(280.dp).offset(x = (-90).dp, y = (-60).dp).graphicsLayer { rotationZ = 12f + spinA() }.clip(MaterialShapesCookie).background(cs.primaryContainer))
+        Box(Modifier.size(180.dp).align(Alignment.TopEnd).offset(x = 50.dp, y = 120.dp).graphicsLayer { rotationZ = -8f + spinB() }.clip(MaterialShapesClover).background(cs.tertiaryContainer))
+        Box(Modifier.size(120.dp).align(Alignment.CenterStart).offset(x = (-30).dp, y = 40.dp).graphicsLayer { rotationZ = spinC() }.clip(MaterialShapesSoftBurst).background(cs.secondaryContainer))
 
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 28.dp, vertical = 24.dp),
@@ -93,12 +97,13 @@ fun LoginScreen(loading: Boolean, error: String?, onSignIn: () -> Unit) {
             Button(
                 onClick = { haptics.click(); onSignIn() },
                 enabled = !loading,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).widthIn(max = 480.dp),
-                shapes = ButtonDefaults.shapes(),
-                contentPadding = ButtonDefaults.MediumContentPadding,
+                // An Expressive large button: the one thing to do on this screen.
+                modifier = Modifier.fillMaxWidth().heightIn(min = ButtonDefaults.LargeContainerHeight).widthIn(max = 480.dp),
+                shapes = ButtonDefaults.shapesFor(ButtonDefaults.LargeContainerHeight),
+                contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.LargeContainerHeight),
             ) {
-                if (loading) LoadingIndicator(Modifier.size(28.dp), color = cs.onPrimary)
-                else Text("Sign in with Hack Club", style = MaterialTheme.typography.titleMedium)
+                if (loading) LoadingIndicator(Modifier.size(40.dp), color = cs.onPrimary)
+                else Text("Sign in with Hack Club", style = ButtonDefaults.textStyleFor(ButtonDefaults.LargeContainerHeight), maxLines = 1)
             }
             Spacer(Modifier.height(12.dp))
             Text(

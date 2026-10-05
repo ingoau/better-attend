@@ -61,7 +61,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -87,6 +87,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.TravelEntry
 import au.ingo.betterattend.ui.components.SegmentedItem
+import au.ingo.betterattend.ui.components.ProvideEntranceStagger
+import au.ingo.betterattend.ui.components.staggeredEntrance
 import au.ingo.betterattend.ui.components.MaterialShapesCookie4
 import au.ingo.betterattend.ui.components.MaterialShapesClover
 import au.ingo.betterattend.ui.components.EmptyState
@@ -117,7 +119,7 @@ fun TravelContent(
     val event = state.event
     val cal = state.calendar
     val tz = cal?.eventTimezone ?: event?.timezone
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -125,7 +127,8 @@ fun TravelContent(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
+            // A large title that collapses as the list scrolls.
+            LargeFlexibleTopAppBar(
                 title = { Text("Travel") },
                 subtitle = { if (event != null) Text(event.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
@@ -287,7 +290,7 @@ private fun TravelList(
                         )
                     }
                 }
-                ListPhase.Rows -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                ListPhase.Rows -> ProvideEntranceStagger { LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     sections.forEach { section ->
                         // Headers fade in/out as filtering adds or empties a day; no placement animation, which
                         // would fight the sticky positioning.
@@ -299,7 +302,7 @@ private fun TravelList(
                             )
                         }
                     }
-                }
+                } }
             }
             }
         }
@@ -468,7 +471,7 @@ internal fun TravelRow(
     SegmentedItem(
         index, count,
         // The row is one TalkBack stop, so its click action is restated here (clearing drops the inner one).
-        modifier.padding(start = 12.dp, end = 12.dp, bottom = if (index == count - 1) 8.dp else 0.dp).clearAndSetSemantics {
+        modifier.staggeredEntrance().padding(start = 12.dp, end = 12.dp, bottom = if (index == count - 1) 8.dp else 0.dp).clearAndSetSemantics {
             contentDescription = description
             if (clickable) { role = Role.Button; semanticsOnClick { onClick(); true } }
         },

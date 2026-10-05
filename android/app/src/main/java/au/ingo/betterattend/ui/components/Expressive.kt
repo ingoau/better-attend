@@ -28,11 +28,27 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.font.FontWeight
+import au.ingo.betterattend.ui.theme.flexWeight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import android.provider.Settings
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.delay
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.toPath
@@ -162,4 +178,96 @@ fun rememberMorphShape(toggled: Boolean, from: RoundedPolygon = MaterialShapes.C
     val morph = remember(from, to) { Morph(from.normalized(), to.normalized()) }
     val progress by animateFloatAsState(if (toggled) 1f else 0f, MaterialTheme.motionScheme.defaultSpatialSpec(), label = "morph")
     return MorphShape(morph, progress.coerceIn(0f, 1f))
+}
+
+/**
+ * A font weight that glides to [target] (Roboto Flex is variable, so labels can thicken on press or
+ * selection instead of jumping between two cuts).
+ */
+@Composable
+fun animatedFlexWeight(target: FontWeight): FontWeight {
+    val w by animateFloatAsState(target.weight.toFloat(), MaterialTheme.motionScheme.fastEffectsSpec(), label = "weight")
+    return flexWeight(w)
+}
+
+/** [pressed] while [interactionSource] is pressed, else [rest], animated. */
+@Composable
+fun pressFlexWeight(interactionSource: InteractionSource, rest: FontWeight, pressed: FontWeight): FontWeight {
+    val isPressed by interactionSource.collectIsPressedAsState()
+    return animatedFlexWeight(if (isPressed) pressed else rest)
+}
+
+/** True when the system's animator duration scale is 0 ("Remove animations" in accessibility settings). */
+@Composable
+fun rememberReducedMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    return remember(resolver) {
+        runCatching { Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }.getOrDefault(false)
+    }
+}
+
+/**
+ * Lets the first screenful of a list rise into place one item after another when it first appears.
+ * Items composed in the first moments after the first one claim increasing slots; anything composed
+ * later (scrolled into view, a filter change) just appears.
+ */
+class EntranceStagger {
+    private var firstClaimAt = 0L
+    private var next = 0
+
+    /** The item's slot in the cascade, or null once the first load has played. */
+    internal fun claim(): Int? {
+        val now = System.nanoTime()
+        if (next == 0) firstClaimAt = now
+        if (now - firstClaimAt > WINDOW_NANOS || next >= MAX_ITEMS) return null
+        return next++
+    }
+
+    private companion object {
+        const val WINDOW_NANOS = 400_000_000L
+        const val MAX_ITEMS = 10
+    }
+}
+
+val LocalEntranceStagger = staticCompositionLocalOf<EntranceStagger?> { null }
+
+/** Provides a fresh [EntranceStagger] to [content]. */
+@Composable
+fun ProvideEntranceStagger(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalEntranceStagger provides remember { EntranceStagger() }, content = content)
+}
+
+/** Fades and rises this item into place as part of the [LocalEntranceStagger] cascade, if any. */
+@Composable
+fun Modifier.staggeredEntrance(): Modifier {
+    val stagger = LocalEntranceStagger.current ?: return this
+    val reduced = rememberReducedMotion()
+    val slot = remember { if (reduced) null else stagger.claim() } ?: return this
+    val progress = remember { Animatable(0f) }
+    val spec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    LaunchedEffect(progress) {
+        delay(slot * 45L)
+        progress.animateTo(1f, spec)
+    }
+    val rise = with(LocalDensity.current) { 28.dp.toPx() }
+    return graphicsLayer {
+        alpha = progress.value.coerceIn(0f, 1f)
+        translationY = (1f - progress.value) * rise
+    }
+}
+
+/**
+ * A slow, endless turn for decorative shapes, in degrees. Read it in a draw-phase lambda (e.g.
+ * `graphicsLayer { rotationZ = spin() }`) so it never recomposes. Stays still under reduced motion.
+ */
+@Composable
+fun rememberSlowSpin(periodMillis: Int = 60_000, clockwise: Boolean = true): () -> Float {
+    if (rememberReducedMotion()) return { 0f }
+    val turn = rememberInfiniteTransition(label = "spin").animateFloat(
+        initialValue = 0f,
+        targetValue = if (clockwise) 360f else -360f,
+        animationSpec = infiniteRepeatable(tween(periodMillis, easing = LinearEasing)),
+        label = "spinAngle",
+    )
+    return { turn.value }
 }

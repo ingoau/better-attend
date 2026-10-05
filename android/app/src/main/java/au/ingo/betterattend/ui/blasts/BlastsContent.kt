@@ -367,13 +367,13 @@ fun BlastComposer(
             Button(
                 onClick = onReview,
                 enabled = text.isNotBlank() && !over && !sending,
-                shapes = ButtonDefaults.shapes(),
+                shapes = ButtonDefaults.shapesFor(ButtonDefaults.MediumContainerHeight),
                 contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MediumContainerHeight),
                 modifier = Modifier.heightIn(min = ButtonDefaults.MediumContainerHeight),
             ) {
                 Icon(Icons.AutoMirrored.Outlined.Send, null, Modifier.size(ButtonDefaults.MediumIconSize))
                 Spacer(Modifier.width(ButtonDefaults.MediumIconSpacing))
-                Text("Review & send")
+                Text("Review & send", style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight))
             }
         }
     }

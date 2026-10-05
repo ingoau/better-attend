@@ -46,12 +46,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import au.ingo.betterattend.ui.components.MorphShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,15 +85,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-@Composable
-fun ResultKind.badgeShape(): Shape = when (this) {
-    ResultKind.Scanned -> MaterialShapes.SoftBurst.toShape()
-    ResultKind.AlreadyScanned -> MaterialShapes.Cookie9Sided.toShape()
-    ResultKind.SavedOffline -> MaterialShapes.Cookie6Sided.toShape()
-    ResultKind.Rejected -> MaterialShapes.Cookie4Sided.toShape()
-    ResultKind.Checking, ResultKind.Confirming, ResultKind.Undone -> CircleShape
-}
-
 /** The big colour-coded icon badge for an outcome (spinner while checking, muted tick + spinner while confirming). */
 @Composable
 fun OutcomeBadge(kind: ResultKind, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 56.dp) {
@@ -101,10 +98,51 @@ fun OutcomeBadge(kind: ResultKind, modifier: Modifier = Modifier, size: androidx
         }
         return
     }
-    Box(modifier.size(size).clip(kind.badgeShape()).background(c.strong), contentAlignment = Alignment.Center) {
-        if (kind == ResultKind.Checking) LoadingIndicator(Modifier.size(size * 0.8f), color = c.onStrong)
-        else Icon(kind.icon(), null, Modifier.size(size * 0.5f), tint = c.onStrong)
+    // The badge lands with a little celebration: it morphs from a circle (or the previous outcome's
+    // shape) into this outcome's shape, twisting into place while it pops with a springy overshoot.
+    // A successful scan blooms into a soft burst; a rejection snaps into a spiky one.
+    val target = kind.badgePolygon()
+    var from by remember { mutableStateOf(MaterialShapes.Circle) }
+    var to by remember { mutableStateOf(MaterialShapes.Circle) }
+    val progress = remember { Animatable(1f) }
+    val pop = remember { Animatable(1f) }
+    LaunchedEffect(kind) {
+        if (target === to) return@LaunchedEffect
+        from = to
+        to = target
+        progress.snapTo(0f)
+        val settles = kind != ResultKind.Checking
+        launch { progress.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)) }
+        if (settles) {
+            pop.snapTo(0.72f)
+            pop.animateTo(1f, spring(dampingRatio = if (kind == ResultKind.Rejected) 0.3f else 0.42f, stiffness = Spring.StiffnessMedium))
+        }
     }
+    val morph = remember(from, to) { Morph(from.normalized(), to.normalized()) }
+    Box(
+        modifier
+            .size(size)
+            .graphicsLayer {
+                scaleX = pop.value
+                scaleY = pop.value
+                rotationZ = (1f - progress.value) * if (kind == ResultKind.Rejected) 45f else -60f
+            }
+            .clip(MorphShape(morph, progress.value.coerceIn(0f, 1f)))
+            .background(c.strong),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (kind == ResultKind.Checking) LoadingIndicator(Modifier.size(size * 0.8f), color = c.onStrong)
+        else Icon(kind.icon(), null, Modifier.size(size * 0.5f).graphicsLayer { rotationZ = -(1f - progress.value) * 30f }, tint = c.onStrong)
+    }
+}
+
+/** The outcome's badge outline: soft burst for a scan, a spiky burst for a rejection. */
+fun ResultKind.badgePolygon(): RoundedPolygon = when (this) {
+    ResultKind.Scanned -> MaterialShapes.SoftBurst
+    ResultKind.AlreadyScanned -> MaterialShapes.Cookie9Sided
+    ResultKind.SavedOffline -> MaterialShapes.Cookie6Sided
+    ResultKind.Rejected -> MaterialShapes.Burst
+    ResultKind.Checking, ResultKind.Confirming, ResultKind.Undone -> MaterialShapes.Circle
 }
 
 /**
