@@ -138,10 +138,13 @@ private struct DetailHeader: View {
                 if let photo = p.headshotUrl?.nonBlank.flatMap(URL.init(string:)) {
                     Button { showingPhoto = true } label: { avatar }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Photo of \(p.name)")
-                        .accessibilityHint("Shows it full screen.")
+                        // The avatar hides itself from VoiceOver, so give the button its own element.
+                        .accessibilityRepresentation {
+                            Button("Photo of \(p.name)") { showingPhoto = true }
+                                .accessibilityHint("Shows it full screen.")
+                        }
                         .fullScreenCover(isPresented: $showingPhoto) {
-                            PhotoViewer(url: photo, name: p.fullName ?? p.name)
+                            PhotoViewer(url: photo, name: p.fullName?.nonBlank ?? p.name)
                         }
                 } else {
                     avatar
@@ -216,24 +219,27 @@ private struct HeaderActions: View {
         let web = ParticipantDetailLogic.webURL(event: event, participantEventId: p.participantEventId)
         // Only once the full profile is in, so the form starts from what's actually on file.
         let canEdit = ParticipantActionVisibility(event).edit && model.detailLoaded
-        HStack(spacing: 8) {
-            if !options.isEmpty {
-                tile("Contact", "person.crop.circle.fill") { contacting = true }
-            }
-            if BadgeWriter.isAvailable {
-                tile("Badge", "wave.3.right", enabled: !model.badge.isWorking && model.busy == nil) {
-                    Task { await model.writeBadge(app) }
+        // Nothing to show (no contact details, NFC, permission or web link): no empty gap either.
+        if !options.isEmpty || BadgeWriter.isAvailable || canEdit || web != nil {
+            HStack(spacing: 8) {
+                if !options.isEmpty {
+                    tile("Contact", "person.crop.circle.fill") { contacting = true }
+                }
+                if BadgeWriter.isAvailable {
+                    tile("Badge", "wave.3.right", enabled: !model.badge.isWorking && model.busy == nil) {
+                        Task { await model.writeBadge(app) }
+                    }
+                }
+                if canEdit {
+                    tile("Edit", "pencil", enabled: model.busy == nil) { editing = true }
+                }
+                if let web {
+                    tile("Web", "safari.fill") { openURL(web) }
                 }
             }
-            if canEdit {
-                tile("Edit", "pencil", enabled: model.busy == nil) { editing = true }
+            .sheet(isPresented: $contacting) {
+                ContactSheet(name: p.name, options: options)
             }
-            if let web {
-                tile("Web", "safari.fill") { openURL(web) }
-            }
-        }
-        .sheet(isPresented: $contacting) {
-            ContactSheet(name: p.name, options: options)
         }
     }
 

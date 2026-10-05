@@ -11,10 +11,11 @@ struct PhotoViewer: View {
     @State private var settledScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var settledOffset: CGSize = .zero
+    /// True for the whole of a pinch, so its finger movement isn't read as a swipe to close.
+    @GestureState private var pinching = false
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geo in
             AsyncImage(url: url) { phase in
                 switch phase {
                 case let .success(image):
@@ -28,19 +29,23 @@ struct PhotoViewer: View {
             }
             .scaleEffect(scale)
             .offset(offset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(.rect)
-            .gesture(zoom.simultaneously(with: pan))
-            .onTapGesture(count: 2) {
-                withAnimation(.snappy) {
-                    if scale > 1 { reset() } else { scale = 2.5; settledScale = 2.5 }
+            .gesture(zoom(in: geo.size).simultaneously(with: pan(in: geo.size)))
+            // Explicit, so the first tap of a double tap never closes the viewer.
+            .gesture(
+                TapGesture(count: 2).onEnded {
+                    withAnimation(.snappy) {
+                        if scale > 1 { reset() } else { scale = 2.5; settledScale = 2.5 }
+                    }
                 }
-            }
-            .onTapGesture { dismiss() }
-            .accessibilityElement()
+                .exclusively(before: TapGesture().onEnded { dismiss() })
+            )
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("Photo of \(name)")
             .accessibilityAddTraits(.isImage)
         }
+        .background(Color.black.ignoresSafeArea())
         .overlay(alignment: .topLeading) {
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
@@ -61,36 +66,47 @@ struct PhotoViewer: View {
         }
     }
 
-    private var zoom: some Gesture {
+    private func zoom(in size: CGSize) -> some Gesture {
         MagnifyGesture()
+            .updating($pinching) { _, state, _ in state = true }
             .onChanged { value in
                 scale = min(max(settledScale * value.magnification, 1), 5)
+                offset = clamped(offset, scale: scale, in: size)
             }
             .onEnded { _ in
                 settledScale = scale
+                settledOffset = offset
                 if scale == 1 { withAnimation(.snappy) { reset() } }
             }
     }
 
-    /// Zoomed in it pans; at full size a downward swipe closes, like Photos.
-    private var pan: some Gesture {
+    /// Zoomed in it pans (never past the photo's edges); at full size a downward swipe closes, like Photos.
+    private func pan(in size: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                if scale > 1 {
-                    offset = CGSize(width: settledOffset.width + value.translation.width, height: settledOffset.height + value.translation.height)
-                } else {
+                if settledScale > 1 {
+                    let moved = CGSize(width: settledOffset.width + value.translation.width, height: settledOffset.height + value.translation.height)
+                    offset = clamped(moved, scale: scale, in: size)
+                } else if !pinching {
                     offset = CGSize(width: 0, height: max(value.translation.height, 0))
                 }
             }
             .onEnded { value in
-                if scale > 1 {
+                if settledScale > 1 {
                     settledOffset = offset
-                } else if value.translation.height > 120 {
+                } else if !pinching && scale == 1 && value.translation.height > 120 {
                     dismiss()
-                } else {
+                } else if scale == 1 {
                     withAnimation(.snappy) { offset = .zero }
                 }
             }
+    }
+
+    /// Keeps the zoomed photo covering the screen: it can move at most the amount it overhangs.
+    private func clamped(_ offset: CGSize, scale: CGFloat, in size: CGSize) -> CGSize {
+        let maxX = size.width * (scale - 1) / 2
+        let maxY = size.height * (scale - 1) / 2
+        return CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, -maxY), maxY))
     }
 
     private func reset() {

@@ -53,8 +53,10 @@ struct ContactSheet: View {
 
     private func open(_ option: ContactOption) {
         Haptics.tap()
-        openURL(option.url) { accepted in
-            if !accepted, let fallback = option.fallback { openURL(fallback) }
+        // Captured: the fallback may run after the sheet has gone.
+        let launch = openURL
+        launch(option.url) { accepted in
+            if !accepted, let fallback = option.fallback { launch(fallback) }
         }
         dismiss()
     }

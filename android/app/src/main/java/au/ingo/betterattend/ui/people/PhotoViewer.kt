@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -52,12 +54,19 @@ fun PhotoViewer(url: String, name: String, onDismiss: () -> Unit) {
 fun PhotoViewerContent(name: String, onDismiss: () -> Unit, image: @Composable (Modifier) -> Unit) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    // Keeps the zoomed photo covering the screen: it can move at most the amount it overhangs.
+    fun clamp(o: Offset, s: Float): Offset {
+        val maxX = size.width * (s - 1) / 2
+        val maxY = size.height * (s - 1) / 2
+        return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
+    }
     val shownScale by animateFloatAsState(scale, MaterialTheme.motionScheme.fastSpatialSpec(), label = "photoZoom")
     val transform = rememberTransformableState { zoom, pan, _ ->
         scale = (scale * zoom).coerceIn(1f, 5f)
-        offset = if (scale == 1f) Offset.Zero else offset + pan
+        offset = clamp(offset + pan, scale)
     }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black).onSizeChanged { size = it }) {
         image(
             Modifier
                 .fillMaxSize()
