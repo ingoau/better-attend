@@ -223,7 +223,7 @@ struct DemoData: Sendable {
         )
     }
 
-    /// The sensitive fields the list endpoint includes for safeguarding leads and admins, so the
+    /// The sensitive fields the list endpoint includes for safeguarding leads and global admins, so the
     /// first-aid sheet has realistic medical needs and contacts to show. Safety flags (and so the
     /// "Need attention" count) are left as they are.
     static func withFirstAidDetails(_ p: Participant, index i: Int) -> Participant {
