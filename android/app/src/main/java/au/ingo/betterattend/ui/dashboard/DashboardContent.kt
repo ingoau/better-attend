@@ -703,15 +703,18 @@ private fun ContextRow(row: ContextProgress, onShare: () -> Unit) {
         contentDescription = "${row.context.name}${if (row.active) ", happening now" else ""}: ${row.count} of ${row.total}"
         onLongClick(SHARE_LABEL) { onShare(); true }
     }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(contextIcon(row.context), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(10.dp))
-            Text(row.context.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            if (row.active) {
-                Spacer(Modifier.width(8.dp))
-                Pill("Now", MaterialTheme.status.successContainer, MaterialTheme.status.onSuccessContainer)
+            // Name and "Now" share the one flexible slot, so the numbers always sit flush right.
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(row.context.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (row.active) {
+                    Spacer(Modifier.width(8.dp))
+                    Pill("Now", MaterialTheme.status.successContainer, MaterialTheme.status.onSuccessContainer)
+                }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
             Text("${row.count}", style = MaterialTheme.typography.titleMedium)
             Text(" / ${row.total}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
