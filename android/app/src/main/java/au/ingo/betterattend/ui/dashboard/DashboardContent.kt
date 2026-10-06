@@ -72,9 +72,6 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
-import androidx.compose.material3.carousel.rememberCarouselState
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -690,73 +687,39 @@ private fun AttentionTile(stats: EventStats, attention: Int, onClick: () -> Unit
 
 // ---------------------------------------------------------------- scan contexts
 
-/**
- * Scan points as an Expressive multi-browse carousel: big tiles for the ones in view, shrinking
- * slivers hinting at more, swiped sideways. Long-press a tile to share its number.
- */
 @Composable
 private fun ContextsCard(rows: List<ContextProgress>, onShare: (String) -> Unit) {
     DashCard(title = "Scan points") {
-        if (rows.size == 1) {
-            ContextTile(rows[0], Modifier.fillMaxWidth()) { onShare(ShareStats.context(rows[0].context.id)) }
-            return@DashCard
-        }
-        val carousel = rememberCarouselState { rows.size }
-        HorizontalMultiBrowseCarousel(
-            state = carousel,
-            preferredItemWidth = 176.dp,
-            itemSpacing = 8.dp,
-            // Taller with larger text, so the name and progress never clip.
-            modifier = Modifier.fillMaxWidth().height(156.dp * LocalDensity.current.fontScale.coerceIn(1f, 1.8f)),
-        ) { i ->
-            val row = rows[i]
-            ContextTile(row, Modifier.fillMaxSize().maskClip(MaterialTheme.shapes.extraLarge)) { onShare(ShareStats.context(row.context.id)) }
+        rows.forEachIndexed { i, row ->
+            if (i > 0) Spacer(Modifier.height(14.dp))
+            ContextRow(row) { onShare(ShareStats.context(row.context.id)) }
         }
     }
 }
 
 @Composable
-private fun ContextTile(row: ContextProgress, modifier: Modifier, onShare: () -> Unit) {
-    val active = row.active
-    val container = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
-    val content = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier
-            .clip(MaterialTheme.shapes.extraLarge)
-            .background(container)
-            .onLongPress(onShare)
-            .clearAndSetSemantics {
-                contentDescription = "${row.context.name}${if (active) ", happening now" else ""}: ${row.count} of ${row.total}"
-                onLongClick(SHARE_LABEL) { onShare(); true }
+private fun ContextRow(row: ContextProgress, onShare: () -> Unit) {
+    Column(Modifier.onLongPress(onShare).clearAndSetSemantics {
+        contentDescription = "${row.context.name}${if (row.active) ", happening now" else ""}: ${row.count} of ${row.total}"
+        onLongClick(SHARE_LABEL) { onShare(); true }
+    }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(contextIcon(row.context), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(10.dp))
+            Text(row.context.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            if (row.active) {
+                Spacer(Modifier.width(8.dp))
+                Pill("Now", MaterialTheme.status.successContainer, MaterialTheme.status.onSuccessContainer)
             }
-            .padding(16.dp),
-    ) {
-        CompositionLocalProvider(LocalContentColor provides content) {
-            Column(Modifier.fillMaxSize()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(36.dp).clip(if (active) MaterialShapesSunny else MaterialShapesCookie4)
-                            .background(if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            contextIcon(row.context), null, Modifier.size(20.dp),
-                            tint = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (active) Pill("Now", MaterialTheme.status.successContainer, MaterialTheme.status.onSuccessContainer)
-                }
-                Spacer(Modifier.weight(1f))
-                Row(verticalAlignment = Alignment.Bottom) {
-                    AnimatedNumber(row.count, style = MaterialTheme.typography.headlineMediumEmphasized)
-                    Text(" / ${row.total}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp), color = content.copy(alpha = 0.7f))
-                }
-                Text(row.context.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(8.dp))
-                if (active) LinearWavyProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth())
-                else LinearProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp), strokeCap = StrokeCap.Round)
-            }
+            Spacer(Modifier.weight(1f))
+            Text("${row.count}", style = MaterialTheme.typography.titleMedium)
+            Text(" / ${row.total}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(8.dp))
+        if (row.active) {
+            LinearWavyProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth())
+        } else {
+            LinearProgressIndicator(progress = { row.fraction }, modifier = Modifier.fillMaxWidth().height(6.dp), strokeCap = StrokeCap.Round)
         }
     }
 }
