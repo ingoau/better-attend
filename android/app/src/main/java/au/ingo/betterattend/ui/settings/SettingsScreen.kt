@@ -26,7 +26,7 @@ import au.ingo.betterattend.data.auth.TokenIssueState
 import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.store.AppSettings
-import au.ingo.betterattend.signups.SignupNotifier
+import au.ingo.betterattend.notifications.AlertNotifications
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
@@ -59,6 +59,8 @@ data class SettingsActions(
     val onHaptics: (Boolean) -> Unit = {},
     val onKeepScreenOn: (Boolean) -> Unit = {},
     val onSignupNotifications: (Boolean) -> Unit = {},
+    val onWithdrawalNotifications: (Boolean) -> Unit = {},
+    val onArrivalNotifications: (Boolean) -> Unit = {},
     val onSyncNow: () -> Unit = {},
     val onClearCache: () -> Unit = {},
     val onSignOut: () -> Unit = {},
@@ -82,10 +84,21 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit
     var syncing by remember { mutableStateOf(false) }
     var clearing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    // Turning signup notifications on asks for the permission first (Android 13+); a refusal leaves them off.
+    // Turning an alert on asks for the permission first (Android 13+); a refusal leaves it off.
+    var enableAfterPermission by remember { mutableStateOf<(suspend (Boolean) -> Unit)?>(null) }
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) scope.launch { c.settings.setSignupNotifications(true) }
-        else message = "Notifications are blocked for BetterAttend. Allow them in your phone's settings to get signup alerts."
+        val enable = enableAfterPermission
+        enableAfterPermission = null
+        if (granted && AlertNotifications.canPost(context)) enable?.let { scope.launch { it(true) } }
+        else message = "Notifications are blocked for BetterAttend. Allow them in your phone's settings to get these alerts."
+    }
+    fun alertToggle(set: suspend (Boolean) -> Unit): (Boolean) -> Unit = { on ->
+        if (on && !AlertNotifications.canPost(context)) {
+            enableAfterPermission = set
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            scope.launch { set(on) }
+        }
     }
     val tokenIssue by c.auth.tokenIssue.collectAsStateWithLifecycle()
 
@@ -128,10 +141,9 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit
         onSounds = { scope.launch { c.settings.setSounds(it) } },
         onHaptics = { scope.launch { c.settings.setHaptics(it) } },
         onKeepScreenOn = { scope.launch { c.settings.setKeepScreenOn(it) } },
-        onSignupNotifications = { on ->
-            if (on && !SignupNotifier.canPost(context)) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            else scope.launch { c.settings.setSignupNotifications(on) }
-        },
+        onSignupNotifications = alertToggle { c.settings.setSignupNotifications(it) },
+        onWithdrawalNotifications = alertToggle { c.settings.setWithdrawalNotifications(it) },
+        onArrivalNotifications = alertToggle { c.settings.setArrivalNotifications(it) },
         onSyncNow = {
             scope.launch {
                 syncing = true

@@ -9,7 +9,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Tells staff when check-ins saved offline are rejected as they sync. Optional: Home shows them too. -->
+    <!-- Tells staff when check-ins saved offline are rejected as they sync (Home shows them too), and posts
+         the signup, withdrawal and pickup alerts organizers turn on in Settings. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
@@ -58,6 +59,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/share_paths" />
         </provider>
+
+        <!-- Posts pickup reminders scheduled from the travel calendar (Settings → Notifications). -->
+        <receiver
+            android:name=".notifications.ArrivalReminderReceiver"
+            android:exported="false" />
 
         <!-- Home-screen widgets (Glance) -->
         <receiver

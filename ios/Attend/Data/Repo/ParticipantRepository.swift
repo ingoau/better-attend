@@ -13,9 +13,9 @@ final class ParticipantRepository {
     @ObservationIgnored private let cache: JsonCache
     @ObservationIgnored private let mutex = AsyncMutex()
     @ObservationIgnored var onChange: () -> Void = {}
-    /// People who signed up since the last sync of a roster we already had (see `SignupLogic`), with
+    /// Who signed up or withdrew since the last sync of a roster we already had (see `RosterAlerts`), with
     /// when that previous sync was. Never called for the first download, which would list everyone.
-    @ObservationIgnored var onNewSignups: (_ eventId: String, _ signups: [Participant], _ previousSyncAt: String?) -> Void = { _, _, _ in }
+    @ObservationIgnored var onRosterChanges: (_ eventId: String, _ changes: RosterChanges, _ previousSyncAt: String?) -> Void = { _, _, _ in }
 
     init(api: AttendAPI, cache: JsonCache) {
         self.api = api
@@ -65,8 +65,8 @@ final class ParticipantRepository {
             await cache.write(key(eventId), roster)
             onChange()
             if let existing {
-                let signups = SignupLogic.newSignups(old: existing, new: roster)
-                if !signups.isEmpty { onNewSignups(eventId, signups, existing.lastSyncAt) }
+                let changes = RosterAlerts.changes(old: existing, new: roster)
+                if !changes.isEmpty { onRosterChanges(eventId, changes, existing.lastSyncAt) }
             }
             return roster
         }

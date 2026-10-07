@@ -152,47 +152,76 @@ struct SettingsView: View {
         }
     }
 
-    /// Signups come from the roster, so only people who can see it get the option.
+    /// Signups and withdrawals come from the roster, arrivals from travel: only offered to people who can see them.
     @ViewBuilder private var notificationsSection: some View {
-        if let event = app.events.selectedEvent, EventPermissions.canViewParticipants(event) {
-            Section {
-                Toggle(isOn: signupNotifications) {
-                    SettingsLabel("New Signups", subtitle: "When someone signs up for \(event.name)",
-                                  systemImage: "person.crop.circle.badge.plus", color: HackClub.green)
+        if let event = app.events.selectedEvent {
+            let rosterAlerts = EventPermissions.canViewParticipants(event)
+            if rosterAlerts || event.travelEnabled {
+                Section {
+                    if rosterAlerts {
+                        Toggle(isOn: alert(.signups)) {
+                            SettingsLabel("New Signups", subtitle: "When someone signs up for \(event.name)",
+                                          systemImage: "person.crop.circle.badge.plus", color: HackClub.green)
+                        }
+                        Toggle(isOn: alert(.withdrawals)) {
+                            SettingsLabel("Withdrawals", subtitle: "When someone withdraws from \(event.name)",
+                                          systemImage: "person.crop.circle.badge.minus", color: HackClub.orange)
+                        }
+                    }
+                    if event.travelEnabled {
+                        Toggle(isOn: alert(.arrivals)) {
+                            SettingsLabel("Arrivals to Pick Up", subtitle: "30 minutes before each arrival, and if their arrival time changes",
+                                          systemImage: "airplane.arrival", color: HackClub.blue)
+                        }
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    if notificationsBlocked {
+                        Text("Notifications are off for BetterAttend. Turn them on in the Settings app to get these alerts.")
+                    } else {
+                        Text("Checked whenever the app syncs, and in the background as often as iOS allows. Pickup reminders go off on time even offline.")
+                    }
                 }
-                // Permission can be switched off in the Settings app while this stays on.
+                // Permission can be switched off in the Settings app while these stay on.
                 .task {
-                    guard app.settings.signupNotifications, !app.isDemo else { return }
-                    notificationsBlocked = await SignupNotifier.isBlocked()
-                }
-            } header: {
-                Text("Notifications")
-            } footer: {
-                if notificationsBlocked {
-                    Text("Notifications are off for BetterAttend. Turn them on in the Settings app to get signup alerts.")
-                } else {
-                    Text("Checked whenever the app syncs, and in the background as often as iOS allows.")
+                    guard app.settings.anyEventAlerts, !app.isDemo else { return }
+                    notificationsBlocked = await AlertNotifier.isBlocked()
                 }
             }
         }
     }
 
-    /// Turning it on asks for notification permission first; a refusal leaves it off.
-    private var signupNotifications: Binding<Bool> {
+    private enum AlertKind { case signups, withdrawals, arrivals }
+
+    /// Turning an alert on asks for notification permission first; a refusal leaves it off.
+    private func alert(_ alert: AlertKind) -> Binding<Bool> {
         Binding {
-            app.settings.signupNotifications
+            switch alert {
+            case .signups: app.settings.signupNotifications
+            case .withdrawals: app.settings.withdrawalNotifications
+            case .arrivals: app.settings.arrivalNotifications
+            }
         } set: { on in
             Haptics.selection()
             guard on, !app.isDemo else {
-                app.settings.signupNotifications = on
+                setAlert(alert, on)
                 return
             }
             Task {
-                let allowed = await SignupNotifier.requestPermission()
+                let allowed = await AlertNotifier.requestPermission()
                 notificationsBlocked = !allowed
-                app.settings.signupNotifications = allowed
+                setAlert(alert, allowed)
                 if allowed { app.scheduleBackgroundRefresh() }
             }
+        }
+    }
+
+    private func setAlert(_ alert: AlertKind, _ on: Bool) {
+        switch alert {
+        case .signups: app.settings.signupNotifications = on
+        case .withdrawals: app.settings.withdrawalNotifications = on
+        case .arrivals: app.settings.arrivalNotifications = on
         }
     }
 

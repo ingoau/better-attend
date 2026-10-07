@@ -25,11 +25,13 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.FlightLand
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.ReportProblem
@@ -179,14 +181,42 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             item { SwitchRow(1, 3, Icons.Outlined.Vibration, "Haptics", "Feel scans, taps and gestures", state.settings.haptics, onChange = actions.onHaptics) }
             item { SwitchRow(2, 3, Icons.Outlined.ScreenLockPortrait, "Keep screen on", "While the scanner is open", state.settings.keepScreenOn, onChange = actions.onKeepScreenOn) }
 
-            // Signups come from the roster, so only people who can see it get the option.
-            if (state.event != null && EventPermissions.canViewParticipants(state.event)) {
+            // Signups and withdrawals come from the roster, arrivals from travel: only offered to people who can see them.
+            val event = state.event
+            val rosterAlerts = event != null && EventPermissions.canViewParticipants(event)
+            val arrivalAlerts = event != null && event.travelEnabled
+            if (event != null && (rosterAlerts || arrivalAlerts)) {
+                val count = (if (rosterAlerts) 2 else 0) + (if (arrivalAlerts) 1 else 0)
                 item { GroupTitle("Notifications") }
+                if (rosterAlerts) {
+                    item {
+                        SwitchRow(
+                            0, count, Icons.Outlined.PersonAdd, "New signups", "When someone signs up for ${event.name}",
+                            state.settings.signupNotifications, onChange = actions.onSignupNotifications,
+                        )
+                    }
+                    item {
+                        SwitchRow(
+                            1, count, Icons.Outlined.PersonRemove, "Withdrawals", "When someone withdraws from ${event.name}",
+                            state.settings.withdrawalNotifications, onChange = actions.onWithdrawalNotifications,
+                        )
+                    }
+                }
+                if (arrivalAlerts) {
+                    item {
+                        SwitchRow(
+                            count - 1, count, Icons.Outlined.FlightLand, "Arrivals to pick up",
+                            "30 minutes before each arrival, and if their arrival time changes",
+                            state.settings.arrivalNotifications, onChange = actions.onArrivalNotifications,
+                        )
+                    }
+                }
                 item {
-                    SwitchRow(
-                        0, 1, Icons.Outlined.PersonAdd, "New signups",
-                        "When someone signs up for ${state.event.name}. Checks about every 15 minutes.",
-                        state.settings.signupNotifications, onChange = actions.onSignupNotifications,
+                    Text(
+                        "Checked as the app syncs, and about every 15 minutes in the background while any is on.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
                     )
                 }
             }

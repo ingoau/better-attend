@@ -21,10 +21,14 @@ class TravelRepository(
         return cache.read(key(eventId), TravelCalendar.serializer())?.also { c -> _calendars.update { it + (eventId to c) } }
     }
 
+    /** Set by the app: a fresh calendar arrived (pickup reminders reschedule from it). */
+    var onRefreshed: suspend (eventId: String, calendar: TravelCalendar) -> Unit = { _, _ -> }
+
     suspend fun refresh(eventId: String): Result<TravelCalendar> = resultOf {
         val cal = api.travel(eventId)
         _calendars.update { it + (eventId to cal) }
         cache.write(key(eventId), TravelCalendar.serializer(), cal)
+        runCatching { onRefreshed(eventId, cal) }
         cal
     }
 

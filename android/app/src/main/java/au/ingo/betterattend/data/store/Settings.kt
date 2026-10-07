@@ -28,7 +28,15 @@ data class AppSettings(
     val signupNotifications: Boolean = false,
     /** When they last turned it on (ISO-8601): rosters synced before then don't count as a baseline. */
     val signupNotificationsSince: String? = null,
-)
+    /** Notify when people withdraw from the selected event. Off until the organizer turns it on. */
+    val withdrawalNotifications: Boolean = false,
+    val withdrawalNotificationsSince: String? = null,
+    /** Remind before each arrival that's awaiting pickup at the selected event. Off until turned on. */
+    val arrivalNotifications: Boolean = false,
+) {
+    /** Any alert that needs the roster or travel kept fresh in the background. */
+    val anyEventAlerts: Boolean get() = signupNotifications || withdrawalNotifications || arrivalNotifications
+}
 
 class SettingsStore(private val context: Context) {
     private object Keys {
@@ -42,6 +50,9 @@ class SettingsStore(private val context: Context) {
         val participantView = booleanPreferencesKey("participant_view")
         val signupNotifications = booleanPreferencesKey("signup_notifications")
         val signupNotificationsSince = stringPreferencesKey("signup_notifications_since")
+        val withdrawalNotifications = booleanPreferencesKey("withdrawal_notifications")
+        val withdrawalNotificationsSince = stringPreferencesKey("withdrawal_notifications_since")
+        val arrivalNotifications = booleanPreferencesKey("arrival_notifications")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -58,6 +69,9 @@ class SettingsStore(private val context: Context) {
             participantView = p[Keys.participantView] ?: false,
             signupNotifications = p[Keys.signupNotifications] ?: false,
             signupNotificationsSince = p[Keys.signupNotificationsSince],
+            withdrawalNotifications = p[Keys.withdrawalNotifications] ?: false,
+            withdrawalNotificationsSince = p[Keys.withdrawalNotificationsSince],
+            arrivalNotifications = p[Keys.arrivalNotifications] ?: false,
         )
     }
 
@@ -73,6 +87,11 @@ class SettingsStore(private val context: Context) {
         it[Keys.signupNotifications] = on
         if (on) it[Keys.signupNotificationsSince] = Time.nowIso() else it.remove(Keys.signupNotificationsSince)
     }
+    suspend fun setWithdrawalNotifications(on: Boolean) = context.dataStore.edit {
+        it[Keys.withdrawalNotifications] = on
+        if (on) it[Keys.withdrawalNotificationsSince] = Time.nowIso() else it.remove(Keys.withdrawalNotificationsSince)
+    }
+    suspend fun setArrivalNotifications(on: Boolean) = context.dataStore.edit { it[Keys.arrivalNotifications] = on }
     suspend fun setSelectedEvent(id: String?) = context.dataStore.edit {
         if (id == null) it.remove(Keys.selectedEvent) else it[Keys.selectedEvent] = id
     }
@@ -85,6 +104,9 @@ class SettingsStore(private val context: Context) {
     }
     suspend fun clearAccountData() = context.dataStore.edit {
         it.remove(Keys.selectedEvent); it.remove(Keys.contexts); it.remove(Keys.participantView)
-        it.remove(Keys.signupNotifications); it.remove(Keys.signupNotificationsSince) // the next account opts in for itself
+        // The next account opts in for itself.
+        it.remove(Keys.signupNotifications); it.remove(Keys.signupNotificationsSince)
+        it.remove(Keys.withdrawalNotifications); it.remove(Keys.withdrawalNotificationsSince)
+        it.remove(Keys.arrivalNotifications)
     }
 }
