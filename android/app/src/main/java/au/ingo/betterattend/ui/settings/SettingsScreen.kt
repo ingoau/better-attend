@@ -143,7 +143,11 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit
         onKeepScreenOn = { scope.launch { c.settings.setKeepScreenOn(it) } },
         onSignupNotifications = alertToggle { c.settings.setSignupNotifications(it) },
         onWithdrawalNotifications = alertToggle { c.settings.setWithdrawalNotifications(it) },
-        onArrivalNotifications = alertToggle { c.settings.setArrivalNotifications(it) },
+        onArrivalNotifications = alertToggle { on ->
+            c.settings.setArrivalNotifications(on)
+            // Reminders come from the travel list: fetch it now rather than waiting for the next background check.
+            if (on) event?.takeIf { it.travelEnabled }?.let { c.travel.refresh(it.id) }
+        },
         onSyncNow = {
             scope.launch {
                 syncing = true

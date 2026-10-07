@@ -12,6 +12,10 @@
     <!-- Tells staff when check-ins saved offline are rejected as they sync (Home shows them too), and posts
          the signup, withdrawal and pickup alerts organizers turn on in Settings. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Pickup reminders: on time when allowed (granted up to Android 12; on 13+ under "Alarms & reminders"),
+         and set again after a reboot. Both optional. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
@@ -64,6 +68,14 @@
         <receiver
             android:name=".notifications.ArrivalReminderReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".notifications.ArrivalRestoreReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Home-screen widgets (Glance) -->
         <receiver

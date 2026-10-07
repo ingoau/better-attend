@@ -105,11 +105,27 @@ class ArrivalAlertsTest {
         assertEquals("e1", ArrivalReminders.scheduledEvent(app))
 
         val intent = alarms.minByOrNull { it.triggerAtTime }!!.operation.let { shadowOf(it).savedIntent }
-        ArrivalReminderReceiver().onReceive(app, intent)
+        ArrivalReminders.fire(app, intent, now)
+        assertEquals(1, posted.size)
+        // Delivered twice (a retried broadcast): still one notification.
+        ArrivalReminders.fire(app, intent, now)
         assertEquals(1, posted.size)
         // Rescheduling after it fired doesn't remind about the same people at the same time again.
         ArrivalReminders.reschedule(app, "e1", "Campfire", calendar, now)
         assertEquals(1, alarms.size)
+    }
+
+    @Test fun aReplacedAlarmOrOneThatArrivesTooLateStaysQuiet() {
+        ArrivalReminders.reschedule(app, "e1", "Campfire", calendar, now)
+        val first = alarms.map { shadowOf(it.operation).savedIntent }
+        // Rescheduled (say Ollie was collected) while the old alarms were already on their way.
+        ArrivalReminders.reschedule(app, "e1", "Campfire", calendar.copy(entries = listOf(mia, ava)), now)
+        first.forEach { ArrivalReminders.fire(app, it, now) }
+        assertTrue(posted.isEmpty())
+        // Delivered after the person has arrived: no use any more.
+        val late = shadowOf(alarms.minByOrNull { it.triggerAtTime }!!.operation).savedIntent
+        ArrivalReminders.fire(app, late, now.plusSeconds(25 * 60))
+        assertTrue(posted.isEmpty())
     }
 
     @Test fun aMovedArrivalIsAnnouncedAndRescheduled() {
@@ -135,7 +151,7 @@ class ArrivalAlertsTest {
         ArrivalReminders.reschedule(app, "e1", "Campfire", calendar, now)
         val intent = shadowOf(alarms.first().operation).savedIntent
         ArrivalReminders.reschedule(app, "e2", "Other", TravelCalendar(), now)
-        ArrivalReminderReceiver().onReceive(app, Intent(intent))
+        ArrivalReminders.fire(app, Intent(intent), now)
         assertTrue(posted.isEmpty())
     }
 }

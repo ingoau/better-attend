@@ -103,7 +103,11 @@ final class AppModel {
             }
             return found
         }
-        events.onChange = { [weak self] in self?.scheduleWidgetPublish() }
+        events.onChange = { [weak self] in
+            self?.scheduleWidgetPublish()
+            // The suggested event can change with the list, not only an explicit choice.
+            if !demo { Task { await self?.updateArrivalReminders() } }
+        }
         participants.onChange = { [weak self] in self?.scheduleWidgetPublish() }
         tickets.onChange = { [weak self] in self?.scheduleWidgetPublish() }
         travel.onChange = { [weak self] in self?.scheduleWidgetPublish() }
@@ -243,9 +247,11 @@ final class AppModel {
             return
         }
         if ArrivalReminders.scheduledEvent(defaults) != event.id { ArrivalReminders.cancelAll(defaults: defaults) }
-        if let calendar = await travel.load(event.id) {
-            ArrivalReminders.reschedule(eventId: event.id, eventName: event.name, calendar: calendar, defaults: defaults)
-        }
+        guard let calendar = await travel.load(event.id) else { return }
+        // Things may have moved on while the calendar loaded (sign-out, turned off, another event, or a later
+        // call that finished first): schedule only if this is still what's wanted.
+        guard settings.arrivalNotifications, user != nil, events.selectedEvent?.id == event.id else { return }
+        ArrivalReminders.reschedule(eventId: event.id, eventName: event.name, calendar: calendar, defaults: defaults)
     }
 
     // MARK: Background refresh

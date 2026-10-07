@@ -159,17 +159,17 @@ struct SettingsView: View {
             if rosterAlerts || event.travelEnabled {
                 Section {
                     if rosterAlerts {
-                        Toggle(isOn: alert(.signups)) {
+                        Toggle(isOn: alertBinding(.signups)) {
                             SettingsLabel("New Signups", subtitle: "When someone signs up for \(event.name)",
                                           systemImage: "person.crop.circle.badge.plus", color: HackClub.green)
                         }
-                        Toggle(isOn: alert(.withdrawals)) {
+                        Toggle(isOn: alertBinding(.withdrawals)) {
                             SettingsLabel("Withdrawals", subtitle: "When someone withdraws from \(event.name)",
                                           systemImage: "person.crop.circle.badge.minus", color: HackClub.orange)
                         }
                     }
                     if event.travelEnabled {
-                        Toggle(isOn: alert(.arrivals)) {
+                        Toggle(isOn: alertBinding(.arrivals)) {
                             SettingsLabel("Arrivals to Pick Up", subtitle: "30 minutes before each arrival, and if their arrival time changes",
                                           systemImage: "airplane.arrival", color: HackClub.blue)
                         }
@@ -195,7 +195,7 @@ struct SettingsView: View {
     private enum AlertKind { case signups, withdrawals, arrivals }
 
     /// Turning an alert on asks for notification permission first; a refusal leaves it off.
-    private func alert(_ alert: AlertKind) -> Binding<Bool> {
+    private func alertBinding(_ alert: AlertKind) -> Binding<Bool> {
         Binding {
             switch alert {
             case .signups: app.settings.signupNotifications
@@ -212,7 +212,12 @@ struct SettingsView: View {
                 let allowed = await AlertNotifier.requestPermission()
                 notificationsBlocked = !allowed
                 setAlert(alert, allowed)
-                if allowed { app.scheduleBackgroundRefresh() }
+                guard allowed else { return }
+                app.scheduleBackgroundRefresh()
+                // Reminders come from the travel list: fetch it now rather than waiting for a background refresh.
+                if alert == .arrivals, let event = app.events.selectedEvent, event.travelEnabled {
+                    _ = try? await app.travel.refresh(event.id)
+                }
             }
         }
     }

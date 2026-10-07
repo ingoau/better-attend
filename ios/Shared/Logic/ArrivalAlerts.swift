@@ -84,8 +84,8 @@ enum ArrivalAlerts {
     static func changeTitle(count: Int) -> String { count == 1 ? "Arrival time changed" : "\(count) arrival times changed" }
 }
 
-/// What's scheduled for one event's pickup reminders. Ids and times only: names live in the pending
-/// notifications, never on disk.
+/// What's scheduled for one event's pickup reminders. Ids and times only: names are only in the pending
+/// notification requests themselves, which sign-out removes.
 struct ArrivalReminderState: Codable, Hashable, Sendable {
     var eventId: String?
     /// Entry id → arrival time it was last scheduled for.
