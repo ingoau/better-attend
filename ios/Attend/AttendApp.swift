@@ -21,6 +21,7 @@ struct AttendApp: App {
                 Task { await app.publishWidgets() }
             case .active:
                 if app.scans.hasQueuedWork { app.scheduleScanRetry(immediately: true) }
+                Task { await app.updateArrivalReminders() }
             default:
                 break
             }

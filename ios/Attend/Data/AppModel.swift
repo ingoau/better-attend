@@ -73,6 +73,26 @@ final class AppModel {
             if !demo { RejectionNotifier.requestPermissionIfNeeded() }
         }
         scans.onRejected = { rejected in if !demo { RejectionNotifier.notify(rejected) } }
+        participants.onRosterChanges = { [weak self] eventId, changes, previousSyncAt in
+            guard let self, !demo else { return }
+            let eventName = events.events?.first { $0.id == eventId }?.name
+            if settings.signupNotifications, RosterAlerts.isBaseline(since: settings.signupNotificationsSince, previousSyncAt: previousSyncAt) {
+                AlertNotifier.notify(.signups, eventId: eventId, eventName: eventName, people: changes.signups)
+            }
+            if settings.withdrawalNotifications,
+               RosterAlerts.isBaseline(since: settings.withdrawalNotificationsSince, previousSyncAt: previousSyncAt) {
+                AlertNotifier.notify(.withdrawals, eventId: eventId, eventName: eventName, people: changes.withdrawals)
+            }
+        }
+        travel.onRefreshed = { [weak self] eventId, calendar in
+            guard let self, !demo, settings.arrivalNotifications, user != nil,
+                  let event = events.selectedEvent, event.id == eventId, event.travelEnabled else { return }
+            ArrivalReminders.reschedule(eventId: eventId, eventName: event.name, calendar: calendar, defaults: settings.store)
+        }
+        settings.onArrivalAlertsChange = { [weak self] in
+            guard !demo else { return }
+            Task { await self?.updateArrivalReminders() }
+        }
         if !demo { UNUserNotificationCenter.current().delegate = NotificationRouter.shared }
         // Offline "wrong event" check: the code may be on another of this user's events.
         scans.otherRosters = { [weak self] eventId in
@@ -83,7 +103,11 @@ final class AppModel {
             }
             return found
         }
-        events.onChange = { [weak self] in self?.scheduleWidgetPublish() }
+        events.onChange = { [weak self] in
+            self?.scheduleWidgetPublish()
+            // The suggested event can change with the list, not only an explicit choice.
+            if !demo { Task { await self?.updateArrivalReminders() } }
+        }
         participants.onChange = { [weak self] in self?.scheduleWidgetPublish() }
         tickets.onChange = { [weak self] in self?.scheduleWidgetPublish() }
         travel.onChange = { [weak self] in self?.scheduleWidgetPublish() }
@@ -119,6 +143,10 @@ final class AppModel {
         tickets.clear()
         travel.clear()
         settings.clearAccountData()
+        if !isDemo {
+            ArrivalReminders.cancelAll(defaults: settings.store)
+            AlertNotifier.removeAll()
+        }
         // Participant headshots (minors) may sit in the URL cache.
         URLCache.shared.removeAllCachedResponses()
         lastSnapshot = nil
@@ -202,9 +230,33 @@ final class AppModel {
         )
     }
 
+    // MARK: Pickup reminders
+
+    /// Schedules pickup reminders from the cached calendar for the selected event, or cancels them when
+    /// they're off or the event has no travel. Travel refreshes reschedule them as times change.
+    func updateArrivalReminders() async {
+        guard !isDemo else { return }
+        let defaults = settings.store
+        guard settings.arrivalNotifications, user != nil, events.events != nil else {
+            // Before the events cache has loaded there's no telling which event is selected: leave them be.
+            if !settings.arrivalNotifications || user == nil { ArrivalReminders.cancelAll(defaults: defaults) }
+            return
+        }
+        guard let event = events.selectedEvent, event.travelEnabled else {
+            ArrivalReminders.cancelAll(defaults: defaults)
+            return
+        }
+        if ArrivalReminders.scheduledEvent(defaults) != event.id { ArrivalReminders.cancelAll(defaults: defaults) }
+        guard let calendar = await travel.load(event.id) else { return }
+        // Things may have moved on while the calendar loaded (sign-out, turned off, another event, or a later
+        // call that finished first): schedule only if this is still what's wanted.
+        guard settings.arrivalNotifications, user != nil, events.selectedEvent?.id == event.id else { return }
+        ArrivalReminders.reschedule(eventId: event.id, eventName: event.name, calendar: calendar, defaults: defaults)
+    }
+
     // MARK: Background refresh
 
-    /// Asks iOS for a background refresh in ~15 minutes (widgets and the offline queue).
+    /// Asks iOS for a background refresh in ~15 minutes (widgets, signup notifications and the offline queue).
     func scheduleBackgroundRefresh() {
         guard user != nil else { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTask)
@@ -219,10 +271,11 @@ final class AppModel {
         guard let user else { return }
         await loadCaches()
         if scans.hasQueuedWork { await scans.flush() }
-        if user.isOrganizer || user.globalAdmin {
+        if isOrganizer {
             if events.events?.isEmpty ?? true { _ = try? await events.refresh() }
+            await updateArrivalReminders()
             if let event = events.selectedEvent {
-                if event.canViewParticipants {
+                if EventPermissions.canViewParticipants(event) {
                     let roster = await participants.load(event.id)
                     let last = Time.parse(roster?.lastSyncAt)
                     if last.map({ Date().timeIntervalSince($0) > 45 }) ?? true { _ = try? await participants.sync(event.id) }
