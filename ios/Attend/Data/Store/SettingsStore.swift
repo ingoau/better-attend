@@ -33,6 +33,8 @@ final class SettingsStore {
     var haptics: Bool { didSet { defaults.set(haptics, forKey: Keys.haptics) } }
     var keepScreenOn: Bool { didSet { defaults.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
     var selectedEventId: String? { didSet { defaults.set(selectedEventId, forKey: Keys.selectedEvent) } }
+    /// Notify when people sign up for the selected event. Off until the organizer turns it on.
+    var signupNotifications: Bool { didSet { defaults.set(signupNotifications, forKey: Keys.signupNotifications) } }
     /// eventId -> scan context id
     var selectedContexts: [String: String] { didSet { defaults.set(selectedContexts, forKey: Keys.contexts) } }
 
@@ -43,6 +45,7 @@ final class SettingsStore {
         static let keepScreenOn = "keep_screen_on"
         static let selectedEvent = "selected_event"
         static let contexts = "selected_contexts"
+        static let signupNotifications = "signup_notifications"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -52,6 +55,7 @@ final class SettingsStore {
         haptics = defaults.object(forKey: Keys.haptics) as? Bool ?? true
         keepScreenOn = defaults.object(forKey: Keys.keepScreenOn) as? Bool ?? true
         selectedEventId = defaults.string(forKey: Keys.selectedEvent)
+        signupNotifications = defaults.bool(forKey: Keys.signupNotifications)
         selectedContexts = defaults.dictionary(forKey: Keys.contexts) as? [String: String] ?? [:]
     }
 
@@ -63,5 +67,6 @@ final class SettingsStore {
     func clearAccountData() {
         selectedEventId = nil
         selectedContexts = [:]
+        signupNotifications = false // the next account opts in for itself
     }
 }

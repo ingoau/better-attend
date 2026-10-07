@@ -75,6 +75,7 @@ class AppContainer(context: Context) {
         runCatching { tickets.clear() }
         runCatching { travel.clear() }
         runCatching { settings.clearAccountData() }
+        runCatching { au.ingo.betterattend.signups.SignupNotifier.cancelAll(appContext) }
         // Participant headshots (minors) live in Coil's caches.
         runCatching {
             val loader = coil3.SingletonImageLoader.get(appContext)

@@ -73,6 +73,11 @@ final class AppModel {
             if !demo { RejectionNotifier.requestPermissionIfNeeded() }
         }
         scans.onRejected = { rejected in if !demo { RejectionNotifier.notify(rejected) } }
+        participants.onNewSignups = { [weak self] eventId, signups in
+            guard let self, !demo, settings.signupNotifications else { return }
+            let eventName = events.events?.first { $0.id == eventId }?.name
+            SignupNotifier.notify(eventId: eventId, eventName: eventName, signups: signups)
+        }
         if !demo { UNUserNotificationCenter.current().delegate = NotificationRouter.shared }
         // Offline "wrong event" check: the code may be on another of this user's events.
         scans.otherRosters = { [weak self] eventId in
@@ -119,6 +124,7 @@ final class AppModel {
         tickets.clear()
         travel.clear()
         settings.clearAccountData()
+        if !isDemo { SignupNotifier.removeAll() }
         // Participant headshots (minors) may sit in the URL cache.
         URLCache.shared.removeAllCachedResponses()
         lastSnapshot = nil
@@ -204,7 +210,7 @@ final class AppModel {
 
     // MARK: Background refresh
 
-    /// Asks iOS for a background refresh in ~15 minutes (widgets and the offline queue).
+    /// Asks iOS for a background refresh in ~15 minutes (widgets, signup notifications and the offline queue).
     func scheduleBackgroundRefresh() {
         guard user != nil else { return }
         let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTask)

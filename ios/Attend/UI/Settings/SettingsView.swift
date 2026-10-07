@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var tokenName = ""
     @State private var issuingToken = false
     @State private var tokenMessage: String?
+    @State private var notificationsBlocked = false
 
     private var pending: Int { app.scans.pending.count }
 
@@ -48,6 +49,7 @@ struct SettingsView: View {
                 }
 
                 scannerSection(settings: settings)
+                notificationsSection
                 offlineSection
                 widgetsSection
                 helpSection
@@ -147,6 +149,45 @@ struct SettingsView: View {
             }
         } header: {
             Text("Scanner")
+        }
+    }
+
+    /// Signups come from the roster, so only people who can see it get the option.
+    @ViewBuilder private var notificationsSection: some View {
+        if let event = app.events.selectedEvent, EventPermissions.canViewParticipants(event) {
+            Section {
+                Toggle(isOn: signupNotifications) {
+                    SettingsLabel("New Signups", subtitle: "When someone signs up for \(event.name)",
+                                  systemImage: "person.crop.circle.badge.plus", color: HackClub.green)
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                if notificationsBlocked {
+                    Text("Notifications are off for BetterAttend. Turn them on in the Settings app to get signup alerts.")
+                } else {
+                    Text("Checked whenever the app syncs, and in the background as often as iOS allows.")
+                }
+            }
+        }
+    }
+
+    /// Turning it on asks for notification permission first; a refusal leaves it off.
+    private var signupNotifications: Binding<Bool> {
+        Binding {
+            app.settings.signupNotifications
+        } set: { on in
+            Haptics.selection()
+            guard on, !app.isDemo else {
+                app.settings.signupNotifications = on
+                return
+            }
+            Task {
+                let allowed = await SignupNotifier.requestPermission()
+                notificationsBlocked = !allowed
+                app.settings.signupNotifications = allowed
+                if allowed { app.scheduleBackgroundRefresh() }
+            }
         }
     }
 

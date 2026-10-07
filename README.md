@@ -91,6 +91,10 @@ They show up as **BetterAttend** and install **alongside** the official app (`au
   scan point you pick.
 - **First-aid sheet** — everyone with medical or safety flags, with allergies, medications and
   emergency contacts for safeguarding leads and global admins; works offline and prints or saves as PDF.
+- **Signup notifications** — off by default; turn on "New signups" in Settings to get a local
+  notification naming whoever signed up for the event you're working on. The app spots them as
+  the roster syncs (in the app, and every ~15 minutes in the background; as often as iOS allows on
+  iPhone); names stay off the lock screen on Android. Nothing is sent through a push server.
 - **Role-aware** — actions only appear for roles Attend allows (e.g. only event admins see
   Invite, Event staff and Remove), so nobody hits a "Forbidden" error.
 

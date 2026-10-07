@@ -4,6 +4,7 @@ import au.ingo.betterattend.data.api.AttendApi
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
 import au.ingo.betterattend.data.store.JsonCache
+import au.ingo.betterattend.signups.SignupLogic
 import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,6 +107,12 @@ class ParticipantRepository(
     /** Edits and removals made in the app. */
     val changes: SharedFlow<ParticipantChange> = _changes.asSharedFlow()
 
+    /**
+     * Set by the app: people who signed up since the last sync of a roster we already had (see
+     * [SignupLogic.newSignups]). Never called for the first download, which would list everyone.
+     */
+    var onNewSignups: suspend (eventId: String, signups: List<Participant>) -> Unit = { _, _ -> }
+
     fun roster(eventId: String): Roster? = _rosters.value[eventId]
 
     suspend fun load(eventId: String): Roster? {
@@ -119,7 +126,15 @@ class ParticipantRepository(
      * Full sync the first time (and every few hours to prune deletions), deltas via
      * `updated_since` otherwise. Throws on failure; the cached roster stays intact.
      */
-    suspend fun sync(eventId: String, forceFull: Boolean = false): Roster = mutex.withLock {
+    suspend fun sync(eventId: String, forceFull: Boolean = false): Roster {
+        var signups = emptyList<Participant>()
+        val roster = syncLocked(eventId, forceFull) { old, new -> signups = SignupLogic.newSignups(old, new) }
+        // Outside the lock: a slow notifier mustn't hold up the next sync or an edit.
+        if (signups.isNotEmpty()) runCatching { onNewSignups(eventId, signups) }
+        return roster
+    }
+
+    private suspend fun syncLocked(eventId: String, forceFull: Boolean, compare: (old: Roster, new: Roster) -> Unit): Roster = mutex.withLock {
         _syncing.update { it + eventId }
         try {
             val existing = load(eventId)
@@ -142,6 +157,7 @@ class ParticipantRepository(
             }
             _rosters.update { it + (eventId to roster) }
             cache.write(key(eventId), Roster.serializer(), roster)
+            if (existing != null) compare(existing, roster)
             roster
         } finally {
             _syncing.update { it - eventId }

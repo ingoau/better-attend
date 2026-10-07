@@ -2,6 +2,8 @@ package au.ingo.betterattend
 
 import android.app.Application
 import android.content.Context
+import au.ingo.betterattend.signups.SignupNotifier
+import au.ingo.betterattend.signups.SignupWatch
 
 class AttendApp : Application() {
     lateinit var container: AppContainer
@@ -12,6 +14,13 @@ class AttendApp : Application() {
         container = AppContainer(this)
         container.scans.onQueued = { au.ingo.betterattend.scan.ScanSyncWorker.enqueue(this) }
         container.scans.onRejected = { au.ingo.betterattend.scan.RejectionNotifier.notify(this, it) }
+        container.participants.onNewSignups = { eventId, signups ->
+            if (container.settings.current().signupNotifications) {
+                val eventName = container.events.events.value?.firstOrNull { it.id == eventId }?.name
+                SignupNotifier.notify(this, eventId, eventName, signups)
+            }
+        }
+        SignupWatch.start(this, container)
         au.ingo.betterattend.widget.WidgetUpdater.start(this, container)
     }
 }

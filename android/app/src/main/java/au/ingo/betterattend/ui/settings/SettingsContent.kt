@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.ReportProblem
@@ -177,6 +178,18 @@ fun SettingsContent(state: SettingsUiState, actions: SettingsActions) {
             item { SwitchRow(0, 3, Icons.Outlined.VolumeUp, "Sounds", "A different sound for each scan result", state.settings.sounds, onChange = actions.onSounds) }
             item { SwitchRow(1, 3, Icons.Outlined.Vibration, "Haptics", "Feel scans, taps and gestures", state.settings.haptics, onChange = actions.onHaptics) }
             item { SwitchRow(2, 3, Icons.Outlined.ScreenLockPortrait, "Keep screen on", "While the scanner is open", state.settings.keepScreenOn, onChange = actions.onKeepScreenOn) }
+
+            // Signups come from the roster, so only people who can see it get the option.
+            if (state.event != null && EventPermissions.canViewParticipants(state.event)) {
+                item { GroupTitle("Notifications") }
+                item {
+                    SwitchRow(
+                        0, 1, Icons.Outlined.PersonAdd, "New signups",
+                        "When someone signs up for ${state.event.name}. Checks about every 15 minutes.",
+                        state.settings.signupNotifications, onChange = actions.onSignupNotifications,
+                    )
+                }
+            }
 
             item { GroupTitle("Data") }
             item {

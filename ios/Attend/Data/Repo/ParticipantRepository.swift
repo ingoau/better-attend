@@ -13,6 +13,9 @@ final class ParticipantRepository {
     @ObservationIgnored private let cache: JsonCache
     @ObservationIgnored private let mutex = AsyncMutex()
     @ObservationIgnored var onChange: () -> Void = {}
+    /// People who signed up since the last sync of a roster we already had (see `SignupLogic`).
+    /// Never called for the first download, which would list everyone.
+    @ObservationIgnored var onNewSignups: (_ eventId: String, _ signups: [Participant]) -> Void = { _, _ in }
 
     init(api: AttendAPI, cache: JsonCache) {
         self.api = api
@@ -61,6 +64,10 @@ final class ParticipantRepository {
             rosters[eventId] = roster
             await cache.write(key(eventId), roster)
             onChange()
+            if let existing {
+                let signups = SignupLogic.newSignups(old: existing, new: roster)
+                if !signups.isEmpty { onNewSignups(eventId, signups) }
+            }
             return roster
         }
     }

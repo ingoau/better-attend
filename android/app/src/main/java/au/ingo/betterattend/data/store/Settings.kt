@@ -23,6 +23,8 @@ data class AppSettings(
     /** eventId -> scan context id, stored as "event:context" pairs joined by ',' */
     val selectedContexts: Map<String, String> = emptyMap(),
     val participantView: Boolean = false,
+    /** Notify when people sign up for the selected event. Off until the organizer turns it on. */
+    val signupNotifications: Boolean = false,
 )
 
 class SettingsStore(private val context: Context) {
@@ -35,6 +37,7 @@ class SettingsStore(private val context: Context) {
         val selectedEvent = stringPreferencesKey("selected_event")
         val contexts = stringPreferencesKey("selected_contexts")
         val participantView = booleanPreferencesKey("participant_view")
+        val signupNotifications = booleanPreferencesKey("signup_notifications")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -49,6 +52,7 @@ class SettingsStore(private val context: Context) {
                 val parts = it.split(':'); if (parts.size == 2) parts[0] to parts[1] else null
             }.toMap(),
             participantView = p[Keys.participantView] ?: false,
+            signupNotifications = p[Keys.signupNotifications] ?: false,
         )
     }
 
@@ -60,6 +64,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setHaptics(on: Boolean) = context.dataStore.edit { it[Keys.haptics] = on }
     suspend fun setKeepScreenOn(on: Boolean) = context.dataStore.edit { it[Keys.keepScreenOn] = on }
     suspend fun setParticipantView(on: Boolean) = context.dataStore.edit { it[Keys.participantView] = on }
+    suspend fun setSignupNotifications(on: Boolean) = context.dataStore.edit { it[Keys.signupNotifications] = on }
     suspend fun setSelectedEvent(id: String?) = context.dataStore.edit {
         if (id == null) it.remove(Keys.selectedEvent) else it[Keys.selectedEvent] = id
     }
@@ -72,5 +77,6 @@ class SettingsStore(private val context: Context) {
     }
     suspend fun clearAccountData() = context.dataStore.edit {
         it.remove(Keys.selectedEvent); it.remove(Keys.contexts); it.remove(Keys.participantView)
+        it.remove(Keys.signupNotifications) // the next account opts in for itself
     }
 }
