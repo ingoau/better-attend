@@ -39,6 +39,12 @@ class SettingsScreenshots : ScreenshotTest() {
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Sign out"))
     }
 
+    @Test fun settingsSignupNotifications() = snap("settings_signup_notifications", prepare = {
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("New signups"))
+    }) {
+        SettingsContent(state.copy(settings = state.settings.copy(signupNotifications = true)), SettingsActions())
+    }
+
     @Test fun settingsDeveloper() = snap("settings_developer", prepare = ::scrollToBottom) {
         SettingsContent(state, SettingsActions())
     }
