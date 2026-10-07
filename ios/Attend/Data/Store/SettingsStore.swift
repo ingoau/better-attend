@@ -34,7 +34,16 @@ final class SettingsStore {
     var keepScreenOn: Bool { didSet { defaults.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
     var selectedEventId: String? { didSet { defaults.set(selectedEventId, forKey: Keys.selectedEvent) } }
     /// Notify when people sign up for the selected event. Off until the organizer turns it on.
-    var signupNotifications: Bool { didSet { defaults.set(signupNotifications, forKey: Keys.signupNotifications) } }
+    var signupNotifications: Bool {
+        didSet {
+            defaults.set(signupNotifications, forKey: Keys.signupNotifications)
+            if signupNotifications != oldValue { signupNotificationsSince = signupNotifications ? Time.nowISO() : nil }
+        }
+    }
+    /// When they last turned it on (ISO-8601): rosters synced before then don't count as a baseline.
+    private(set) var signupNotificationsSince: String? {
+        didSet { defaults.set(signupNotificationsSince, forKey: Keys.signupNotificationsSince) }
+    }
     /// eventId -> scan context id
     var selectedContexts: [String: String] { didSet { defaults.set(selectedContexts, forKey: Keys.contexts) } }
 
@@ -46,6 +55,7 @@ final class SettingsStore {
         static let selectedEvent = "selected_event"
         static let contexts = "selected_contexts"
         static let signupNotifications = "signup_notifications"
+        static let signupNotificationsSince = "signup_notifications_since"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -56,6 +66,7 @@ final class SettingsStore {
         keepScreenOn = defaults.object(forKey: Keys.keepScreenOn) as? Bool ?? true
         selectedEventId = defaults.string(forKey: Keys.selectedEvent)
         signupNotifications = defaults.bool(forKey: Keys.signupNotifications)
+        signupNotificationsSince = defaults.string(forKey: Keys.signupNotificationsSince)
         selectedContexts = defaults.dictionary(forKey: Keys.contexts) as? [String: String] ?? [:]
     }
 

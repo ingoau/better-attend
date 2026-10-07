@@ -17,7 +17,9 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import org.junit.After
+import au.ingo.betterattend.data.store.AppSettings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -56,6 +58,23 @@ class SignupsTest {
         assertEquals(listOf("pe2"), SignupLogic.newSignups(old, new).map { it.participantEventId })
     }
 
+    @Test fun reinstatementsAreNot() {
+        val old = Roster("e1", listOf(mia, person(2, "Ollie Smith", "withdrawn"), person(3, "Ava Jones", "rejected")))
+        val new = Roster("e1", listOf(mia, ollie, ava))
+        assertTrue(SignupLogic.newSignups(old, new).isEmpty())
+    }
+
+    @Test fun onlyRostersSyncedSinceTurningItOnAreABaseline() {
+        val on = AppSettings(signupNotifications = true, signupNotificationsSince = "2026-10-03T10:00:00Z")
+        assertTrue(SignupLogic.shouldNotify(on, "2026-10-03T10:15:00Z"))
+        assertTrue(SignupLogic.shouldNotify(on, "2026-10-03T10:00:00Z"))
+        // Cached from before it was on: everyone since then would show up as new.
+        assertFalse(SignupLogic.shouldNotify(on, "2026-10-01T09:00:00Z"))
+        assertFalse(SignupLogic.shouldNotify(on, null))
+        assertFalse(SignupLogic.shouldNotify(on.copy(signupNotifications = false), "2026-10-03T10:15:00Z"))
+        assertFalse(SignupLogic.shouldNotify(on.copy(signupNotificationsSince = null), "2026-10-03T10:15:00Z"))
+    }
+
     @Test fun updatesToPeopleAlreadySignedUpAreNot() {
         val old = Roster("e1", listOf(mia, ava))
         val new = Roster("e1", listOf(mia.copy(checkedInAt = "2026-10-03T00:00:00Z"), ava.copy(status = "complete")))
@@ -66,6 +85,7 @@ class SignupsTest {
         assertEquals("New signup for Campfire", SignupLogic.title(1, "Campfire"))
         assertEquals("3 new signups for Campfire", SignupLogic.title(3, "Campfire"))
         assertEquals("2 new signups", SignupLogic.title(2, null))
+        assertEquals("New signups for Campfire", SignupLogic.groupTitle("Campfire"))
         assertEquals("Mia Chen", SignupLogic.summary(listOf(mia)))
         assertEquals("Mia Chen and Ollie Smith", SignupLogic.summary(listOf(mia, ollie)))
         assertEquals("Mia Chen, Ollie Smith and Ava Jones", SignupLogic.summary(listOf(mia, ollie, ava)))
@@ -81,6 +101,7 @@ class SignupsTest {
     private lateinit var cache: JsonCache
     private lateinit var repo: ParticipantRepository
     private val notified = mutableListOf<Pair<String, List<String>>>()
+    private val previousSyncs = mutableListOf<String?>()
 
     private val tokens = object : TokenStore {
         override val token: String = "t"
@@ -99,7 +120,10 @@ class SignupsTest {
         cache = JsonCache(ApplicationProvider.getApplicationContext())
         cache.clear()
         repo = ParticipantRepository(AttendApi(tokens, onSessionExpired = {}, baseUrl = server.url("/").toString().trimEnd('/')), cache)
-        repo.onNewSignups = { eventId, signups -> notified += eventId to signups.map { it.name } }
+        repo.onNewSignups = { eventId, signups, previousSyncAt ->
+            notified += eventId to signups.map { it.name }
+            previousSyncs += previousSyncAt
+        }
     }
 
     @After fun tearDown() {
@@ -116,9 +140,11 @@ class SignupsTest {
     @Test fun laterSyncsReportWhoIsNew() = runBlocking {
         roster = listOf(mia)
         repo.sync("e1")
+        val firstSync = repo.roster("e1")!!.lastSyncAt
         roster = listOf(ollie) // delta: only what changed
         repo.sync("e1")
         assertEquals(listOf("e1" to listOf("Ollie Smith")), notified)
+        assertEquals(listOf(firstSync), previousSyncs)
         // Nothing new: no call.
         roster = listOf(ollie.copy(checkedInAt = "2026-10-03T00:00:00Z"))
         repo.sync("e1")
@@ -130,7 +156,7 @@ class SignupsTest {
     }
 
     @Test fun aFailingNotifierDoesNotFailTheSync() = runBlocking {
-        repo.onNewSignups = { _, _ -> error("boom") }
+        repo.onNewSignups = { _, _, _ -> error("boom") }
         roster = listOf(mia)
         repo.sync("e1")
         roster = listOf(ollie)

@@ -109,9 +109,10 @@ class ParticipantRepository(
 
     /**
      * Set by the app: people who signed up since the last sync of a roster we already had (see
-     * [SignupLogic.newSignups]). Never called for the first download, which would list everyone.
+     * [SignupLogic.newSignups]), with when that previous sync was. Never called for the first
+     * download, which would list everyone.
      */
-    var onNewSignups: suspend (eventId: String, signups: List<Participant>) -> Unit = { _, _ -> }
+    var onNewSignups: suspend (eventId: String, signups: List<Participant>, previousSyncAt: String?) -> Unit = { _, _, _ -> }
 
     fun roster(eventId: String): Roster? = _rosters.value[eventId]
 
@@ -128,9 +129,13 @@ class ParticipantRepository(
      */
     suspend fun sync(eventId: String, forceFull: Boolean = false): Roster {
         var signups = emptyList<Participant>()
-        val roster = syncLocked(eventId, forceFull) { old, new -> signups = SignupLogic.newSignups(old, new) }
+        var previousSyncAt: String? = null
+        val roster = syncLocked(eventId, forceFull) { old, new ->
+            signups = SignupLogic.newSignups(old, new)
+            previousSyncAt = old.lastSyncAt
+        }
         // Outside the lock: a slow notifier mustn't hold up the next sync or an edit.
-        if (signups.isNotEmpty()) runCatching { onNewSignups(eventId, signups) }
+        if (signups.isNotEmpty()) runCatching { onNewSignups(eventId, signups, previousSyncAt) }
         return roster
     }
 

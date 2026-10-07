@@ -73,8 +73,10 @@ final class AppModel {
             if !demo { RejectionNotifier.requestPermissionIfNeeded() }
         }
         scans.onRejected = { rejected in if !demo { RejectionNotifier.notify(rejected) } }
-        participants.onNewSignups = { [weak self] eventId, signups in
-            guard let self, !demo, settings.signupNotifications else { return }
+        participants.onNewSignups = { [weak self] eventId, signups, previousSyncAt in
+            guard let self, !demo,
+                  SignupLogic.shouldNotify(enabled: settings.signupNotifications, since: settings.signupNotificationsSince,
+                                           previousSyncAt: previousSyncAt) else { return }
             let eventName = events.events?.first { $0.id == eventId }?.name
             SignupNotifier.notify(eventId: eventId, eventName: eventName, signups: signups)
         }
@@ -225,10 +227,10 @@ final class AppModel {
         guard let user else { return }
         await loadCaches()
         if scans.hasQueuedWork { await scans.flush() }
-        if user.isOrganizer || user.globalAdmin {
+        if isOrganizer {
             if events.events?.isEmpty ?? true { _ = try? await events.refresh() }
             if let event = events.selectedEvent {
-                if event.canViewParticipants {
+                if EventPermissions.canViewParticipants(event) {
                     let roster = await participants.load(event.id)
                     let last = Time.parse(roster?.lastSyncAt)
                     if last.map({ Date().timeIntervalSince($0) > 45 }) ?? true { _ = try? await participants.sync(event.id) }

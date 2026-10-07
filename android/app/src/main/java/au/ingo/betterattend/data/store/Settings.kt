@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import au.ingo.betterattend.util.Time
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -25,6 +26,8 @@ data class AppSettings(
     val participantView: Boolean = false,
     /** Notify when people sign up for the selected event. Off until the organizer turns it on. */
     val signupNotifications: Boolean = false,
+    /** When they last turned it on (ISO-8601): rosters synced before then don't count as a baseline. */
+    val signupNotificationsSince: String? = null,
 )
 
 class SettingsStore(private val context: Context) {
@@ -38,6 +41,7 @@ class SettingsStore(private val context: Context) {
         val contexts = stringPreferencesKey("selected_contexts")
         val participantView = booleanPreferencesKey("participant_view")
         val signupNotifications = booleanPreferencesKey("signup_notifications")
+        val signupNotificationsSince = stringPreferencesKey("signup_notifications_since")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -53,6 +57,7 @@ class SettingsStore(private val context: Context) {
             }.toMap(),
             participantView = p[Keys.participantView] ?: false,
             signupNotifications = p[Keys.signupNotifications] ?: false,
+            signupNotificationsSince = p[Keys.signupNotificationsSince],
         )
     }
 
@@ -64,7 +69,10 @@ class SettingsStore(private val context: Context) {
     suspend fun setHaptics(on: Boolean) = context.dataStore.edit { it[Keys.haptics] = on }
     suspend fun setKeepScreenOn(on: Boolean) = context.dataStore.edit { it[Keys.keepScreenOn] = on }
     suspend fun setParticipantView(on: Boolean) = context.dataStore.edit { it[Keys.participantView] = on }
-    suspend fun setSignupNotifications(on: Boolean) = context.dataStore.edit { it[Keys.signupNotifications] = on }
+    suspend fun setSignupNotifications(on: Boolean) = context.dataStore.edit {
+        it[Keys.signupNotifications] = on
+        if (on) it[Keys.signupNotificationsSince] = Time.nowIso() else it.remove(Keys.signupNotificationsSince)
+    }
     suspend fun setSelectedEvent(id: String?) = context.dataStore.edit {
         if (id == null) it.remove(Keys.selectedEvent) else it[Keys.selectedEvent] = id
     }
@@ -77,6 +85,6 @@ class SettingsStore(private val context: Context) {
     }
     suspend fun clearAccountData() = context.dataStore.edit {
         it.remove(Keys.selectedEvent); it.remove(Keys.contexts); it.remove(Keys.participantView)
-        it.remove(Keys.signupNotifications) // the next account opts in for itself
+        it.remove(Keys.signupNotifications); it.remove(Keys.signupNotificationsSince) // the next account opts in for itself
     }
 }

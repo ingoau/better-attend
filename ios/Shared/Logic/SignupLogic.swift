@@ -2,17 +2,26 @@ import Foundation
 
 /// Who signed up between two syncs of a roster, and how a notification words it.
 enum SignupLogic {
-    /// People who count as signed up in `new` but didn't in `old`: registrations that weren't on the
-    /// roster before, or that were only invited by staff and have now started registering. Staff
-    /// invites, withdrawals and rejections aren't signups.
+    /// People who count as signed up in `new` but weren't on `old` at all, or were only invited by staff
+    /// there and have now started registering. Staff invites, withdrawals, rejections and reinstatements
+    /// aren't signups.
     static func newSignups(old: Roster, new: Roster) -> [Participant] {
         let before = old.byEventId
         return new.participants.filter { p in
-            isSignedUp(p) && !(before[p.participantEventId].map(isSignedUp) ?? false)
+            guard isSignedUp(p) else { return false }
+            guard let was = before[p.participantEventId] else { return true }
+            return was.status == "invited"
         }
     }
 
     private static func isSignedUp(_ p: Participant) -> Bool { p.isActive && p.status != "invited" }
+
+    /// Only report signups measured against a roster synced after the setting was turned on: one cached
+    /// from days earlier would announce everyone who registered while it was off.
+    static func shouldNotify(enabled: Bool, since: String?, previousSyncAt: String?) -> Bool {
+        guard enabled, let since = Time.parse(since), let previous = Time.parse(previousSyncAt) else { return false }
+        return previous >= since
+    }
 
     /// "New signup for Campfire" / "3 new signups for Campfire"
     static func title(count: Int, eventName: String?) -> String {

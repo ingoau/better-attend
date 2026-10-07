@@ -160,6 +160,11 @@ struct SettingsView: View {
                     SettingsLabel("New Signups", subtitle: "When someone signs up for \(event.name)",
                                   systemImage: "person.crop.circle.badge.plus", color: HackClub.green)
                 }
+                // Permission can be switched off in the Settings app while this stays on.
+                .task {
+                    guard app.settings.signupNotifications, !app.isDemo else { return }
+                    notificationsBlocked = await SignupNotifier.isBlocked()
+                }
             } header: {
                 Text("Notifications")
             } footer: {
