@@ -377,7 +377,9 @@ final class Locked<T>: @unchecked Sendable {
         var gone = mia
         gone.status = "withdrawn"
         await seedRoster([gone])
-        let scans = repo(api: offlineAPI)
+        // A generous timeout: on a loaded CI simulator the refusal itself can take longer than 400 ms,
+        // which would turn this into the timeout case the test isn't about.
+        let scans = repo(timeout: .seconds(10), api: offlineAPI)
         _ = await scans.submit(eventId: "e1", input: qrMia, scanContextId: "desk", scanContextName: "Desk")
         #expect(!scans.hasQueuedWork, "connection refused: the request never left")
     }
