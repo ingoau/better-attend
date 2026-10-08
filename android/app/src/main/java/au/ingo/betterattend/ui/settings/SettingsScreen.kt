@@ -1,11 +1,14 @@
 package au.ingo.betterattend.ui.settings
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.PersistableBundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +26,7 @@ import au.ingo.betterattend.data.auth.TokenIssueState
 import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.User
 import au.ingo.betterattend.data.store.AppSettings
+import au.ingo.betterattend.notifications.AlertNotifications
 import au.ingo.betterattend.ui.LocalAppContainer
 import au.ingo.betterattend.ui.components.rememberHaptics
 import au.ingo.betterattend.ui.nav.AppNavigator
@@ -54,6 +58,9 @@ data class SettingsActions(
     val onSounds: (Boolean) -> Unit = {},
     val onHaptics: (Boolean) -> Unit = {},
     val onKeepScreenOn: (Boolean) -> Unit = {},
+    val onSignupNotifications: (Boolean) -> Unit = {},
+    val onWithdrawalNotifications: (Boolean) -> Unit = {},
+    val onArrivalNotifications: (Boolean) -> Unit = {},
     val onSyncNow: () -> Unit = {},
     val onClearCache: () -> Unit = {},
     val onSignOut: () -> Unit = {},
@@ -77,6 +84,22 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit
     var syncing by remember { mutableStateOf(false) }
     var clearing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    // Turning an alert on asks for the permission first (Android 13+); a refusal leaves it off.
+    var enableAfterPermission by remember { mutableStateOf<(suspend (Boolean) -> Unit)?>(null) }
+    val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val enable = enableAfterPermission
+        enableAfterPermission = null
+        if (granted && AlertNotifications.canPost(context)) enable?.let { scope.launch { it(true) } }
+        else message = "Notifications are blocked for BetterAttend. Allow them in your phone's settings to get these alerts."
+    }
+    fun alertToggle(set: suspend (Boolean) -> Unit): (Boolean) -> Unit = { on ->
+        if (on && !AlertNotifications.canPost(context)) {
+            enableAfterPermission = set
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            scope.launch { set(on) }
+        }
+    }
     val tokenIssue by c.auth.tokenIssue.collectAsStateWithLifecycle()
 
     // The browser sign-in came back with a new token: copy it, then drop it from memory.
@@ -118,6 +141,13 @@ fun SettingsScreen(nav: AppNavigator, onIssueToken: (deviceName: String) -> Unit
         onSounds = { scope.launch { c.settings.setSounds(it) } },
         onHaptics = { scope.launch { c.settings.setHaptics(it) } },
         onKeepScreenOn = { scope.launch { c.settings.setKeepScreenOn(it) } },
+        onSignupNotifications = alertToggle { c.settings.setSignupNotifications(it) },
+        onWithdrawalNotifications = alertToggle { c.settings.setWithdrawalNotifications(it) },
+        onArrivalNotifications = alertToggle { on ->
+            c.settings.setArrivalNotifications(on)
+            // Reminders come from the travel list: fetch it now rather than waiting for the next background check.
+            if (on) event?.takeIf { it.travelEnabled }?.let { c.travel.refresh(it.id) }
+        },
         onSyncNow = {
             scope.launch {
                 syncing = true

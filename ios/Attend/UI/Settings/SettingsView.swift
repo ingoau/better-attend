@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var tokenName = ""
     @State private var issuingToken = false
     @State private var tokenMessage: String?
+    @State private var notificationsBlocked = false
 
     private var pending: Int { app.scans.pending.count }
 
@@ -48,6 +49,7 @@ struct SettingsView: View {
                 }
 
                 scannerSection(settings: settings)
+                notificationsSection
                 offlineSection
                 widgetsSection
                 helpSection
@@ -147,6 +149,84 @@ struct SettingsView: View {
             }
         } header: {
             Text("Scanner")
+        }
+    }
+
+    /// Signups and withdrawals come from the roster, arrivals from travel: only offered to people who can see them.
+    @ViewBuilder private var notificationsSection: some View {
+        if let event = app.events.selectedEvent {
+            let rosterAlerts = EventPermissions.canViewParticipants(event)
+            if rosterAlerts || event.travelEnabled {
+                Section {
+                    if rosterAlerts {
+                        Toggle(isOn: alertBinding(.signups)) {
+                            SettingsLabel("New Signups", subtitle: "When someone signs up for \(event.name)",
+                                          systemImage: "person.crop.circle.badge.plus", color: HackClub.green)
+                        }
+                        Toggle(isOn: alertBinding(.withdrawals)) {
+                            SettingsLabel("Withdrawals", subtitle: "When someone withdraws from \(event.name)",
+                                          systemImage: "person.crop.circle.badge.minus", color: HackClub.orange)
+                        }
+                    }
+                    if event.travelEnabled {
+                        Toggle(isOn: alertBinding(.arrivals)) {
+                            SettingsLabel("Arrivals to Pick Up", subtitle: "30 minutes before each arrival, and if their arrival time changes",
+                                          systemImage: "airplane.arrival", color: HackClub.blue)
+                        }
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    if notificationsBlocked {
+                        Text("Notifications are off for BetterAttend. Turn them on in the Settings app to get these alerts.")
+                    } else {
+                        Text("Checked whenever the app syncs, and in the background as often as iOS allows. Pickup reminders go off on time even offline.")
+                    }
+                }
+                // Permission can be switched off in the Settings app while these stay on.
+                .task {
+                    guard app.settings.anyEventAlerts, !app.isDemo else { return }
+                    notificationsBlocked = await AlertNotifier.isBlocked()
+                }
+            }
+        }
+    }
+
+    private enum AlertKind { case signups, withdrawals, arrivals }
+
+    /// Turning an alert on asks for notification permission first; a refusal leaves it off.
+    private func alertBinding(_ alert: AlertKind) -> Binding<Bool> {
+        Binding {
+            switch alert {
+            case .signups: app.settings.signupNotifications
+            case .withdrawals: app.settings.withdrawalNotifications
+            case .arrivals: app.settings.arrivalNotifications
+            }
+        } set: { on in
+            Haptics.selection()
+            guard on, !app.isDemo else {
+                setAlert(alert, on)
+                return
+            }
+            Task {
+                let allowed = await AlertNotifier.requestPermission()
+                notificationsBlocked = !allowed
+                setAlert(alert, allowed)
+                guard allowed else { return }
+                app.scheduleBackgroundRefresh()
+                // Reminders come from the travel list: fetch it now rather than waiting for a background refresh.
+                if alert == .arrivals, let event = app.events.selectedEvent, event.travelEnabled {
+                    _ = try? await app.travel.refresh(event.id)
+                }
+            }
+        }
+    }
+
+    private func setAlert(_ alert: AlertKind, _ on: Bool) {
+        switch alert {
+        case .signups: app.settings.signupNotifications = on
+        case .withdrawals: app.settings.withdrawalNotifications = on
+        case .arrivals: app.settings.arrivalNotifications = on
         }
     }
 

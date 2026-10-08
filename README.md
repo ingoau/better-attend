@@ -92,6 +92,14 @@ They show up as **BetterAttend** and install **alongside** the official app.
   scan point you pick.
 - **First-aid sheet** — everyone with medical or safety flags, with allergies, medications and
   emergency contacts for safeguarding leads and global admins; works offline and prints or saves as PDF.
+- **Notifications for organizers** — all off by default; turn them on in Settings → Notifications:
+  - **New signups** and **Withdrawals** name who signed up for, or withdrew from, the event you're
+    working on, spotted as the roster syncs (in the app, and every ~15 minutes in the background; as
+    often as iOS allows on iPhone).
+  - **Arrivals to pick up** reminds you 30 minutes before each arrival that's awaiting pickup, and
+    tells you when one's arrival time changes. Reminders are scheduled on the phone from the travel
+    list, so they go off on time even offline.
+  Names stay off the lock screen on Android, and nothing goes through a push server.
 - **Role-aware** — actions only appear for roles Attend allows (e.g. only event admins see
   Invite, Event staff and Remove), so nobody hits a "Forbidden" error.
 

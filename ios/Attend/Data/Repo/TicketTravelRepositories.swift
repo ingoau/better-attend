@@ -71,6 +71,8 @@ final class TravelRepository {
     @ObservationIgnored private let api: AttendAPI
     @ObservationIgnored private let cache: JsonCache
     @ObservationIgnored var onChange: () -> Void = {}
+    /// A fresh calendar arrived (pickup reminders reschedule from it).
+    @ObservationIgnored var onRefreshed: (_ eventId: String, _ calendar: TravelCalendar) -> Void = { _, _ in }
 
     init(api: AttendAPI, cache: JsonCache) {
         self.api = api
@@ -91,6 +93,7 @@ final class TravelRepository {
         calendars[eventId] = cal
         await cache.write(key(eventId), cal)
         onChange()
+        onRefreshed(eventId, cal)
         return cal
     }
 

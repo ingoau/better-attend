@@ -75,6 +75,9 @@ class AppContainer(context: Context) {
         runCatching { tickets.clear() }
         runCatching { travel.clear() }
         runCatching { settings.clearAccountData() }
+        // Alerts name participants; pending pickup reminders would still fire.
+        runCatching { au.ingo.betterattend.notifications.AlertNotifications.cancelAll(appContext) }
+        runCatching { au.ingo.betterattend.notifications.ArrivalReminders.cancelAll(appContext) }
         // Participant headshots (minors) live in Coil's caches.
         runCatching {
             val loader = coil3.SingletonImageLoader.get(appContext)
