@@ -4,8 +4,8 @@
 
 # BetterAttend
 
-**A better Hack Club Attend app for Android and iOS.**<br>
-Faster, offline-first, and built for the door.
+**A Hack Club Attend client for Android and iOS**<br>
+Faster, native, and offline-first
 
 <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend"><img src="docs/assets/badge_obtainium.png" alt="Get it on Obtainium" height="64"></a>
 
@@ -43,13 +43,14 @@ BetterAttend is an unofficial app, not made by Hack Club: native rewrites of Hac
   a Control Center control and Siri / Spotlight shortcuts. Same features, built the iOS way; see
   [`ios/README.md`](ios/README.md).
 
-Both talk to the same backend ([hackclub/attend](https://github.com/hackclub/attend)) and sign in
+Both use the same backend ([hackclub/attend](https://github.com/hackclub/attend)) and sign in
 with the same Hack Club OAuth client as the official app, so any existing Attend account works.
-They show up as **BetterAttend** and install **alongside** the official app (`au.ingo.betterattend`).
+They show up as **BetterAttend** and install **alongside** the official app.
 
 ## What's in it
 
 **For organizers**
+
 - **Home dashboard** — live "84 / 120 checked in" with an expressive progress ring, not-here-yet and
   last-hour counts, per scan-point progress, arrivals to collect, people needing attention, recent
   check-ins and one-tap actions (Scan · Find · Announce · Kiosk).
@@ -95,11 +96,13 @@ They show up as **BetterAttend** and install **alongside** the official app (`au
   Invite, Event staff and Remove), so nobody hits a "Forbidden" error.
 
 **For participants**
+
 - **My tickets** — works offline at the door; pass with a high-contrast QR that **boosts screen
   brightness** automatically, full-screen QR, Google Wallet, countdown, directions, arriving
   travel, organiser messages and safety contacts.
 
 **Home-screen widgets** (Jetpack Glance, Material You, light + dark, resizable)
+
 - **Check-in progress** — count, progress bar, not here yet; larger sizes add per-scan-point rows.
 - **Arrivals** — awaiting pickup / collected / checked in + next arrival.
 - **Quick scan** — one tap straight into the scanner.
@@ -182,11 +185,6 @@ git tag v1.3.0 && git push origin v1.3.0
 
 The tag sets the version name, and the version code is derived from it (`v1.3.0` → `10300`), so
 there's nothing to bump by hand.
-
-## Website
-
-[`docs/`](docs) is a one-page website (plain HTML, no build step) with screenshots and download links.
-Publish it with GitHub Pages: **Settings → Pages → Deploy from a branch → `main` / `docs`**.
 
 ## How sign-in works
 
