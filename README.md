@@ -10,7 +10,7 @@ Faster, native, and offline-first
 <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/ingoau/better-attend"><img src="docs/assets/badge_obtainium.png" alt="Get it on Obtainium" height="64"></a>
 
 [![Latest release](https://img.shields.io/github/v/release/ingoau/better-attend?style=flat-square&label=release&color=EC3750)](https://github.com/ingoau/better-attend/releases/latest)
-![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
+![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![iOS 18+](https://img.shields.io/badge/iOS-18%2B-000000?style=flat-square&logo=apple&logoColor=white)
 
 [**Download the APK**](https://github.com/ingoau/better-attend/releases/latest) · [Website](https://ingoau.github.io/better-attend/) · [iOS notes](ios/README.md)
@@ -151,7 +151,7 @@ from GitHub releases and keeps it updated:
 
 Or download an APK from the [latest release](https://github.com/ingoau/better-attend/releases/latest) —
 `BetterAttend-<version>-arm64-v8a.apk` fits almost every phone, `BetterAttend-<version>-universal.apk` runs
-everywhere — then open it on your phone and allow installing from that source. Android 8.0+.
+everywhere — then open it on your phone and allow installing from that source. Android 7.0+.
 Builds of unreleased changes are under **Actions → Android → attend-apk**.
 
 ## Android: Build

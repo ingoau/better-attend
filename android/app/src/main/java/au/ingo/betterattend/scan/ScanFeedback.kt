@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import android.os.Build
 import android.os.VibrationEffect
+import androidx.annotation.RequiresApi
 import android.os.Vibrator
 import android.os.VibratorManager
 import java.io.File
@@ -58,9 +59,25 @@ class ScanFeedback(context: Context) {
         if (sound) runCatching {
             soundIds[kind]?.takeIf { it in loaded }?.let { pool.play(it, 1f, 1f, 1, 0, 1f) }
         }
-        if (haptic) runCatching { vibrator?.vibrate(effectFor(kind)) }
+        if (haptic) runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(effectFor(kind))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(legacyPatternFor(kind), -1)
+            }
+        }
     }
 
+    // Android 7.x has no amplitude control, so these are timing-only versions of effectFor.
+    private fun legacyPatternFor(kind: FeedbackKind): LongArray = when (kind) {
+        FeedbackKind.Success -> longArrayOf(0, 45)
+        FeedbackKind.Info -> longArrayOf(0, 20)
+        FeedbackKind.Warning -> longArrayOf(0, 40, 90, 40)
+        FeedbackKind.Reject -> longArrayOf(0, 70, 60, 70, 60, 120)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun effectFor(kind: FeedbackKind): VibrationEffect = when (kind) {
         FeedbackKind.Success -> VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE)
         FeedbackKind.Info -> VibrationEffect.createOneShot(25, 110)

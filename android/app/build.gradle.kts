@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "au.ingo.betterattend"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 36
         // The release workflow passes these in from the git tag; local builds use the defaults.
         versionCode = providers.gradleProperty("versionCode").orNull?.toInt() ?: 3
@@ -60,6 +60,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // java.time and friends on Android 7.x (API 24–25).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     testOptions {
@@ -101,6 +103,7 @@ kotlin {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.activity.compose)
