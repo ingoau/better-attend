@@ -118,17 +118,18 @@ extension Fixtures {
         #expect(DashboardLogic.needsAttention(Fixtures.Home.participants) == 5)
     }
 
-    @Test func contextProgressFollowsPositionAndMarksActive() {
+    @Test func contextProgressFollowsAttendOrderAndMarksActive() {
         let lunchNow = Fixtures.contexts.map { c in
             var c = c
             if c.id == "c3" { c.startsAt = "2026-10-03T11:00:00+10:00"; c.endsAt = "2026-10-03T13:00:00+10:00" }
             return c
         }.reversed()
         let rows = DashboardLogic.contextProgress(Array(lunchNow), stats: stats, now: now)
-        #expect(rows.map(\.context.id) == ["c1", "c2", "c3"])
-        #expect(rows.map(\.count) == [84, 22, 63])
-        #expect(rows.map(\.active) == [false, false, true])
-        #expect(abs(rows[0].fraction - 0.7) < 0.001)
+        // Scheduled points first (by start time), then the rest by position, as Attend lists them.
+        #expect(rows.map(\.context.id) == ["c3", "c1", "c2"])
+        #expect(rows.map(\.count) == [63, 84, 22])
+        #expect(rows.map(\.active) == [true, false, false])
+        #expect(abs(rows[1].fraction - 0.7) < 0.001)
     }
 
     @Test func fractionIsSafeWithNoConfirmed() {

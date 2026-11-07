@@ -2,6 +2,7 @@ package au.ingo.betterattend.widget
 
 import au.ingo.betterattend.data.model.Event
 import au.ingo.betterattend.data.model.ScanContext
+import au.ingo.betterattend.data.model.inAttendOrder
 import au.ingo.betterattend.data.model.Ticket
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.model.User
@@ -141,7 +142,7 @@ object WidgetSnapshots {
     /** Per-context unique-participant counts, in the event's context order. Falls back to names seen in the roster. */
     fun contextCounts(stats: EventStats, roster: Roster, contexts: List<ScanContext>?): List<ContextCount> {
         if (!contexts.isNullOrEmpty()) {
-            return contexts.sortedBy { it.position }.map { c ->
+            return contexts.inAttendOrder().map { c ->
                 ContextCount(c.id, c.name, stats.perContext[c.id] ?: 0, c.checksIn, c.isTravelPickup || c.isAirport)
             }
         }

@@ -376,7 +376,7 @@ extension Fixtures {
 
     @Test func loadsCheckpointsAndDefaultsToTheLiveOne() {
         #expect(model.ready)
-        #expect(model.contexts?.map(\.id) == ["c1", "c2", "c3", "c4"])
+        #expect(model.contexts?.map(\.id) == ["c3", "c4", "c1", "c2"]) // scheduled first, as Attend lists them
         // The demo's lunch window is open now.
         #expect(model.selectedContextId == "c3")
         model.selectContext("c1")
