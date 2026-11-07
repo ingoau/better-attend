@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/shortcut_background" />
-    <foreground android:drawable="@drawable/ic_shortcut_people_fg" />
-</adaptive-icon>
+<!-- Android 7.1 shortcut icon (adaptive version lives in drawable-anydpi-v26). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/shortcut_background" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_shortcut_people_fg" />
+</layer-list>
