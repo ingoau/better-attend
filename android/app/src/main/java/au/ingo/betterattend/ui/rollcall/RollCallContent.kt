@@ -92,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.ScanContext
+import au.ingo.betterattend.data.model.inAttendOrder
 import au.ingo.betterattend.data.repo.RollCall
 import au.ingo.betterattend.data.repo.RollCallExpected
 import au.ingo.betterattend.data.repo.Roster
@@ -374,7 +375,7 @@ private fun RecordingChoices(contexts: List<ScanContext>?, recording: TickRecord
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp),
                 )
-                contexts.sortedBy { it.position }.forEach { ctx ->
+                contexts.inAttendOrder().forEach { ctx ->
                     val selected = (recording as? TickRecording.AtScanPoint)?.contextId == ctx.id
                     ChoiceCard(
                         selected = selected,

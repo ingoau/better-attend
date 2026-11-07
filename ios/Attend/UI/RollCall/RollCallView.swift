@@ -153,7 +153,7 @@ private struct RollCallSetupView: View {
 
     @ViewBuilder
     private var recordSection: some View {
-        let contexts = (app.events.cachedContexts(event.id) ?? []).sorted { $0.position < $1.position }
+        let contexts = (app.events.cachedContexts(event.id) ?? []).inAttendOrder()
         let selected = contexts.first { $0.id == scanPointId }
         Section {
             ChoiceRow(title: "Only on this phone", subtitle: "Nothing is sent. Works offline.", systemImage: "iphone",

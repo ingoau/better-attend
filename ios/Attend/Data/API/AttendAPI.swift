@@ -174,7 +174,7 @@ final class AttendAPI {
     func events() async throws -> [Event] { try await (get("/events") as EventsResponse).events }
 
     func scanContexts(eventId: String) async throws -> [ScanContext] {
-        try await (get("/events/\(eventId)/scan_contexts") as ScanContextsResponse).scanContexts.sorted { $0.position < $1.position }
+        try await (get("/events/\(eventId)/scan_contexts") as ScanContextsResponse).scanContexts.inAttendOrder()
     }
 
     // MARK: Scans

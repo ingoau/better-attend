@@ -42,15 +42,16 @@ class DashboardLogicTest {
         assertEquals(5, DashboardLogic.needsAttention(OrganizerSamples.participants))
     }
 
-    @Test fun contextProgressFollowsPositionAndMarksActive() {
+    @Test fun contextProgressFollowsAttendOrderAndMarksActive() {
         val lunchNow = SampleData.contexts.map {
             if (it.id == "c3") it.copy(startsAt = "2026-10-03T11:00:00+10:00", endsAt = "2026-10-03T13:00:00+10:00") else it
         }.reversed()
         val rows = DashboardLogic.contextProgress(lunchNow, stats, now)
-        assertEquals(listOf("c1", "c2", "c3"), rows.map { it.context.id })
-        assertEquals(listOf(84, 22, 63), rows.map { it.count })
-        assertEquals(listOf(false, false, true), rows.map { it.active })
-        assertEquals(0.7f, rows[0].fraction, 0.001f)
+        // Scheduled points first (by start time), then the rest by position, as Attend lists them.
+        assertEquals(listOf("c3", "c1", "c2"), rows.map { it.context.id })
+        assertEquals(listOf(63, 84, 22), rows.map { it.count })
+        assertEquals(listOf(true, false, false), rows.map { it.active })
+        assertEquals(0.7f, rows[1].fraction, 0.001f)
     }
 
     @Test fun fractionIsSafeWithNoConfirmed() {

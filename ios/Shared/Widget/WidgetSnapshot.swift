@@ -125,7 +125,7 @@ enum WidgetSnapshots {
     /// Per-context unique-participant counts, in the event's context order. Falls back to names seen in the roster.
     static func contextCounts(_ stats: EventStats, roster: Roster, contexts: [ScanContext]?) -> [ContextCount] {
         if let contexts, !contexts.isEmpty {
-            return contexts.sorted { $0.position < $1.position }.map { c in
+            return contexts.inAttendOrder().map { c in
                 ContextCount(id: c.id, name: c.name, count: stats.perContext[c.id] ?? 0, checksIn: c.checksIn, isTravel: c.isTravelPickup || c.isAirport)
             }
         }
