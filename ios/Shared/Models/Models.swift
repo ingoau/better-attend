@@ -133,6 +133,24 @@ struct ScanContext: Codable, Hashable, Sendable, Identifiable {
     var endsAt: String?
 }
 
+extension Array where Element == ScanContext {
+    /// Attend's scan-point order (ScanContext's default scope upstream): scheduled points by start time,
+    /// unscheduled ones after, then by manual position, keeping the server's order as the last tiebreak.
+    func inAttendOrder() -> [ScanContext] {
+        enumerated()
+            .map { (offset: $0.offset, context: $0.element, start: Time.parse($0.element.startsAt)) }
+            .sorted { a, b in
+                switch (a.start, b.start) {
+                case let (x?, y?) where x != y: return x < y
+                case (.some, nil): return true
+                case (nil, .some): return false
+                default: return (a.context.position, a.offset) < (b.context.position, b.offset)
+                }
+            }
+            .map(\.context)
+    }
+}
+
 struct ScanContextsResponse: Codable, Sendable {
     @Default<Empty<ScanContext>> var scanContexts: [ScanContext] = []
 }

@@ -463,7 +463,7 @@ import Testing
         #expect(org.notArrived == stats.notArrived)
         #expect(org.lastHour == stats.checkedInLastHour)
         #expect(org.updatedAt == "2026-10-03T01:20:00Z")
-        #expect(org.contexts.map(\.name) == Fixtures.contexts.sorted { $0.position < $1.position }.map(\.name))
+        #expect(org.contexts.map(\.name) == Fixtures.contexts.inAttendOrder().map(\.name))
         for c in org.contexts { #expect(c.count == stats.perContext[c.id] ?? 0) }
         #expect(org.contexts.first { $0.id == "c2" }?.isTravel == true)
     }

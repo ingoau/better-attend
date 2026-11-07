@@ -433,7 +433,7 @@ enum ParticipantDetailLogic {
     }
 
     static func scanPoints(_ p: Participant, contexts: [ScanContext]) -> [ScanPoint] {
-        var points = contexts.sorted { $0.position < $1.position }.map { c in
+        var points = contexts.inAttendOrder().map { c in
             ScanPoint(id: c.id, name: c.name, checksIn: c.checksIn, isTravelPickup: c.isTravelPickup || c.isAirport,
                       scan: p.scansByContext.first { $0.scanContextId == c.id && $0.scanCount > 0 })
         }

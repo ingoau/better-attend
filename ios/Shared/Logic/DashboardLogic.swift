@@ -53,9 +53,8 @@ enum DashboardLogic {
 
     /// Progress per scan context in the organizer's order; the context whose window contains now is marked active.
     static func contextProgress(_ contexts: [ScanContext], stats: EventStats, now: Date = Date()) -> [ContextProgress] {
-        contexts.enumerated()
-            .sorted { ($0.element.position, $0.offset) < ($1.element.position, $1.offset) }
-            .map { _, c in
+        contexts.inAttendOrder()
+            .map { c in
                 ContextProgress(context: c, count: stats.perContext[c.id] ?? 0, total: stats.expected, active: EventLogic.isLive(c, now: now))
             }
     }

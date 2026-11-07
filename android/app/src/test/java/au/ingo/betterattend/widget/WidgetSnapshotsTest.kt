@@ -2,6 +2,7 @@ package au.ingo.betterattend.widget
 
 import au.ingo.betterattend.data.api.AttendJson
 import au.ingo.betterattend.data.model.TravelEntry
+import au.ingo.betterattend.data.model.inAttendOrder
 import au.ingo.betterattend.data.repo.EventStats
 import au.ingo.betterattend.data.repo.Roster
 import au.ingo.betterattend.ui.preview.SampleData
@@ -42,7 +43,7 @@ class WidgetSnapshotsTest {
         assertEquals(stats.checkedInLastHour, org.lastHour)
         assertEquals("2026-10-03T01:20:00Z", org.updatedAt)
         // One row per scan context, in position order, with unique-participant counts.
-        assertEquals(SampleData.contexts.sortedBy { it.position }.map { it.name }, org.contexts.map { it.name })
+        assertEquals(SampleData.contexts.inAttendOrder().map { it.name }, org.contexts.map { it.name })
         org.contexts.forEach { assertEquals(stats.perContext[it.id] ?: 0, it.count) }
         assertTrue(org.contexts.first { it.id == "c2" }.isTravel)
     }

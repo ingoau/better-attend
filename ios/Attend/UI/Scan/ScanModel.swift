@@ -71,7 +71,7 @@ final class ScanModel {
 
     /// nil while loading with nothing cached.
     var contexts: [ScanContext]? {
-        event.flatMap { app.events.cachedContexts($0.id) }.map { $0.sorted { $0.position < $1.position } }
+        event.flatMap { app.events.cachedContexts($0.id) }.map { $0.inAttendOrder() }
     }
 
     var contextsError: String? { event.flatMap { contextErrors[$0.id] } }

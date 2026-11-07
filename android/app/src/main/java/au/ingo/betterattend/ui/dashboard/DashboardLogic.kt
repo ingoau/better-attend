@@ -5,6 +5,7 @@ import au.ingo.betterattend.data.model.EventPermissions
 import au.ingo.betterattend.data.model.Participant
 import au.ingo.betterattend.data.model.Scan
 import au.ingo.betterattend.data.model.ScanContext
+import au.ingo.betterattend.data.model.inAttendOrder
 import au.ingo.betterattend.data.model.TravelCalendar
 import au.ingo.betterattend.data.model.TravelEntry
 import au.ingo.betterattend.data.repo.EventStats
@@ -65,7 +66,7 @@ object DashboardLogic {
 
     /** Progress per scan context in the organizer's order; the context whose window contains now is marked active. */
     fun contextProgress(contexts: List<ScanContext>, stats: EventStats, now: Instant): List<ContextProgress> =
-        contexts.sortedBy { it.position }.map { c ->
+        contexts.inAttendOrder().map { c ->
             val s = Time.parse(c.startsAt)
             val e = Time.parse(c.endsAt)
             val active = s != null && e != null && !now.isBefore(s) && !now.isAfter(e)

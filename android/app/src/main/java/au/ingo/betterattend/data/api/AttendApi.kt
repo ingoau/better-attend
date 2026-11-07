@@ -223,7 +223,7 @@ class AttendApi(
     suspend fun events(): List<Event> = get<EventsResponse>("/events").events
 
     suspend fun scanContexts(eventId: String): List<ScanContext> =
-        get<ScanContextsResponse>("/events/$eventId/scan_contexts").scanContexts.sortedBy { it.position }
+        get<ScanContextsResponse>("/events/$eventId/scan_contexts").scanContexts.inAttendOrder()
 
     // ---------------- scans ----------------
 

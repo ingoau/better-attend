@@ -278,9 +278,9 @@ extension Fixtures {
         var p = Fixtures.zoe
         p.scansByContext.append(ContextScanSummary(scanContextId: "gone", scanContextName: "Old desk", scanCount: 1))
         let points = ParticipantDetailLogic.scanPoints(p, contexts: Array(Fixtures.contexts.reversed()))
-        #expect(points.map(\.id) == ["c1", "c2", "c3", "gone"]) // by position, removed ones last
-        #expect(points[0].scan?.scanContextName == "Desk")
-        #expect(points[1].isTravelPickup && points[1].scan == nil)
+        #expect(points.map(\.id) == ["c3", "c1", "c2", "gone"]) // in Attend's order, removed ones last
+        #expect(points[1].scan?.scanContextName == "Desk")
+        #expect(points[2].isTravelPickup && points[2].scan == nil)
         #expect(points[3].name == "Old desk" && points[3].scan != nil)
         #expect(ParticipantDetailLogic.scanPoints(Fixtures.arjun, contexts: []).isEmpty)
     }

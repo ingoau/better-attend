@@ -141,6 +141,13 @@ data class ScanContext(
     @SerialName("ends_at") val endsAt: String? = null,
 )
 
+/**
+ * Attend's scan-point order (ScanContext's default scope upstream): scheduled points by start time,
+ * unscheduled ones after, then by manual position. Stable, so the server's created_at tiebreak survives.
+ */
+fun List<ScanContext>.inAttendOrder(): List<ScanContext> =
+    sortedWith(compareBy<ScanContext, java.time.Instant?>(nullsLast()) { au.ingo.betterattend.util.Time.parse(it.startsAt) }.thenBy { it.position })
+
 @Serializable
 data class ScanContextsResponse(@SerialName("scan_contexts") val scanContexts: List<ScanContext> = emptyList())
 
