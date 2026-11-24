@@ -273,10 +273,6 @@ final class AttendAPI {
 
     // MARK: NFC badges
 
-    func nfcEnsure(eventId: String, participantEventId: String) async throws -> NfcBadge {
-        try await send("POST", "/events/\(eventId)/participant_events/\(participantEventId)/nfc_badge/ensure")
-    }
-
     func nfcConfirm(eventId: String, participantEventId: String, badgeToken: String) async throws -> NfcBadge {
         try await send("POST", "/events/\(eventId)/participant_events/\(participantEventId)/nfc_badge/confirm", body: ["badge_token": badgeToken])
     }
