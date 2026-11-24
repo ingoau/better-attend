@@ -400,19 +400,15 @@ class ParticipantDetailViewModel(
             NfcAvailability.Disabled -> { _state.update { it.copy(nfc = NfcWriteState.Disabled) }; return }
             NfcAvailability.Ready -> Unit
         }
-        viewModelScope.launch {
-            _state.update { it.copy(nfc = NfcWriteState.Preparing) }
-            try {
-                val badge = c.api.nfcEnsure(eventId, participantEventId)
-                val slack = _state.value.participant?.slackUserId
-                _state.update { it.copy(nfc = NfcWriteState.Waiting(badge.badgeToken, !slack.isNullOrBlank())) }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                val msg = if ((e as? ApiException)?.status == 422) e.message ?: "NFC badges are not enabled for this event" else e.friendlyMessage
-                _state.update { it.copy(nfc = NfcWriteState.Failed(msg, retryable = (e as? ApiException)?.status != 422)) }
-                cue(false)
-            }
+        // Only write a token Attend already issued; never mint one from here (no nfc_badge/ensure).
+        val p = _state.value.participant
+        val token = p?.nfcBadgeToken?.takeIf { it.isNotBlank() }
+        if (token == null) {
+            _state.update { it.copy(nfc = NfcWriteState.Failed(NO_BADGE_TOKEN, retryable = false)) }
+            cue(false)
+            return
         }
+        _state.update { it.copy(nfc = NfcWriteState.Waiting(token, !p?.slackUserId.isNullOrBlank())) }
     }
 
     /** Called from the NFC binder thread when a tag appears while waiting. */
@@ -441,7 +437,7 @@ class ParticipantDetailViewModel(
         }
     }
 
-    /** Back to waiting for a tag after a retryable failure (keeps the ensured token). */
+    /** Back to waiting for a tag after a retryable failure (reuses the participant's existing token). */
     fun retryNfc(availability: NfcAvailability) = startNfcWrite(availability)
 
     fun dismissNfc() { _state.update { it.copy(nfc = NfcWriteState.Idle) } }
@@ -463,6 +459,10 @@ class ParticipantDetailViewModel(
                 _state.update { it.copy(busy = null) }
             }
         }
+    }
+
+    companion object {
+        const val NO_BADGE_TOKEN = "No NFC badge token for this person yet. Make sure NFC badges are enabled for this event, then refresh."
     }
 
     class Factory(private val c: AppContainer, private val eventId: String, private val participantEventId: String) : ViewModelProvider.Factory {

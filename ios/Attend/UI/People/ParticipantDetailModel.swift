@@ -274,22 +274,18 @@ final class ParticipantDetailModel {
 
     // MARK: NFC badge
 
-    /// ensure (get the token) → write + verify on the tag → confirm with Attend.
+    static let noBadgeToken = "No NFC badge token for this person yet. Make sure NFC badges are enabled for this event, then refresh."
+
+    /// Use the token Attend already issued → write + verify on the tag → confirm with Attend.
+    /// Never mints a token from here (no nfc_badge/ensure).
     func writeBadge(_ app: AppModel) async {
         guard BadgeWriter.isAvailable, badge == .idle || badge.isFailure else { return }
-        badge = .preparing
-        let token: String
-        do {
-            token = try await app.api.nfcEnsure(eventId: eventId, participantEventId: participantEventId).badgeToken
-        } catch {
-            guard !error.isCancellation else { badge = .idle; return }
-            let api = error as? APIError
-            let message = api?.isUnprocessable == true ? (api?.message.nonBlank ?? "NFC badges aren't enabled for this event.") : error.friendlyMessage
-            badge = .failed(message, retryable: api?.isUnprocessable != true)
+        let p = participant(app)
+        guard let token = p?.nfcBadgeToken?.nonBlank else {
+            badge = .failed(Self.noBadgeToken, retryable: false)
             Haptics.reject()
             return
         }
-        let p = participant(app)
         badge = .writing
         let writer = BadgeWriter(
             token: token,

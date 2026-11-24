@@ -317,9 +317,6 @@ class AttendApi(
 
     // ---------------- NFC badges ----------------
 
-    suspend fun nfcEnsure(eventId: String, participantEventId: String): NfcBadge =
-        send("POST", "/events/$eventId/participant_events/$participantEventId/nfc_badge/ensure")
-
     suspend fun nfcConfirm(eventId: String, participantEventId: String, badgeToken: String): NfcBadge =
         send("POST", "/events/$eventId/participant_events/$participantEventId/nfc_badge/confirm", buildJsonObject {
             put("badge_token", badgeToken)
